@@ -1,10 +1,13 @@
 import Link from "next/link";
+import { SignOutButton } from "@/app/dashboard/SignOutButton";
 import { SettingsManager } from "@/app/dashboard/settings/SettingsManager";
+import { requireAuthenticatedDashboardUser } from "@/lib/auth/dashboardSession";
 import { isDatabaseConfigured } from "@/lib/env";
 import { getIntegrationSettingsSummary } from "@/lib/settings/integrationSettings";
 import type { IntegrationSettingsSummary } from "@/lib/types";
 
 export default async function DashboardSettingsPage() {
+  const user = await requireAuthenticatedDashboardUser();
   let databaseReady = isDatabaseConfigured();
   let settings: IntegrationSettingsSummary = {
     publerWorkspaceId: "",
@@ -40,14 +43,18 @@ export default async function DashboardSettingsPage() {
               Configure Publer API access and AI once, then let Studio reuse those settings for
               generation now and publishing later.
             </p>
+            <p className="mt-3 text-sm text-[#6e4a2b]">{user.email}</p>
           </div>
 
-          <Link
-            href="/dashboard"
-            className="rounded-full border border-[#d8b690] px-5 py-3 text-sm font-semibold uppercase tracking-[0.22em] text-[#8a572a]"
-          >
-            Back to dashboard
-          </Link>
+          <div className="flex flex-wrap gap-3">
+            <SignOutButton />
+            <Link
+              href="/dashboard"
+              className="rounded-full border border-[#d8b690] px-5 py-3 text-sm font-semibold uppercase tracking-[0.22em] text-[#8a572a]"
+            >
+              Back to dashboard
+            </Link>
+          </div>
         </div>
 
         {!databaseReady ? (

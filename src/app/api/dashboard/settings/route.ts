@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { requireAuthenticatedDashboardApiUser } from "@/lib/auth/dashboardSession";
 import { isDatabaseConfigured } from "@/lib/env";
 import {
   getIntegrationSettingsSummary,
@@ -18,6 +19,11 @@ const settingsSchema = z.object({
 });
 
 export async function GET() {
+  const auth = await requireAuthenticatedDashboardApiUser();
+  if (!auth.ok) {
+    return auth.response;
+  }
+
   if (!isDatabaseConfigured()) {
     return NextResponse.json(
       {
@@ -37,6 +43,11 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const auth = await requireAuthenticatedDashboardApiUser();
+  if (!auth.ok) {
+    return auth.response;
+  }
+
   if (!isDatabaseConfigured()) {
     return NextResponse.json(
       {

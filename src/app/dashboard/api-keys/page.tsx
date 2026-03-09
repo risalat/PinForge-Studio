@@ -1,10 +1,13 @@
 import Link from "next/link";
 import { ApiKeysManager } from "@/app/dashboard/api-keys/ApiKeysManager";
+import { SignOutButton } from "@/app/dashboard/SignOutButton";
 import { listApiKeys } from "@/lib/auth/apiKeys";
+import { requireAuthenticatedDashboardUser } from "@/lib/auth/dashboardSession";
 import { isDatabaseConfigured } from "@/lib/env";
 import type { ApiKeyListItem } from "@/lib/types";
 
 export default async function DashboardApiKeysPage() {
+  const user = await requireAuthenticatedDashboardUser();
   let databaseReady = isDatabaseConfigured();
   let apiKeys: ApiKeyListItem[] = [];
 
@@ -31,14 +34,18 @@ export default async function DashboardApiKeysPage() {
               Generate bearer keys for the Chrome extension. Plaintext keys are shown once only and
               stored hashed in the database.
             </p>
+            <p className="mt-3 text-sm text-[#6e4a2b]">{user.email}</p>
           </div>
 
-          <Link
-            href="/dashboard"
-            className="rounded-full border border-[#d8b690] px-5 py-3 text-sm font-semibold uppercase tracking-[0.22em] text-[#8a572a]"
-          >
-            Back to dashboard
-          </Link>
+          <div className="flex flex-wrap gap-3">
+            <SignOutButton />
+            <Link
+              href="/dashboard"
+              className="rounded-full border border-[#d8b690] px-5 py-3 text-sm font-semibold uppercase tracking-[0.22em] text-[#8a572a]"
+            >
+              Back to dashboard
+            </Link>
+          </div>
         </div>
 
         {!databaseReady ? (

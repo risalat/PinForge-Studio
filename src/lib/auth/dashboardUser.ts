@@ -1,16 +1,26 @@
 import { Prisma } from "@prisma/client";
-import { env } from "@/lib/env";
+import { requireAuthenticatedDashboardUser } from "@/lib/auth/dashboardSession";
 import { prisma } from "@/lib/prisma";
 
 export async function getOrCreateDashboardUser() {
+  const authUser = await requireAuthenticatedDashboardUser();
+  const email = authUser.email?.trim().toLowerCase();
+
+  if (!email) {
+    throw new Error("Supabase user email is required for dashboard access.");
+  }
+
   try {
     return await prisma.user.upsert({
       where: {
-        email: env.defaultUserEmail,
+        authUserId: authUser.id,
       },
-      update: {},
+      update: {
+        email,
+      },
       create: {
-        email: env.defaultUserEmail,
+        authUserId: authUser.id,
+        email,
       },
     });
   } catch (error) {
@@ -18,11 +28,27 @@ export async function getOrCreateDashboardUser() {
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === "P2002"
     ) {
-      return prisma.user.findUniqueOrThrow({
+      const existingByEmail = await prisma.user.findUnique({
         where: {
-          email: env.defaultUserEmail,
+          email,
         },
       });
+
+      if (!existingByEmail) {
+        throw error;
+      }
+
+      if (!existingByEmail.authUserId || existingByEmail.authUserId === authUser.id) {
+        return prisma.user.update({
+          where: {
+            id: existingByEmail.id,
+          },
+          data: {
+            authUserId: authUser.id,
+            email,
+          },
+        });
+      }
     }
 
     throw error;

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { revokeApiKey } from "@/lib/auth/apiKeys";
+import { requireAuthenticatedDashboardApiUser } from "@/lib/auth/dashboardSession";
 import { isDatabaseConfigured } from "@/lib/env";
 
 type RevokeRouteProps = {
@@ -9,6 +10,11 @@ type RevokeRouteProps = {
 };
 
 export async function POST(_request: Request, { params }: RevokeRouteProps) {
+  const auth = await requireAuthenticatedDashboardApiUser();
+  if (!auth.ok) {
+    return auth.response;
+  }
+
   if (!isDatabaseConfigured()) {
     return NextResponse.json(
       {

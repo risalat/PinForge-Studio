@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { requireAuthenticatedDashboardApiUser } from "@/lib/auth/dashboardSession";
 import { isDatabaseConfigured } from "@/lib/env";
 import { PublerClient } from "@/lib/publer/publerClient";
 import { getIntegrationSettings } from "@/lib/settings/integrationSettings";
@@ -11,6 +12,11 @@ const schema = z.object({
 });
 
 export async function POST(request: Request) {
+  const auth = await requireAuthenticatedDashboardApiUser();
+  if (!auth.ok) {
+    return auth.response;
+  }
+
   try {
     const rawPayload = await request.json();
     const payload = schema.parse(rawPayload);

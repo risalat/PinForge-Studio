@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { SignOutButton } from "@/app/dashboard/SignOutButton";
+import { requireAuthenticatedDashboardUser } from "@/lib/auth/dashboardSession";
 import { isDatabaseConfigured } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
 
@@ -45,6 +47,7 @@ async function getDashboardData() {
 }
 
 export default async function DashboardPage() {
+  const user = await requireAuthenticatedDashboardUser();
   const data = await getDashboardData();
 
   return (
@@ -58,8 +61,10 @@ export default async function DashboardPage() {
             <h1 className="mt-2 text-4xl font-black uppercase tracking-[-0.05em]">
               Generation overview
             </h1>
+            <p className="mt-3 text-sm text-[#6e4a2b]">{user.email}</p>
           </div>
           <div className="flex flex-wrap gap-3">
+            <SignOutButton />
             <Link
               href="/dashboard/settings"
               className="rounded-full border border-[#d8b690] px-5 py-3 text-sm font-semibold uppercase tracking-[0.22em] text-[#8a572a]"

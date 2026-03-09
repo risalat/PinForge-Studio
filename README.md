@@ -39,25 +39,29 @@ Copy-Item .env.example .env
 4. Set `APP_ENCRYPTION_KEY` to a long random secret. Studio uses this to encrypt stored Publer
    and AI credentials at rest.
 
-5. Generate the Prisma client:
+5. Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` for Supabase Auth.
+
+6. Generate the Prisma client:
 
 ```bash
 npm run prisma:generate
 ```
 
-6. Run your first migration:
+7. Run your first migration:
 
 ```bash
 npm run prisma:migrate -- --name init
 ```
 
-7. Install the Playwright Chromium browser:
+8. In the Supabase dashboard, create your first email/password user under `Authentication -> Users`.
+
+9. Install the Playwright Chromium browser:
 
 ```bash
 npm run playwright:install
 ```
 
-8. Start the dev server:
+10. Start the dev server:
 
 ```bash
 npm run dev
@@ -71,6 +75,7 @@ npm run dev
 ## Useful routes
 
 - `/` home
+- `/login` dashboard login
 - `/dashboard` dashboard overview
 - `/dashboard/settings` Publer and AI integration settings
 - `/dashboard/api-keys` extension API key management
@@ -80,6 +85,7 @@ npm run dev
 ## Notes
 
 - Publer and AI credentials are configured in the dashboard, not in `.env`.
+- Dashboard access is protected by Supabase Auth. Set the same auth env vars in Vercel before using the production deployment.
 - Local file storage defaults to `./storage`.
 - The render pipeline writes PNGs under `storage/temp/jobs/{jobId}/`.
 - `R2StorageProvider` is intentionally stubbed for later production wiring.
