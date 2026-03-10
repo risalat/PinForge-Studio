@@ -268,6 +268,23 @@ export async function createAssistedGenerationPlans(input: {
         continue;
       }
 
+      await tx.template.upsert({
+        where: { id: template.id },
+        update: {
+          name: template.name,
+          componentKey: template.componentKey,
+          configJson: template as unknown as Prisma.InputJsonValue,
+          isActive: true,
+        },
+        create: {
+          id: template.id,
+          name: template.name,
+          componentKey: template.componentKey,
+          configJson: template as unknown as Prisma.InputJsonValue,
+          isActive: true,
+        },
+      });
+
       const plan = await tx.generationPlan.create({
         data: {
           jobId: job.id,
@@ -330,6 +347,23 @@ export async function createManualGenerationPlan(input: {
   if (chosenIds.length === 0) {
     throw new Error("No valid source images were provided.");
   }
+
+  await prisma.template.upsert({
+    where: { id: template.id },
+    update: {
+      name: template.name,
+      componentKey: template.componentKey,
+      configJson: template as unknown as Prisma.InputJsonValue,
+      isActive: true,
+    },
+    create: {
+      id: template.id,
+      name: template.name,
+      componentKey: template.componentKey,
+      configJson: template as unknown as Prisma.InputJsonValue,
+      isActive: true,
+    },
+  });
 
   const plan = await prisma.generationPlan.create({
     data: {

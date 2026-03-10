@@ -183,7 +183,8 @@ export function JobReviewManager({
           <div>
             <h2 className="text-xl font-bold">Image review</h2>
             <p className="text-sm text-[#6e4a2b]">
-              Select the source images you want to keep and mark preferred candidates.
+              Decide which images can be used in this job and which ones assisted mode should try
+              first.
             </p>
           </div>
           <button
@@ -194,6 +195,22 @@ export function JobReviewManager({
           >
             Save review
           </button>
+        </div>
+
+        <div className="grid gap-3 rounded-xl border border-[#eadacc] bg-[#fcf7f0] p-4 text-sm text-[#6e4a2b] md:grid-cols-2">
+          <div>
+            <p className="font-semibold text-[#23160d]">Use in plans</p>
+            <p className="mt-1">
+              Enabled images can be used by assisted auto and can also be assigned manually.
+            </p>
+          </div>
+          <div>
+            <p className="font-semibold text-[#23160d]">Prefer in assisted auto</p>
+            <p className="mt-1">
+              This only biases assisted auto toward that image. It does not force it into every
+              generated pin.
+            </p>
+          </div>
         </div>
 
         <div className="grid gap-4 lg:grid-cols-2">
@@ -218,7 +235,7 @@ export function JobReviewManager({
                           })
                         }
                       />
-                      Selected
+                      Use in plans
                     </label>
                     <label className="flex items-center gap-2">
                       <input
@@ -227,9 +244,16 @@ export function JobReviewManager({
                         disabled={!image.isSelected}
                         onChange={(event) => updateImage(image.id, { isPreferred: event.target.checked })}
                       />
-                      Preferred
+                      Prefer in assisted auto
                     </label>
                   </div>
+                  <p className="text-xs text-[#8a572a]">
+                    {image.isSelected
+                      ? image.isPreferred
+                        ? "Active and prioritized for assisted auto."
+                        : "Active for both assisted and manual planning."
+                      : "Inactive until you enable it again."}
+                  </p>
                   <p className="break-all text-xs text-[#7a614d]">{image.url}</p>
                   <p><strong>Alt:</strong> {image.alt || "None"}</p>
                   <p><strong>Caption:</strong> {image.caption || "None"}</p>
