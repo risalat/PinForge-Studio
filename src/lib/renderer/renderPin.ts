@@ -81,10 +81,7 @@ function isServerlessRuntime() {
 }
 
 function resolveChromiumInputDir() {
-  const candidateDirs = [
-    path.join(process.cwd(), "node_modules", "@sparticuz", "chromium", "bin"),
-    path.join(path.dirname(require.resolve("@sparticuz/chromium")), "..", "..", "bin"),
-  ];
+  const candidateDirs = [path.join(process.cwd(), "node_modules", "@sparticuz", "chromium", "bin")];
 
   for (const candidateDir of candidateDirs) {
     if (existsSync(candidateDir)) {
