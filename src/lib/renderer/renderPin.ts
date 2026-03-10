@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import path from "node:path";
 import serverlessChromium from "@sparticuz/chromium";
 import { chromium as localChromium } from "playwright";
 import { chromium as serverlessPlaywright } from "playwright-core";
@@ -63,9 +65,10 @@ async function launchBrowser() {
   }
 
   if (isServerlessRuntime()) {
+    const chromiumInputDir = resolveChromiumInputDir();
     return serverlessPlaywright.launch({
       args: serverlessChromium.args,
-      executablePath: await serverlessChromium.executablePath(),
+      executablePath: await serverlessChromium.executablePath(chromiumInputDir),
       headless: true,
     });
   }
@@ -75,4 +78,19 @@ async function launchBrowser() {
 
 function isServerlessRuntime() {
   return process.env.VERCEL === "1" || process.env.VERCEL === "true";
+}
+
+function resolveChromiumInputDir() {
+  const candidateDirs = [
+    path.join(process.cwd(), "node_modules", "@sparticuz", "chromium", "bin"),
+    path.join(path.dirname(require.resolve("@sparticuz/chromium")), "..", "..", "bin"),
+  ];
+
+  for (const candidateDir of candidateDirs) {
+    if (existsSync(candidateDir)) {
+      return candidateDir;
+    }
+  }
+
+  return undefined;
 }
