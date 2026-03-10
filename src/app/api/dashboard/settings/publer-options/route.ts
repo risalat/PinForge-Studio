@@ -36,16 +36,23 @@ export async function POST(request: Request) {
       baseClient.getWorkspaces(),
       baseClient.getPinterestAccounts(),
     ]);
+    const accessibleWorkspaceIds = new Set(workspaces.map((workspace) => workspace.id));
+    const requestedWorkspaceId =
+      payload.workspaceId?.trim() || savedSettings?.publerWorkspaceId || "";
 
     const selectedWorkspaceId =
-      payload.workspaceId?.trim() ||
-      savedSettings?.publerWorkspaceId ||
-      workspaces[0]?.id ||
-      "";
+      (requestedWorkspaceId && accessibleWorkspaceIds.has(requestedWorkspaceId)
+        ? requestedWorkspaceId
+        : workspaces[0]?.id) || "";
+    const accessibleAccountIds = new Set(accounts.map((account) => String(account.id)));
+    const requestedAccountId =
+      String(payload.accountId ?? "").trim() || savedSettings?.publerAccountId || "";
     const selectedAccountId =
-      String(payload.accountId ?? "").trim() ||
-      savedSettings?.publerAccountId ||
-      (accounts[0] ? String(accounts[0].id) : "");
+      (requestedAccountId && accessibleAccountIds.has(requestedAccountId)
+        ? requestedAccountId
+        : accounts[0]
+          ? String(accounts[0].id)
+          : "");
 
     let boards: Awaited<ReturnType<PublerClient["getPinterestBoards"]>> = [];
 

@@ -19,6 +19,7 @@ import {
 import { env } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
 import {
+  PublerClient,
   createPublerClient,
   extractPostIdsFromJobRaw,
   extractScheduleOutcomesFromJobRaw,
@@ -497,7 +498,10 @@ export async function uploadJobPinsToPubler(input: {
 }) {
   const job = await getOwnedJobOrThrow(input.jobId, input.userId);
   const settings = await getIntegrationSettingsForUserId(input.userId);
-  const workspaceId = input.workspaceId?.trim() || settings.publerWorkspaceId;
+  const workspaceId = await resolveAccessiblePublerWorkspaceId({
+    apiKey: settings.publerApiKey,
+    requestedWorkspaceId: input.workspaceId?.trim() || settings.publerWorkspaceId,
+  });
 
   if (!workspaceId) {
     throw new Error("Select a Publer workspace before uploading media.");
@@ -797,7 +801,10 @@ export async function scheduleJobPins(input: {
 }) {
   const job = await getOwnedJobOrThrow(input.jobId, input.userId);
   const settings = await getIntegrationSettingsForUserId(input.userId);
-  const workspaceId = input.workspaceId?.trim() || settings.publerWorkspaceId;
+  const workspaceId = await resolveAccessiblePublerWorkspaceId({
+    apiKey: settings.publerApiKey,
+    requestedWorkspaceId: input.workspaceId?.trim() || settings.publerWorkspaceId,
+  });
   const accountId = input.accountId?.trim() || settings.publerAccountId;
   const selectedBoardIds = Array.from(
     new Set(
@@ -1297,6 +1304,35 @@ async function syncJobProgressStatus(jobId: string) {
       },
     });
   }
+}
+
+async function resolveAccessiblePublerWorkspaceId(input: {
+  apiKey: string;
+  requestedWorkspaceId?: string | null;
+}) {
+  const requestedWorkspaceId = input.requestedWorkspaceId?.trim() || "";
+  const client = new PublerClient({
+    apiKey: input.apiKey,
+    workspaceId: "",
+  });
+  const workspaces = await client.getWorkspaces();
+
+  if (workspaces.length === 0) {
+    throw new Error("No Publer workspaces are available for the current API key.");
+  }
+
+  if (!requestedWorkspaceId) {
+    return workspaces[0].id;
+  }
+
+  const matchingWorkspace = workspaces.find((workspace) => workspace.id === requestedWorkspaceId);
+  if (matchingWorkspace) {
+    return matchingWorkspace.id;
+  }
+
+  throw new Error(
+    "The selected Publer workspace is not accessible with the current API key. Refresh destination and choose an available workspace.",
+  );
 }
 
 function selectPinsForWorkflowAction(job: WorkflowJob, generatedPinIds?: string[]) {
