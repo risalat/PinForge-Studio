@@ -18,6 +18,7 @@ const publishSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("upload_media"),
     generatedPinIds: z.array(z.string().min(1)).optional(),
+    workspaceId: z.string().optional(),
   }),
   z.object({
     action: z.literal("generate_titles"),
@@ -45,6 +46,10 @@ const publishSchema = z.discriminatedUnion("action", [
     workspaceId: z.string().optional(),
     accountId: z.string().optional(),
     boardId: z.string().optional(),
+    boardIds: z.array(z.string().min(1)).optional(),
+    boardDistributionMode: z.enum(["round_robin", "first_selected", "primary_weighted"]).optional(),
+    primaryBoardId: z.string().optional(),
+    primaryBoardPercent: z.number().int().min(0).max(100).optional(),
     generatedPinIds: z.array(z.string().min(1)).optional(),
   }),
 ]);
@@ -77,6 +82,7 @@ export async function POST(request: Request, { params }: RouteProps) {
           userId: user.id,
           jobId,
           generatedPinIds: payload.generatedPinIds,
+          workspaceId: payload.workspaceId,
         });
         break;
       case "generate_titles":
@@ -110,6 +116,10 @@ export async function POST(request: Request, { params }: RouteProps) {
           workspaceId: payload.workspaceId,
           accountId: payload.accountId,
           boardId: payload.boardId,
+          boardIds: payload.boardIds,
+          boardDistributionMode: payload.boardDistributionMode,
+          primaryBoardId: payload.primaryBoardId,
+          primaryBoardPercent: payload.primaryBoardPercent,
           generatedPinIds: payload.generatedPinIds,
         });
         break;

@@ -89,6 +89,8 @@ type PublerOptionsResponse = {
   selectedAccountId?: string;
 };
 
+type BoardDistributionMode = "round_robin" | "first_selected" | "primary_weighted";
+
 export function JobPublishManager({
   jobId,
   jobStatus,
@@ -107,11 +109,17 @@ export function JobPublishManager({
   );
   const [selectedPinIds, setSelectedPinIds] = useState<string[]>(pins.map((pin) => pin.id));
   const [firstPublishAt, setFirstPublishAt] = useState("");
-  const [intervalMinutes, setIntervalMinutes] = useState(24 * 60);
-  const [jitterMinutes, setJitterMinutes] = useState(0);
+  const [intervalDays, setIntervalDays] = useState(1);
+  const [jitterDays, setJitterDays] = useState(0);
   const [workspaceId, setWorkspaceId] = useState(defaults.workspaceId);
   const [accountId, setAccountId] = useState(defaults.accountId);
-  const [boardId, setBoardId] = useState(defaults.boardId);
+  const [selectedBoardIds, setSelectedBoardIds] = useState<string[]>(
+    defaults.boardId ? [defaults.boardId] : [],
+  );
+  const [boardDistributionMode, setBoardDistributionMode] =
+    useState<BoardDistributionMode>("round_robin");
+  const [primaryBoardId, setPrimaryBoardId] = useState(defaults.boardId);
+  const [primaryBoardPercent, setPrimaryBoardPercent] = useState(60);
   const [workspaces, setWorkspaces] = useState<PublerWorkspace[]>([]);
   const [accounts, setAccounts] = useState<PublerAccount[]>([]);
   const [boards, setBoards] = useState<PublerBoard[]>([]);
@@ -139,18 +147,22 @@ export function JobPublishManager({
     [pins, selectedPinIds],
   );
 
+  const selectedBoards = useMemo(
+    () =>
+      selectedBoardIds
+        .map((boardId) => boards.find((board) => board.id === boardId))
+        .filter((board): board is PublerBoard => Boolean(board)),
+    [boards, selectedBoardIds],
+  );
+
   const summary = useMemo(
     () => ({
       uploaded: pins.filter((pin) => pin.mediaStatus === "UPLOADED").length,
       mediaFailed: pins.filter((pin) => pin.mediaStatus === "FAILED").length,
-      titlesReady: pins.filter((pin) => {
-        const copy = copyByPinId.get(pin.id);
-        return Boolean(copy?.title.trim());
-      }).length,
-      descriptionsReady: pins.filter((pin) => {
-        const copy = copyByPinId.get(pin.id);
-        return Boolean(copy?.description.trim());
-      }).length,
+      titlesReady: pins.filter((pin) => Boolean(copyByPinId.get(pin.id)?.title.trim())).length,
+      descriptionsReady: pins.filter((pin) =>
+        Boolean(copyByPinId.get(pin.id)?.description.trim()),
+      ).length,
       scheduled: pins.filter((pin) => pin.scheduleStatus === "SCHEDULED").length,
       scheduleFailed: pins.filter((pin) => pin.scheduleStatus === "FAILED").length,
     }),
@@ -180,13 +192,29 @@ export function JobPublishManager({
       return buildSchedulePreview({
         pinIds: selectedPins.map((pin) => pin.id),
         firstPublishAt,
-        intervalMinutes,
-        jitterMinutes,
+        intervalMinutes: intervalDays * 24 * 60,
+        jitterMinutes: jitterDays * 24 * 60,
       });
     } catch {
       return [];
     }
-  }, [firstPublishAt, intervalMinutes, jitterMinutes, selectedPins]);
+  }, [firstPublishAt, intervalDays, jitterDays, selectedPins]);
+
+  const schedulePreviewRows = useMemo(
+    () =>
+      buildBoardPreviewAssignments({
+        pinIds: schedulePreview.map((item) => item.pinId),
+        boardIds: selectedBoardIds,
+        mode: boardDistributionMode,
+        primaryBoardId,
+        primaryBoardPercent,
+      }).map((assignment, index) => ({
+        ...schedulePreview[index],
+        board:
+          selectedBoards.find((board) => board.id === assignment.boardId) ?? null,
+      })),
+    [boardDistributionMode, primaryBoardId, primaryBoardPercent, schedulePreview, selectedBoardIds, selectedBoards],
+  );
 
   useEffect(() => {
     if (!integrationReady.hasPublerApiKey) {
@@ -199,6 +227,19 @@ export function JobPublishManager({
       nextAccountId: defaults.accountId,
     });
   }, [defaults.accountId, defaults.workspaceId, integrationReady.hasPublerApiKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (selectedBoardIds.length === 0) {
+      if (primaryBoardId) {
+        setPrimaryBoardId("");
+      }
+      return;
+    }
+
+    if (!primaryBoardId || !selectedBoardIds.includes(primaryBoardId)) {
+      setPrimaryBoardId(selectedBoardIds[0]);
+    }
+  }, [primaryBoardId, selectedBoardIds]);
 
   async function loadPublerOptions(input?: {
     preserveCurrentSelection?: boolean;
@@ -240,10 +281,29 @@ export function JobPublishManager({
       setBoards(nextBoards);
       setWorkspaceId(resolvedWorkspaceId);
       setAccountId(resolvedAccountId);
+      setSelectedBoardIds((current) => {
+        const validBoardIds = current.filter((boardId) =>
+          nextBoards.some((board) => board.id === boardId),
+        );
+        if (validBoardIds.length > 0) {
+          return validBoardIds;
+        }
 
-      if (!nextBoards.some((board) => board.id === boardId)) {
-        setBoardId(nextBoards[0]?.id ?? "");
-      }
+        if (defaults.boardId && nextBoards.some((board) => board.id === defaults.boardId)) {
+          return [defaults.boardId];
+        }
+
+        return [];
+      });
+      setPrimaryBoardId((current) => {
+        if (current && nextBoards.some((board) => board.id === current)) {
+          return current;
+        }
+        if (defaults.boardId && nextBoards.some((board) => board.id === defaults.boardId)) {
+          return defaults.boardId;
+        }
+        return nextBoards[0]?.id ?? "";
+      });
     } catch (error) {
       setOptionsError(error instanceof Error ? error.message : "Unable to load Publer options.");
     } finally {
@@ -307,6 +367,42 @@ export function JobPublishManager({
     });
   }
 
+  function toggleBoard(boardId: string, isChecked: boolean) {
+    setSelectedBoardIds((current) => {
+      if (isChecked) {
+        if (!primaryBoardId) {
+          setPrimaryBoardId(boardId);
+        }
+        return current.includes(boardId) ? current : [...current, boardId];
+      }
+
+      if (primaryBoardId === boardId) {
+        const remainingBoards = current.filter((value) => value !== boardId);
+        setPrimaryBoardId(remainingBoards[0] ?? "");
+      }
+      return current.filter((value) => value !== boardId);
+    });
+  }
+
+  function moveBoard(boardId: string, direction: "up" | "down") {
+    setSelectedBoardIds((current) => {
+      const index = current.indexOf(boardId);
+      if (index === -1) {
+        return current;
+      }
+
+      const nextIndex = direction === "up" ? index - 1 : index + 1;
+      if (nextIndex < 0 || nextIndex >= current.length) {
+        return current;
+      }
+
+      const next = [...current];
+      const [moved] = next.splice(index, 1);
+      next.splice(nextIndex, 0, moved);
+      return next;
+    });
+  }
+
   function selectBy(predicate: (pin: PinItem) => boolean) {
     setSelectedPinIds(pins.filter(predicate).map((pin) => pin.id));
   }
@@ -365,9 +461,9 @@ export function JobPublishManager({
             <p className="mt-1">
               {formatLabel(latestScheduleRun.status)}
               {latestScheduleRun.completedAt
-                ? ` • completed ${new Date(latestScheduleRun.completedAt).toLocaleString()}`
+                ? ` - completed ${new Date(latestScheduleRun.completedAt).toLocaleString()}`
                 : latestScheduleRun.submittedAt
-                  ? ` • submitted ${new Date(latestScheduleRun.submittedAt).toLocaleString()}`
+                  ? ` - submitted ${new Date(latestScheduleRun.submittedAt).toLocaleString()}`
                   : ""}
             </p>
             {latestScheduleRun.errorMessage ? (
@@ -375,6 +471,222 @@ export function JobPublishManager({
             ) : null}
           </div>
         ) : null}
+      </section>
+
+      <section className="rounded-3xl border border-[#e8d7c5] bg-white p-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-bold">Publishing destination</h2>
+            <p className="mt-2 text-sm text-[#6e4a2b]">
+              Choose the Publer workspace, Pinterest account, and one or more preferred boards
+              before uploading media. Board order becomes the scheduling priority.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() =>
+              void loadPublerOptions({
+                preserveCurrentSelection: true,
+                nextWorkspaceId: workspaceId,
+                nextAccountId: accountId,
+              })
+            }
+            disabled={isLoadingOptions || !integrationReady.hasPublerApiKey}
+            className="rounded-full border border-[#d8b690] px-4 py-2 text-sm font-semibold text-[#8a572a] disabled:opacity-60"
+          >
+            {isLoadingOptions ? "Refreshing..." : "Refresh destination"}
+          </button>
+        </div>
+
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <label className="block text-sm font-semibold text-[#6e4a2b]">
+            Workspace
+            <select
+              value={workspaceId}
+              onChange={(event) => {
+                const nextValue = event.target.value;
+                setWorkspaceId(nextValue);
+                setSelectedBoardIds([]);
+                setPrimaryBoardId("");
+                void loadPublerOptions({
+                  nextWorkspaceId: nextValue,
+                  nextAccountId: accountId,
+                });
+              }}
+              className="mt-2 w-full rounded-xl border border-[#dcc8b2] bg-[#fffaf4] px-3 py-2"
+            >
+              <option value="">Select workspace</option>
+              {workspaces.map((workspace) => (
+                <option key={workspace.id} value={workspace.id}>
+                  {workspace.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block text-sm font-semibold text-[#6e4a2b]">
+            Pinterest account
+            <select
+              value={accountId}
+              onChange={(event) => {
+                const nextValue = event.target.value;
+                setAccountId(nextValue);
+                setSelectedBoardIds([]);
+                setPrimaryBoardId("");
+                void loadPublerOptions({
+                  nextWorkspaceId: workspaceId,
+                  nextAccountId: nextValue,
+                });
+              }}
+              className="mt-2 w-full rounded-xl border border-[#dcc8b2] bg-[#fffaf4] px-3 py-2"
+            >
+              <option value="">Select account</option>
+              {accounts.map((account) => (
+                <option key={String(account.id)} value={String(account.id)}>
+                  {account.name || String(account.id)}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div className="mt-4 rounded-2xl border border-[#eadacc] bg-[#fcf7f0] p-4">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="text-sm font-semibold text-[#23160d]">Preferred Pinterest boards</p>
+              <p className="mt-1 text-sm text-[#6e4a2b]">
+                Select multiple boards to spread pins out. Move boards up or down to control
+                preference order.
+              </p>
+            </div>
+            <label className="block text-sm font-semibold text-[#6e4a2b]">
+              Distribution
+              <select
+                value={boardDistributionMode}
+                onChange={(event) =>
+                  setBoardDistributionMode(event.target.value as BoardDistributionMode)
+                }
+                className="mt-2 w-full rounded-xl border border-[#dcc8b2] bg-white px-3 py-2"
+              >
+                <option value="round_robin">Round robin across selected boards</option>
+                <option value="first_selected">Use the first selected board for all pins</option>
+                <option value="primary_weighted">Favor one primary board</option>
+              </select>
+            </label>
+          </div>
+
+          {boardDistributionMode === "primary_weighted" ? (
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <label className="block text-sm font-semibold text-[#6e4a2b]">
+                Primary board
+                <select
+                  value={primaryBoardId}
+                  onChange={(event) => setPrimaryBoardId(event.target.value)}
+                  className="mt-2 w-full rounded-xl border border-[#dcc8b2] bg-white px-3 py-2"
+                >
+                  <option value="">Select primary board</option>
+                  {selectedBoards.map((board) => (
+                    <option key={board.id} value={board.id}>
+                      {board.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block text-sm font-semibold text-[#6e4a2b]">
+                Primary board share (%)
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step="1"
+                  value={primaryBoardPercent}
+                  onChange={(event) => setPrimaryBoardPercent(Number(event.target.value) || 0)}
+                  className="mt-2 w-full rounded-xl border border-[#dcc8b2] bg-white px-3 py-2"
+                />
+                <span className="mt-2 block text-xs font-normal text-[#6e4a2b]">
+                  Default is 60%. Remaining pins are distributed across the other selected boards.
+                </span>
+              </label>
+            </div>
+          ) : null}
+
+          {boards.length === 0 ? (
+            <p className="mt-4 text-sm text-[#6e4a2b]">
+              Load a workspace and Pinterest account to choose boards.
+            </p>
+          ) : (
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              {boards.map((board) => {
+                const selectionIndex = selectedBoardIds.indexOf(board.id);
+                const isSelected = selectionIndex !== -1;
+
+                return (
+                  <div
+                    key={board.id}
+                    className={`rounded-2xl border p-4 ${
+                      isSelected ? "border-[#8a572a] bg-white" : "border-[#eadacc] bg-[#fffaf4]"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <label className="flex min-w-0 items-start gap-3">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={(event) => toggleBoard(board.id, event.target.checked)}
+                          className="mt-1"
+                        />
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-semibold text-[#23160d]">
+                            {board.name}
+                          </span>
+                          <span className="block text-xs uppercase tracking-[0.18em] text-[#8a572a]">
+                            {isSelected
+                              ? boardDistributionMode === "primary_weighted" &&
+                                primaryBoardId === board.id
+                                ? `Primary - priority ${selectionIndex + 1}`
+                                : `Priority ${selectionIndex + 1}`
+                              : "Not selected"}
+                          </span>
+                        </span>
+                      </label>
+                      {isSelected ? (
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => moveBoard(board.id, "up")}
+                            disabled={selectionIndex === 0}
+                            className="rounded-full border border-[#d8b690] px-3 py-1 text-xs font-semibold text-[#8a572a] disabled:opacity-50"
+                          >
+                            Up
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => moveBoard(board.id, "down")}
+                            disabled={selectionIndex === selectedBoardIds.length - 1}
+                            className="rounded-full border border-[#d8b690] px-3 py-1 text-xs font-semibold text-[#8a572a] disabled:opacity-50"
+                          >
+                            Down
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {optionsError ? (
+          <p className="mt-3 text-sm text-[#8f3d24]">{optionsError}</p>
+        ) : isLoadingOptions ? (
+          <p className="mt-3 text-sm text-[#6e4a2b]">Loading Publer workspace data...</p>
+        ) : (
+          <p className="mt-3 text-sm text-[#6e4a2b]">
+            {workspaceId
+              ? `Workspace selected${accountId ? ", account selected" : ""}${selectedBoardIds.length > 0 ? `, ${selectedBoardIds.length} board${selectedBoardIds.length === 1 ? "" : "s"} selected` : ""}.`
+              : "Select a workspace first to upload media into Publer."}
+          </p>
+        )}
       </section>
 
       <section className="rounded-3xl border border-[#e8d7c5] bg-white p-5">
@@ -393,9 +705,7 @@ export function JobPublishManager({
             />
             <SelectionButton
               label="Missing descriptions"
-              onClick={() =>
-                selectBy((pin) => !copyByPinId.get(pin.id)?.description.trim())
-              }
+              onClick={() => selectBy((pin) => !copyByPinId.get(pin.id)?.description.trim())}
             />
             <SelectionButton
               label="Schedule failed"
@@ -410,12 +720,21 @@ export function JobPublishManager({
           <StepCard
             title="Step 1 - Upload media"
             subtitle="Upload rendered PNGs to Publer and preserve media IDs per pin."
-            countLabel={`${summary.uploaded} uploaded • ${summary.mediaFailed} failed`}
+            countLabel={`${summary.uploaded} uploaded - ${summary.mediaFailed} failed`}
             actionLabel="Upload selected pins"
-            disabled={isPending || selectedPins.length === 0 || !integrationReady.hasPublerApiKey}
+            disabled={
+              isPending ||
+              selectedPins.length === 0 ||
+              !integrationReady.hasPublerApiKey ||
+              !workspaceId
+            }
             onClick={() =>
               handleAction(
-                { action: "upload_media", generatedPinIds: selectedPinIds },
+                {
+                  action: "upload_media",
+                  generatedPinIds: selectedPinIds,
+                  workspaceId,
+                },
                 "Unable to upload media.",
               )
             }
@@ -463,8 +782,8 @@ export function JobPublishManager({
               <div>
                 <h2 className="text-xl font-bold">Step 4 - Scheduling</h2>
                 <p className="mt-2 text-sm text-[#6e4a2b]">
-                  Studio uses the same deterministic schedule preview shown here when sending posts
-                  to Publer, so the timestamps you review are the timestamps that get submitted.
+                  The preview below uses the same timing and board distribution rules that Studio
+                  sends to Publer.
                 </p>
               </div>
               <div className="text-sm text-[#6e4a2b]">
@@ -488,22 +807,24 @@ export function JobPublishManager({
                 />
               </label>
               <label className="block text-sm font-semibold text-[#6e4a2b]">
-                Interval minutes
+                Interval days
                 <input
                   type="number"
                   min={1}
-                  value={intervalMinutes}
-                  onChange={(event) => setIntervalMinutes(Number(event.target.value) || 1)}
+                  step="1"
+                  value={intervalDays}
+                  onChange={(event) => setIntervalDays(Number(event.target.value) || 1)}
                   className="mt-2 w-full rounded-xl border border-[#dcc8b2] bg-[#fffaf4] px-3 py-2"
                 />
               </label>
               <label className="block text-sm font-semibold text-[#6e4a2b]">
-                Jitter minutes
+                Jitter days
                 <input
                   type="number"
                   min={0}
-                  value={jitterMinutes}
-                  onChange={(event) => setJitterMinutes(Number(event.target.value) || 0)}
+                  step="1"
+                  value={jitterDays}
+                  onChange={(event) => setJitterDays(Number(event.target.value) || 0)}
                   className="mt-2 w-full rounded-xl border border-[#dcc8b2] bg-[#fffaf4] px-3 py-2"
                 />
               </label>
@@ -515,76 +836,19 @@ export function JobPublishManager({
                     ? "Selected pins are ready for scheduling."
                     : "Selected pins still need uploaded media and finalized copy."}
                 </p>
+                <p className="mt-1">
+                  {selectedBoards.length > 0
+                    ? `${selectedBoards.length} board${selectedBoards.length === 1 ? "" : "s"} selected for distribution.`
+                    : "Choose at least one board before scheduling."}
+                </p>
+                {boardDistributionMode === "primary_weighted" && primaryBoardId ? (
+                  <p className="mt-1">
+                    Primary board target: {primaryBoardPercent}% on{" "}
+                    {selectedBoards.find((board) => board.id === primaryBoardId)?.name ?? "selected board"}.
+                  </p>
+                ) : null}
               </div>
             </div>
-
-            <div className="mt-4 grid gap-4 md:grid-cols-3">
-              <label className="block text-sm font-semibold text-[#6e4a2b]">
-                Workspace
-                <select
-                  value={workspaceId}
-                  onChange={(event) => {
-                    const nextValue = event.target.value;
-                    setWorkspaceId(nextValue);
-                    void loadPublerOptions({
-                      nextWorkspaceId: nextValue,
-                      nextAccountId: accountId,
-                    });
-                  }}
-                  className="mt-2 w-full rounded-xl border border-[#dcc8b2] bg-[#fffaf4] px-3 py-2"
-                >
-                  <option value="">Select workspace</option>
-                  {workspaces.map((workspace) => (
-                    <option key={workspace.id} value={workspace.id}>
-                      {workspace.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block text-sm font-semibold text-[#6e4a2b]">
-                Pinterest account
-                <select
-                  value={accountId}
-                  onChange={(event) => {
-                    const nextValue = event.target.value;
-                    setAccountId(nextValue);
-                    void loadPublerOptions({
-                      nextWorkspaceId: workspaceId,
-                      nextAccountId: nextValue,
-                    });
-                  }}
-                  className="mt-2 w-full rounded-xl border border-[#dcc8b2] bg-[#fffaf4] px-3 py-2"
-                >
-                  <option value="">Select account</option>
-                  {accounts.map((account) => (
-                    <option key={String(account.id)} value={String(account.id)}>
-                      {account.name || String(account.id)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block text-sm font-semibold text-[#6e4a2b]">
-                Board
-                <select
-                  value={boardId}
-                  onChange={(event) => setBoardId(event.target.value)}
-                  className="mt-2 w-full rounded-xl border border-[#dcc8b2] bg-[#fffaf4] px-3 py-2"
-                >
-                  <option value="">Select board</option>
-                  {boards.map((board) => (
-                    <option key={board.id} value={board.id}>
-                      {board.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-
-            {optionsError ? (
-              <p className="mt-3 text-sm text-[#8f3d24]">{optionsError}</p>
-            ) : isLoadingOptions ? (
-              <p className="mt-3 text-sm text-[#6e4a2b]">Loading Publer workspace data...</p>
-            ) : null}
 
             <div className="mt-4 flex flex-wrap gap-3">
               <button
@@ -595,11 +859,14 @@ export function JobPublishManager({
                       action: "schedule",
                       generatedPinIds: selectedPinIds,
                       firstPublishAt,
-                      intervalMinutes,
-                      jitterMinutes,
+                      intervalMinutes: intervalDays * 24 * 60,
+                      jitterMinutes: jitterDays * 24 * 60,
                       workspaceId,
                       accountId,
-                      boardId,
+                      boardIds: selectedBoardIds,
+                      boardDistributionMode,
+                      primaryBoardId,
+                      primaryBoardPercent,
                     },
                     "Unable to schedule pins.",
                   )
@@ -611,7 +878,9 @@ export function JobPublishManager({
                   selectedPins.length === 0 ||
                   !workspaceId ||
                   !accountId ||
-                  !boardId
+                  selectedBoardIds.length === 0 ||
+                  (boardDistributionMode === "primary_weighted" &&
+                    (!primaryBoardId || !selectedBoardIds.includes(primaryBoardId)))
                 }
                 className="rounded-full bg-[#2c1c12] px-4 py-2 text-sm font-semibold text-[#f7ede0] disabled:opacity-60"
               >
@@ -620,7 +889,9 @@ export function JobPublishManager({
               <button
                 type="button"
                 onClick={() =>
-                  selectBy((pin) => pin.scheduleStatus === "FAILED" || pin.scheduleStatus === "PENDING")
+                  selectBy(
+                    (pin) => pin.scheduleStatus === "FAILED" || pin.scheduleStatus === "PENDING",
+                  )
                 }
                 className="rounded-full border border-[#d8b690] px-4 py-2 text-sm font-semibold text-[#8a572a]"
               >
@@ -629,26 +900,28 @@ export function JobPublishManager({
             </div>
 
             <div className="mt-5 overflow-hidden rounded-2xl border border-[#eadacc]">
-              <div className="grid grid-cols-[minmax(0,1fr)_180px_120px] bg-[#f7efe6] px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-[#8a572a]">
+              <div className="grid grid-cols-[minmax(0,1fr)_180px_180px_120px] bg-[#f7efe6] px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-[#8a572a]">
                 <span>Pin</span>
+                <span>Board</span>
                 <span>Planned time</span>
                 <span>Jitter</span>
               </div>
-              {schedulePreview.length === 0 ? (
+              {schedulePreviewRows.length === 0 ? (
                 <p className="px-4 py-4 text-sm text-[#6e4a2b]">
-                  Select pins and provide a first publish time to preview the schedule.
+                  Select pins, boards, and a first publish time to preview the schedule.
                 </p>
               ) : (
-                schedulePreview.map((item) => {
+                schedulePreviewRows.map((item) => {
                   const pin = pins.find((candidate) => candidate.id === item.pinId);
                   return (
                     <div
                       key={item.pinId}
-                      className="grid grid-cols-[minmax(0,1fr)_180px_120px] items-center gap-4 border-t border-[#f0e3d7] px-4 py-3 text-sm text-[#4f3725]"
+                      className="grid grid-cols-[minmax(0,1fr)_180px_180px_120px] items-center gap-4 border-t border-[#f0e3d7] px-4 py-3 text-sm text-[#4f3725]"
                     >
                       <span className="truncate">{pin?.templateId ?? item.pinId}</span>
+                      <span className="truncate">{item.board?.name ?? "No board selected"}</span>
                       <span>{formatPreviewDate(item.scheduledFor)}</span>
-                      <span>{item.jitterOffsetMinutes} min</span>
+                      <span>{item.jitterOffsetMinutes / (24 * 60)} day(s)</span>
                     </div>
                   );
                 })
@@ -819,7 +1092,13 @@ function SelectionButton({ label, onClick }: { label: string; onClick: () => voi
   );
 }
 
-function StatusChip({ label, tone }: { label: string; tone: "neutral" | "good" | "warning" | "bad" }) {
+function StatusChip({
+  label,
+  tone,
+}: {
+  label: string;
+  tone: "neutral" | "good" | "warning" | "bad";
+}) {
   const className =
     tone === "good"
       ? "border-[#c8dec1] bg-[#f2fbef] text-[#355c2f]"
@@ -833,7 +1112,12 @@ function StatusChip({ label, tone }: { label: string; tone: "neutral" | "good" |
 }
 
 function toneForStatus(status: string) {
-  if (status === "UPLOADED" || status === "FINALIZED" || status === "GENERATED" || status === "SCHEDULED") {
+  if (
+    status === "UPLOADED" ||
+    status === "FINALIZED" ||
+    status === "GENERATED" ||
+    status === "SCHEDULED"
+  ) {
     return "good" as const;
   }
   if (status === "FAILED") {
@@ -843,6 +1127,75 @@ function toneForStatus(status: string) {
     return "warning" as const;
   }
   return "neutral" as const;
+}
+
+function buildBoardPreviewAssignments(input: {
+  pinIds: string[];
+  boardIds: string[];
+  mode: BoardDistributionMode;
+  primaryBoardId: string;
+  primaryBoardPercent: number;
+}) {
+  if (input.pinIds.length === 0 || input.boardIds.length === 0) {
+    return [];
+  }
+
+  if (input.mode === "first_selected") {
+    return input.pinIds.map((pinId) => ({
+      pinId,
+      boardId: input.boardIds[0],
+    }));
+  }
+
+  if (input.mode === "round_robin") {
+    return input.pinIds.map((pinId, index) => ({
+      pinId,
+      boardId: input.boardIds[index % input.boardIds.length],
+    }));
+  }
+
+  const primaryBoardId =
+    input.primaryBoardId && input.boardIds.includes(input.primaryBoardId)
+      ? input.primaryBoardId
+      : input.boardIds[0];
+  const secondaryBoardIds = input.boardIds.filter((boardId) => boardId !== primaryBoardId);
+
+  if (secondaryBoardIds.length === 0) {
+    return input.pinIds.map((pinId) => ({
+      pinId,
+      boardId: primaryBoardId,
+    }));
+  }
+
+  const primaryTarget = Math.min(
+    input.pinIds.length,
+    Math.max(0, Math.round((input.pinIds.length * input.primaryBoardPercent) / 100)),
+  );
+  let assignedPrimary = 0;
+  let secondaryIndex = 0;
+
+  return input.pinIds.map((pinId, index) => {
+    const expectedPrimary = Math.round(((index + 1) * primaryTarget) / input.pinIds.length);
+    const usePrimary =
+      assignedPrimary < primaryTarget &&
+      (assignedPrimary < expectedPrimary ||
+        input.pinIds.length - (index + 1) < primaryTarget - assignedPrimary);
+
+    if (usePrimary) {
+      assignedPrimary += 1;
+      return {
+        pinId,
+        boardId: primaryBoardId,
+      };
+    }
+
+    const boardId = secondaryBoardIds[secondaryIndex % secondaryBoardIds.length];
+    secondaryIndex += 1;
+    return {
+      pinId,
+      boardId,
+    };
+  });
 }
 
 function formatLabel(value: string) {

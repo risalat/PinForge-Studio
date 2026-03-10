@@ -493,12 +493,19 @@ export async function uploadJobPinsToPubler(input: {
   userId: string;
   jobId: string;
   generatedPinIds?: string[];
+  workspaceId?: string;
 }) {
   const job = await getOwnedJobOrThrow(input.jobId, input.userId);
   const settings = await getIntegrationSettingsForUserId(input.userId);
+  const workspaceId = input.workspaceId?.trim() || settings.publerWorkspaceId;
+
+  if (!workspaceId) {
+    throw new Error("Select a Publer workspace before uploading media.");
+  }
+
   const publerClient = createPublerClient({
     apiKey: settings.publerApiKey,
-    workspaceId: settings.publerWorkspaceId,
+    workspaceId,
   });
   const selectedPins = selectPinsForWorkflowAction(job, input.generatedPinIds);
   const result = createStepResultAccumulator();
@@ -782,13 +789,29 @@ export async function scheduleJobPins(input: {
   workspaceId?: string;
   accountId?: string;
   boardId?: string;
+  boardIds?: string[];
+  boardDistributionMode?: "round_robin" | "first_selected" | "primary_weighted";
+  primaryBoardId?: string;
+  primaryBoardPercent?: number;
   generatedPinIds?: string[];
 }) {
   const job = await getOwnedJobOrThrow(input.jobId, input.userId);
   const settings = await getIntegrationSettingsForUserId(input.userId);
   const workspaceId = input.workspaceId?.trim() || settings.publerWorkspaceId;
   const accountId = input.accountId?.trim() || settings.publerAccountId;
-  const boardId = input.boardId?.trim() || settings.publerBoardId;
+  const selectedBoardIds = Array.from(
+    new Set(
+      (input.boardIds?.length ? input.boardIds : [input.boardId?.trim() || settings.publerBoardId])
+        .map((boardId) => boardId?.trim())
+        .filter((boardId): boardId is string => Boolean(boardId)),
+    ),
+  );
+  const boardDistributionMode = input.boardDistributionMode ?? "round_robin";
+  const primaryBoardId = input.primaryBoardId?.trim() || selectedBoardIds[0] || null;
+  const primaryBoardPercent =
+    boardDistributionMode === "primary_weighted"
+      ? Math.max(0, Math.min(100, input.primaryBoardPercent ?? 60))
+      : null;
   const publerClient = createPublerClient({
     apiKey: settings.publerApiKey,
     workspaceId,
@@ -798,8 +821,16 @@ export async function scheduleJobPins(input: {
     throw new Error("Select a Publer account before scheduling.");
   }
 
-  if (!boardId) {
-    throw new Error("Select a Publer board before scheduling.");
+  if (selectedBoardIds.length === 0) {
+    throw new Error("Select at least one Publer board before scheduling.");
+  }
+
+  if (
+    boardDistributionMode === "primary_weighted" &&
+    primaryBoardId &&
+    !selectedBoardIds.includes(primaryBoardId)
+  ) {
+    throw new Error("The primary board must be one of the selected boards.");
   }
 
   const firstPublishAt = new Date(input.firstPublishAt);
@@ -833,15 +864,37 @@ export async function scheduleJobPins(input: {
       status: ScheduleRunStatus.SUBMITTING,
       workspaceId,
       accountId,
-      boardId,
+      boardId: selectedBoardIds[0] ?? null,
       firstPublishAt,
       intervalMinutes: input.intervalMinutes,
       jitterMinutes: input.jitterMinutes ?? 0,
+      rawResponse: {
+        boardIds: selectedBoardIds,
+        boardDistributionMode,
+        primaryBoardId,
+        primaryBoardPercent,
+      } satisfies Prisma.InputJsonValue,
       submittedAt: new Date(),
     },
   });
   const result = createStepResultAccumulator();
   result.skipped = requestedPins.length - selectedPins.length;
+  const scheduleAssignments: Array<{
+    pinId: string;
+    boardId: string;
+    scheduledFor: string;
+    status: "scheduled" | "failed";
+    postId?: string;
+    error?: string;
+  }> = [];
+  const boardAssignments = buildBoardAssignments({
+    pinIds: selectedPins.map((pin) => pin.id),
+    boardIds: selectedBoardIds,
+    mode: boardDistributionMode,
+    primaryBoardId,
+    primaryBoardPercent,
+  });
+  const assignedBoardByPinId = new Map(boardAssignments.map((assignment) => [assignment.pinId, assignment.boardId]));
 
   for (const pin of selectedPins) {
     const preview = previewByPinId.get(pin.id);
@@ -849,6 +902,7 @@ export async function scheduleJobPins(input: {
     const mediaId = pin.publerMedia?.mediaId?.trim();
     const title = pin.pinCopy?.title?.trim();
     const description = pin.pinCopy?.description?.trim();
+    const assignedBoardId = assignedBoardByPinId.get(pin.id) ?? selectedBoardIds[0];
 
     const item = await prisma.scheduleRunItem.create({
       data: {
@@ -892,7 +946,7 @@ export async function scheduleJobPins(input: {
           {
             id: accountId,
             scheduled_at: scheduledFor.toISOString(),
-            album_id: boardId,
+            album_id: assignedBoardId,
           },
         ],
       });
@@ -920,6 +974,13 @@ export async function scheduleJobPins(input: {
         },
       });
 
+      scheduleAssignments.push({
+        pinId: pin.id,
+        boardId: assignedBoardId,
+        scheduledFor: scheduledFor.toISOString(),
+        status: "scheduled",
+        postId: outcome?.postId,
+      });
       result.succeeded += 1;
     } catch (error) {
       const reason = error instanceof Error ? error.message : "Unable to schedule pin in Publer.";
@@ -933,6 +994,14 @@ export async function scheduleJobPins(input: {
           errorMessage: reason,
         },
       });
+
+      scheduleAssignments.push({
+        pinId: pin.id,
+        boardId: assignedBoardId,
+        scheduledFor: scheduledFor.toISOString(),
+        status: "failed",
+        error: reason,
+      });
     }
   }
 
@@ -941,6 +1010,13 @@ export async function scheduleJobPins(input: {
     data: {
       status: result.failed > 0 ? ScheduleRunStatus.FAILED : ScheduleRunStatus.COMPLETED,
       errorMessage: result.failed > 0 ? result.failures[0]?.reason ?? "Scheduling failed." : null,
+      rawResponse: {
+        boardIds: selectedBoardIds,
+        boardDistributionMode,
+        primaryBoardId,
+        primaryBoardPercent,
+        assignments: scheduleAssignments,
+      } satisfies Prisma.InputJsonValue,
       completedAt: new Date(),
     },
   });
@@ -1246,6 +1322,75 @@ function selectPinsForWorkflowAction(job: WorkflowJob, generatedPinIds?: string[
 
 function hasSuccessfulSchedule(pin: WorkflowJob["generatedPins"][number]) {
   return pin.scheduleRunItems.some((item) => item.status === ScheduleRunItemStatus.SCHEDULED);
+}
+
+function buildBoardAssignments(input: {
+  pinIds: string[];
+  boardIds: string[];
+  mode: "round_robin" | "first_selected" | "primary_weighted";
+  primaryBoardId?: string | null;
+  primaryBoardPercent?: number | null;
+}) {
+  if (input.pinIds.length === 0 || input.boardIds.length === 0) {
+    return [];
+  }
+
+  if (input.mode === "first_selected") {
+    return input.pinIds.map((pinId) => ({
+      pinId,
+      boardId: input.boardIds[0],
+    }));
+  }
+
+  if (input.mode === "round_robin") {
+    return input.pinIds.map((pinId, index) => ({
+      pinId,
+      boardId: input.boardIds[index % input.boardIds.length],
+    }));
+  }
+
+  const primaryBoardId = input.primaryBoardId && input.boardIds.includes(input.primaryBoardId)
+    ? input.primaryBoardId
+    : input.boardIds[0];
+  const secondaryBoardIds = input.boardIds.filter((boardId) => boardId !== primaryBoardId);
+
+  if (secondaryBoardIds.length === 0) {
+    return input.pinIds.map((pinId) => ({
+      pinId,
+      boardId: primaryBoardId,
+    }));
+  }
+
+  const primaryBoardPercent = Math.max(0, Math.min(100, input.primaryBoardPercent ?? 60));
+  const targetPrimaryCount = Math.min(
+    input.pinIds.length,
+    Math.max(0, Math.round((input.pinIds.length * primaryBoardPercent) / 100)),
+  );
+  let assignedPrimaryCount = 0;
+  let secondaryIndex = 0;
+
+  return input.pinIds.map((pinId, index) => {
+    const expectedPrimaryCount = Math.round(((index + 1) * targetPrimaryCount) / input.pinIds.length);
+    const shouldUsePrimary =
+      assignedPrimaryCount < targetPrimaryCount &&
+      (assignedPrimaryCount < expectedPrimaryCount ||
+        input.pinIds.length - (index + 1) < targetPrimaryCount - assignedPrimaryCount);
+
+    if (shouldUsePrimary) {
+      assignedPrimaryCount += 1;
+      return {
+        pinId,
+        boardId: primaryBoardId,
+      };
+    }
+
+    const boardId = secondaryBoardIds[secondaryIndex % secondaryBoardIds.length];
+    secondaryIndex += 1;
+    return {
+      pinId,
+      boardId,
+    };
+  });
 }
 
 function extractScheduleOutcome(raw: Record<string, unknown>) {
