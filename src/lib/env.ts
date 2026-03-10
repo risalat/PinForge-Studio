@@ -19,11 +19,40 @@ export const env = {
   r2AccessKeyId: process.env.R2_ACCESS_KEY_ID ?? "",
   r2SecretAccessKey: process.env.R2_SECRET_ACCESS_KEY ?? "",
   r2PublicBaseUrl: process.env.R2_PUBLIC_BASE_URL ?? "",
-  appUrl:
-    process.env.APP_URL ??
-    process.env.NEXT_PUBLIC_APP_URL ??
-    "http://127.0.0.1:3000",
+  appUrl: resolveAppUrl(),
 };
+
+function resolveAppUrl() {
+  const explicitUrl = process.env.APP_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "";
+  if (explicitUrl.trim()) {
+    return normalizeBaseUrl(explicitUrl);
+  }
+
+  const vercelUrl =
+    process.env.VERCEL_URL ??
+    process.env.VERCEL_BRANCH_URL ??
+    process.env.VERCEL_PROJECT_PRODUCTION_URL ??
+    "";
+  if (vercelUrl.trim()) {
+    return normalizeBaseUrl(vercelUrl, "https");
+  }
+
+  return "http://127.0.0.1:3000";
+}
+
+function normalizeBaseUrl(value: string, defaultProtocol?: "http" | "https") {
+  const trimmed = value.trim().replace(/\/+$/, "");
+  if (!trimmed) {
+    return "";
+  }
+
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed;
+  }
+
+  const protocol = defaultProtocol ?? "https";
+  return `${protocol}://${trimmed}`;
+}
 
 export function isDatabaseConfigured() {
   return Boolean(env.databaseUrl);
