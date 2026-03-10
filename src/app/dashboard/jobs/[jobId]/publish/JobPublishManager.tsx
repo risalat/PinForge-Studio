@@ -120,6 +120,7 @@ export function JobPublishManager({
     useState<BoardDistributionMode>("round_robin");
   const [primaryBoardId, setPrimaryBoardId] = useState(defaults.boardId);
   const [primaryBoardPercent, setPrimaryBoardPercent] = useState(60);
+  const [boardSearchQuery, setBoardSearchQuery] = useState("");
   const [workspaces, setWorkspaces] = useState<PublerWorkspace[]>([]);
   const [accounts, setAccounts] = useState<PublerAccount[]>([]);
   const [boards, setBoards] = useState<PublerBoard[]>([]);
@@ -154,6 +155,14 @@ export function JobPublishManager({
         .filter((board): board is PublerBoard => Boolean(board)),
     [boards, selectedBoardIds],
   );
+  const filteredBoards = useMemo(() => {
+    const query = boardSearchQuery.trim().toLowerCase();
+    if (!query) {
+      return boards;
+    }
+
+    return boards.filter((board) => board.name.toLowerCase().includes(query));
+  }, [boardSearchQuery, boards]);
 
   const summary = useMemo(
     () => ({
@@ -508,6 +517,7 @@ export function JobPublishManager({
                 setWorkspaceId(nextValue);
                 setSelectedBoardIds([]);
                 setPrimaryBoardId("");
+                setBoardSearchQuery("");
                 void loadPublerOptions({
                   nextWorkspaceId: nextValue,
                   nextAccountId: accountId,
@@ -532,6 +542,7 @@ export function JobPublishManager({
                 setAccountId(nextValue);
                 setSelectedBoardIds([]);
                 setPrimaryBoardId("");
+                setBoardSearchQuery("");
                 void loadPublerOptions({
                   nextWorkspaceId: workspaceId,
                   nextAccountId: nextValue,
@@ -614,46 +625,62 @@ export function JobPublishManager({
               Load a workspace and Pinterest account to choose boards.
             </p>
           ) : (
-            <div className="mt-4 grid gap-3 md:grid-cols-2">
-              {boards.map((board) => {
-                const selectionIndex = selectedBoardIds.indexOf(board.id);
-                const isSelected = selectionIndex !== -1;
+            <div className="mt-4 space-y-4">
+              <div className="rounded-2xl border border-[#eadacc] bg-white p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-sm font-semibold text-[#23160d]">
+                    Selected boards: {selectedBoards.length}
+                  </p>
+                  {selectedBoards.length > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedBoardIds([]);
+                        setPrimaryBoardId("");
+                      }}
+                      className="rounded-full border border-[#d8b690] px-3 py-1 text-xs font-semibold text-[#8a572a]"
+                    >
+                      Clear selected
+                    </button>
+                  ) : null}
+                </div>
 
-                return (
-                  <div
-                    key={board.id}
-                    className={`rounded-2xl border p-4 ${
-                      isSelected ? "border-[#8a572a] bg-white" : "border-[#eadacc] bg-[#fffaf4]"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <label className="flex min-w-0 items-start gap-3">
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={(event) => toggleBoard(board.id, event.target.checked)}
-                          className="mt-1"
-                        />
-                        <span className="min-w-0">
-                          <span className="block truncate text-sm font-semibold text-[#23160d]">
+                {selectedBoards.length === 0 ? (
+                  <p className="mt-3 text-sm text-[#6e4a2b]">
+                    No boards selected yet. Open the picker below and search by board name.
+                  </p>
+                ) : (
+                  <div className="mt-3 space-y-2">
+                    {selectedBoards.map((board, index) => (
+                      <div
+                        key={board.id}
+                        className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#eadacc] bg-[#fffaf4] px-3 py-2"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-[#23160d]">
                             {board.name}
-                          </span>
-                          <span className="block text-xs uppercase tracking-[0.18em] text-[#8a572a]">
-                            {isSelected
-                              ? boardDistributionMode === "primary_weighted" &&
-                                primaryBoardId === board.id
-                                ? `Primary - priority ${selectionIndex + 1}`
-                                : `Priority ${selectionIndex + 1}`
-                              : "Not selected"}
-                          </span>
-                        </span>
-                      </label>
-                      {isSelected ? (
-                        <div className="flex gap-2">
+                          </p>
+                          <p className="text-xs uppercase tracking-[0.16em] text-[#8a572a]">
+                            {boardDistributionMode === "primary_weighted" && primaryBoardId === board.id
+                              ? `Primary - priority ${index + 1}`
+                              : `Priority ${index + 1}`}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {boardDistributionMode === "primary_weighted" ? (
+                            <button
+                              type="button"
+                              onClick={() => setPrimaryBoardId(board.id)}
+                              disabled={primaryBoardId === board.id}
+                              className="rounded-full border border-[#d8b690] px-3 py-1 text-xs font-semibold text-[#8a572a] disabled:opacity-50"
+                            >
+                              Make primary
+                            </button>
+                          ) : null}
                           <button
                             type="button"
                             onClick={() => moveBoard(board.id, "up")}
-                            disabled={selectionIndex === 0}
+                            disabled={index === 0}
                             className="rounded-full border border-[#d8b690] px-3 py-1 text-xs font-semibold text-[#8a572a] disabled:opacity-50"
                           >
                             Up
@@ -661,17 +688,75 @@ export function JobPublishManager({
                           <button
                             type="button"
                             onClick={() => moveBoard(board.id, "down")}
-                            disabled={selectionIndex === selectedBoardIds.length - 1}
+                            disabled={index === selectedBoards.length - 1}
                             className="rounded-full border border-[#d8b690] px-3 py-1 text-xs font-semibold text-[#8a572a] disabled:opacity-50"
                           >
                             Down
                           </button>
+                          <button
+                            type="button"
+                            onClick={() => toggleBoard(board.id, false)}
+                            className="rounded-full border border-[#d8b690] px-3 py-1 text-xs font-semibold text-[#8a572a]"
+                          >
+                            Remove
+                          </button>
                         </div>
-                      ) : null}
-                    </div>
+                      </div>
+                    ))}
                   </div>
-                );
-              })}
+                )}
+              </div>
+
+              <details className="rounded-2xl border border-[#eadacc] bg-white">
+                <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-[#23160d]">
+                  Search and select boards
+                </summary>
+                <div className="border-t border-[#f0e3d7] px-4 py-4">
+                  <label className="block text-sm font-semibold text-[#6e4a2b]">
+                    Search boards
+                    <input
+                      value={boardSearchQuery}
+                      onChange={(event) => setBoardSearchQuery(event.target.value)}
+                      placeholder="Search by board name"
+                      className="mt-2 w-full rounded-xl border border-[#dcc8b2] bg-[#fffaf4] px-3 py-2"
+                    />
+                  </label>
+                  <div className="mt-3 max-h-72 space-y-2 overflow-y-auto pr-1">
+                    {filteredBoards.length === 0 ? (
+                      <p className="text-sm text-[#6e4a2b]">No boards match this search.</p>
+                    ) : (
+                      filteredBoards.map((board) => {
+                        const isSelected = selectedBoardIds.includes(board.id);
+
+                        return (
+                          <label
+                            key={board.id}
+                            className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-2 ${
+                              isSelected
+                                ? "border-[#8a572a] bg-[#fffaf4]"
+                                : "border-[#eadacc] bg-white"
+                            }`}
+                          >
+                            <span className="flex min-w-0 items-center gap-3">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={(event) => toggleBoard(board.id, event.target.checked)}
+                              />
+                              <span className="truncate text-sm font-semibold text-[#23160d]">
+                                {board.name}
+                              </span>
+                            </span>
+                            <span className="text-xs uppercase tracking-[0.16em] text-[#8a572a]">
+                              {isSelected ? "Selected" : "Available"}
+                            </span>
+                          </label>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              </details>
             </div>
           )}
         </div>
