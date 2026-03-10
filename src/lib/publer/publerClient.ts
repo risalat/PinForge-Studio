@@ -79,7 +79,9 @@ export class PublerClient {
   }
 
   async getWorkspaces(): Promise<PublerWorkspace[]> {
-    const payload = await this.request<unknown>("/workspaces");
+    const payload = await this.request<unknown>("/workspaces", undefined, {
+      includeWorkspaceHeader: false,
+    });
     return extractArray(payload)
       .map((item) => ({
         id: String(pickStringOrNumber(item, ["id", "workspace_id", "workspaceId"]) ?? ""),
@@ -203,11 +205,17 @@ export class PublerClient {
     return this.schedulePosts(request);
   }
 
-  private async request<T>(path: string, init?: RequestInit): Promise<T> {
+  private async request<T>(
+    path: string,
+    init?: RequestInit,
+    options?: {
+      includeWorkspaceHeader?: boolean;
+    },
+  ): Promise<T> {
     const headers = new Headers(init?.headers);
     headers.set("Content-Type", "application/json");
     headers.set("Authorization", `Bearer-API ${this.apiKey}`);
-    if (this.workspaceId) {
+    if (options?.includeWorkspaceHeader !== false && this.workspaceId) {
       headers.set("Publer-Workspace-Id", this.workspaceId);
     }
 
