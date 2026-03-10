@@ -2,6 +2,8 @@ import path from "node:path";
 import { NextResponse } from "next/server";
 import { getStorageProvider } from "@/lib/storage";
 
+export const runtime = "nodejs";
+
 type StorageRouteProps = {
   params: Promise<{
     key: string[];
@@ -18,7 +20,7 @@ export async function GET(_request: Request, { params }: StorageRouteProps) {
     return new NextResponse(new Uint8Array(file.body), {
       status: 200,
       headers: {
-        "Content-Type": guessContentType(storageKey),
+        "Content-Type": file.contentType ?? guessContentType(storageKey),
         "Cache-Control": "private, max-age=300",
       },
     });

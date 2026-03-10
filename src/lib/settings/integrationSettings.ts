@@ -38,9 +38,13 @@ const DEFAULT_SETTINGS: IntegrationSettings = {
 
 export async function getIntegrationSettings() {
   const user = await getOrCreateDashboardUser();
+  return getIntegrationSettingsForUserId(user.id);
+}
+
+export async function getIntegrationSettingsForUserId(userId: string) {
   const settings = await prisma.userIntegrationSettings.findUnique({
     where: {
-      userId: user.id,
+      userId,
     },
   });
 

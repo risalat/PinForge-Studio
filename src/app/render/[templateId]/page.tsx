@@ -8,7 +8,7 @@ type RenderPageProps = {
   }>;
   searchParams: Promise<{
     jobId?: string;
-    copyIndex?: string;
+    planId?: string;
   }>;
 };
 
@@ -17,7 +17,7 @@ export default async function RenderTemplatePage({
   searchParams,
 }: RenderPageProps) {
   const { templateId } = await params;
-  const { jobId, copyIndex } = await searchParams;
+  const { jobId, planId } = await searchParams;
   const config = getTemplateConfig(templateId);
 
   if (!config) {
@@ -27,7 +27,7 @@ export default async function RenderTemplatePage({
   const payload = await getRenderPayload(
     templateId,
     jobId,
-    Number.parseInt(copyIndex ?? "0", 10) || 0,
+    planId,
   );
 
   return (

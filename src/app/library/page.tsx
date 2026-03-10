@@ -75,6 +75,9 @@ export default function TemplateLibraryPage() {
                       <span className="rounded-full border border-[#dcc5aa] px-4 py-2 text-xs font-semibold uppercase tracking-[0.24em] text-[#8a572a]">
                         {template.imageSlotCount} image slots
                       </span>
+                      <span className="rounded-full border border-[#dcc5aa] px-4 py-2 text-xs font-semibold uppercase tracking-[0.24em] text-[#8a572a]">
+                        {template.features.overlay ? "Overlay" : "Editorial"}
+                      </span>
                     </div>
 
                     <div>
@@ -126,6 +129,12 @@ export default function TemplateLibraryPage() {
                       className="rounded-full border border-[#d8b690] px-5 py-3 text-sm font-semibold uppercase tracking-[0.22em] text-[#8a572a]"
                     >
                       Open render
+                    </Link>
+                    <Link
+                      href="/dashboard/jobs"
+                      className="rounded-full border border-[#d8b690] px-5 py-3 text-sm font-semibold uppercase tracking-[0.22em] text-[#8a572a]"
+                    >
+                      Use in jobs
                     </Link>
                   </div>
                 </div>

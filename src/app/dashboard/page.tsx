@@ -1,7 +1,10 @@
+import { GenerationJobStatus } from "@prisma/client";
 import Link from "next/link";
 import { SignOutButton } from "@/app/dashboard/SignOutButton";
+import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
 import { requireAuthenticatedDashboardUser } from "@/lib/auth/dashboardSession";
 import { isDatabaseConfigured } from "@/lib/env";
+import { listJobsForUser } from "@/lib/jobs/generatePins";
 import { prisma } from "@/lib/prisma";
 
 async function getDashboardData() {
@@ -9,30 +12,36 @@ async function getDashboardData() {
     return {
       postsProcessed: 0,
       pinsGenerated: 0,
+      readyToSchedule: 0,
       recentJobs: [],
       databaseReady: false,
     };
   }
 
   try {
-    const [postsProcessed, pinsGenerated, recentJobs] = await Promise.all([
+    const user = await getOrCreateDashboardUser();
+    const [postsProcessed, pinsGenerated, readyToSchedule, recentJobs] = await Promise.all([
       prisma.post.count(),
-      prisma.generatedPin.count(),
-      prisma.generationJob.findMany({
-        orderBy: {
-          createdAt: "desc",
-        },
-        take: 8,
-        include: {
-          post: true,
-          generatedPins: true,
+      prisma.generatedPin.count({
+        where: {
+          job: {
+            userId: user.id,
+          },
         },
       }),
+      prisma.generationJob.count({
+        where: {
+          userId: user.id,
+          status: GenerationJobStatus.READY_TO_SCHEDULE,
+        },
+      }),
+      listJobsForUser(user.id).then((jobs) => jobs.slice(0, 8)),
     ]);
 
     return {
       postsProcessed,
       pinsGenerated,
+      readyToSchedule,
       recentJobs,
       databaseReady: true,
     };
@@ -40,6 +49,7 @@ async function getDashboardData() {
     return {
       postsProcessed: 0,
       pinsGenerated: 0,
+      readyToSchedule: 0,
       recentJobs: [],
       databaseReady: false,
     };
@@ -59,12 +69,18 @@ export default async function DashboardPage() {
               Dashboard
             </p>
             <h1 className="mt-2 text-4xl font-black uppercase tracking-[-0.05em]">
-              Generation overview
+              Intake and publishing overview
             </h1>
             <p className="mt-3 text-sm text-[#6e4a2b]">{user.email}</p>
           </div>
           <div className="flex flex-wrap gap-3">
             <SignOutButton />
+            <Link
+              href="/dashboard/jobs"
+              className="rounded-full bg-[#2c1c12] px-5 py-3 text-sm font-semibold uppercase tracking-[0.22em] text-[#f7ede0]"
+            >
+              Open jobs board
+            </Link>
             <Link
               href="/dashboard/settings"
               className="rounded-full border border-[#d8b690] px-5 py-3 text-sm font-semibold uppercase tracking-[0.22em] text-[#8a572a]"
@@ -81,21 +97,15 @@ export default async function DashboardPage() {
               href="/library"
               className="rounded-full border border-[#d8b690] px-5 py-3 text-sm font-semibold uppercase tracking-[0.22em] text-[#8a572a]"
             >
-              Content library
-            </Link>
-            <Link
-              href="/preview/split-vertical-title"
-              className="rounded-full bg-[#2c1c12] px-5 py-3 text-sm font-semibold uppercase tracking-[0.22em] text-[#f7ede0]"
-            >
-              Preview template
+              Library
             </Link>
           </div>
         </div>
 
         {!data.databaseReady ? (
           <div className="rounded-[30px] border border-[#e2d1bc] bg-[#fff8ef] p-6 text-[#6e4a2b]">
-            `DATABASE_URL` is not configured yet. Preview and render routes work now; dashboard data
-            will populate after the first Prisma migration.
+            `DATABASE_URL` is not configured yet. The dashboard workflow will populate after the
+            database is connected and migrated.
           </div>
         ) : null}
 
@@ -114,9 +124,9 @@ export default async function DashboardPage() {
           </div>
           <div className="rounded-[30px] bg-white p-6 shadow-[0_24px_50px_rgba(60,40,18,0.08)]">
             <p className="text-sm font-semibold uppercase tracking-[0.26em] text-[#9c6a38]">
-              Recent jobs
+              Ready to schedule
             </p>
-            <p className="mt-4 text-5xl font-black">{data.recentJobs.length}</p>
+            <p className="mt-4 text-5xl font-black">{data.readyToSchedule}</p>
           </div>
         </section>
 
@@ -127,38 +137,50 @@ export default async function DashboardPage() {
                 Jobs
               </p>
               <h2 className="mt-2 text-3xl font-black uppercase tracking-[-0.04em]">
-                Recent generation jobs
+                Latest intake jobs
               </h2>
             </div>
+            <Link
+              href="/dashboard/jobs"
+              className="rounded-full border border-[#d8b690] px-5 py-3 text-sm font-semibold uppercase tracking-[0.22em] text-[#f7ede0]"
+            >
+              View all jobs
+            </Link>
           </div>
 
           <div className="mt-6 overflow-hidden rounded-[24px] bg-white text-[#27180e]">
             <table className="min-w-full divide-y divide-[#eadccf]">
               <thead className="bg-[#f7efe6] text-left text-sm uppercase tracking-[0.22em] text-[#8a572a]">
                 <tr>
-                  <th className="px-5 py-4">Post</th>
+                  <th className="px-5 py-4">Article</th>
                   <th className="px-5 py-4">Status</th>
-                  <th className="px-5 py-4">Templates</th>
-                  <th className="px-5 py-4">Outputs</th>
+                  <th className="px-5 py-4">Images</th>
+                  <th className="px-5 py-4">Pins</th>
+                  <th className="px-5 py-4">Schedule</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#f2e6da]">
                 {data.recentJobs.length === 0 ? (
                   <tr>
-                    <td className="px-5 py-6 text-sm text-[#6e4a2b]" colSpan={4}>
-                      No jobs yet. Use `POST /api/generate` after your database is configured.
+                    <td className="px-5 py-6 text-sm text-[#6e4a2b]" colSpan={5}>
+                      No intake jobs yet. The extension will create review jobs via `POST /api/generate`.
                     </td>
                   </tr>
                 ) : (
                   data.recentJobs.map((job) => (
                     <tr key={job.id}>
                       <td className="px-5 py-4">
-                        <p className="font-semibold">{job.post.title}</p>
-                        <p className="text-sm text-[#6e4a2b]">{job.post.url}</p>
+                        <Link href={`/dashboard/jobs/${job.id}`} className="font-semibold underline">
+                          {job.articleTitleSnapshot}
+                        </Link>
+                        <p className="text-sm text-[#6e4a2b]">{job.postUrlSnapshot}</p>
                       </td>
                       <td className="px-5 py-4 font-semibold">{job.status}</td>
-                      <td className="px-5 py-4">{job.requestedTemplates.length}</td>
+                      <td className="px-5 py-4">{job.sourceImages.length}</td>
                       <td className="px-5 py-4">{job.generatedPins.length}</td>
+                      <td className="px-5 py-4">
+                        {job.scheduleRuns[0]?.status ?? "Not started"}
+                      </td>
                     </tr>
                   ))
                 )}

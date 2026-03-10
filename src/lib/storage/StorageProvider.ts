@@ -8,6 +8,7 @@ export type StoredObject = {
   key: string;
   absolutePath?: string;
   contentType?: string;
+  publicUrl?: string;
 };
 
 export type RetrievedObject = StoredObject & {

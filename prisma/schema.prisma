@@ -8,9 +8,56 @@ datasource db {
 }
 
 enum GenerationJobStatus {
-  PENDING
-  PROCESSING
+  RECEIVED
+  REVIEWING
+  READY_FOR_GENERATION
+  PINS_GENERATED
+  MEDIA_UPLOADED
+  TITLES_GENERATED
+  DESCRIPTIONS_GENERATED
+  READY_TO_SCHEDULE
+  SCHEDULED
   COMPLETED
+  FAILED
+}
+
+enum GenerationPlanMode {
+  ASSISTED_AUTO
+  MANUAL
+}
+
+enum GenerationPlanStatus {
+  DRAFT
+  READY
+  GENERATED
+  FAILED
+}
+
+enum MediaUploadStatus {
+  PENDING
+  UPLOADING
+  UPLOADED
+  FAILED
+}
+
+enum PinCopyFieldStatus {
+  EMPTY
+  GENERATED
+  FINALIZED
+}
+
+enum ScheduleRunStatus {
+  DRAFT
+  SUBMITTING
+  SCHEDULED
+  COMPLETED
+  FAILED
+}
+
+enum ScheduleRunItemStatus {
+  PENDING
+  SUBMITTING
+  SCHEDULED
   FAILED
 }
 
@@ -20,6 +67,7 @@ model User {
   email               String   @unique
   createdAt           DateTime @default(now())
   apiKeys             ApiKey[]
+  generationJobs      GenerationJob[]
   integrationSettings UserIntegrationSettings?
 }
 
@@ -35,39 +83,191 @@ model Post {
 
 model GenerationJob {
   id                 String              @id @default(cuid())
+  userId             String
   postId             String
-  status             GenerationJobStatus @default(PENDING)
-  requestedTemplates String[]
-  sourceImages       Json?
-  generatedCopy      Json?
+  postUrlSnapshot    String
+  articleTitleSnapshot String
+  domainSnapshot     String
+  status             GenerationJobStatus @default(RECEIVED)
+  globalKeywords     String[] @default([])
+  titleStyle         String?
+  toneHint           String?
+  listCountHint      Int?
+  titleVariationCount Int?
+  requestedPinCount  Int?
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   post               Post                @relation(fields: [postId], references: [id], onDelete: Cascade)
+  sourceImages       JobSourceImage[]
+  generationPlans    GenerationPlan[]
   generatedPins      GeneratedPin[]
+  milestones         JobMilestone[]
+  scheduleRuns       ScheduleRun[]
+
+  @@index([userId, status, createdAt])
+  @@index([postId, createdAt])
+}
+
+model JobSourceImage {
+  id                     String   @id @default(cuid())
+  jobId                   String
+  url                    String
+  alt                    String?
+  caption                String?
+  nearestHeading         String?
+  sectionHeadingPath     String[] @default([])
+  surroundingTextSnippet String?
+  isSelected             Boolean  @default(true)
+  isPreferred            Boolean  @default(false)
+  sortOrder              Int      @default(0)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  job                    GenerationJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  planAssignments        GenerationPlanImageAssignment[]
+
+  @@index([jobId, sortOrder])
+}
+
+model GenerationPlan {
+  id               String               @id @default(cuid())
+  jobId            String
+  mode             GenerationPlanMode
+  templateId       String
+  sortOrder        Int                  @default(0)
+  status           GenerationPlanStatus @default(DRAFT)
+  notes            String?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  job              GenerationJob        @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  template         Template             @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  imageAssignments GenerationPlanImageAssignment[]
+  generatedPins    GeneratedPin[]
+
+  @@index([jobId, status, sortOrder])
+}
+
+model GenerationPlanImageAssignment {
+  id            String         @id @default(cuid())
+  planId        String
+  sourceImageId String
+  slotIndex     Int
+  createdAt     DateTime       @default(now())
+  plan          GenerationPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  sourceImage   JobSourceImage @relation(fields: [sourceImageId], references: [id], onDelete: Cascade)
+
+  @@unique([planId, slotIndex])
+  @@index([sourceImageId])
 }
 
 model GeneratedPin {
-  id           String        @id @default(cuid())
-  jobId        String
-  templateId   String
-  title        String
-  description  String?
-  exportPath   String
-  publerPostId String?
-  scheduledAt  DateTime?
-  createdAt    DateTime      @default(now())
-  job          GenerationJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  template     Template      @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  id               String            @id @default(cuid())
+  jobId             String
+  planId            String
+  templateId        String
+  exportPath        String
+  storageKey        String?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  job               GenerationJob    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  plan              GenerationPlan   @relation(fields: [planId], references: [id], onDelete: Cascade)
+  template          Template         @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  pinCopy           PinCopy?
+  publerMedia       PublerMedia?
+  scheduleRunItems  ScheduleRunItem[]
+
+  @@index([jobId, createdAt])
+  @@index([planId])
 }
 
 model Template {
-  id            String         @id
-  name          String
-  componentKey  String         @unique
-  configJson    Json
-  isActive      Boolean        @default(true)
-  createdAt     DateTime       @default(now())
-  generatedPins GeneratedPin[]
+  id              String           @id
+  name            String
+  componentKey    String           @unique
+  configJson      Json
+  isActive        Boolean          @default(true)
+  createdAt       DateTime         @default(now())
+  generatedPins   GeneratedPin[]
+  generationPlans GenerationPlan[]
+}
+
+model PublerMedia {
+  id            String            @id @default(cuid())
+  generatedPinId String           @unique
+  status        MediaUploadStatus @default(PENDING)
+  uploadJobId   String?
+  mediaId       String?
+  sourceUrl     String?
+  errorMessage  String?
+  rawResponse   Json?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  generatedPin  GeneratedPin      @relation(fields: [generatedPinId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+}
+
+model PinCopy {
+  id                String             @id @default(cuid())
+  generatedPinId    String             @unique
+  title             String?
+  description       String?
+  titleStatus       PinCopyFieldStatus @default(EMPTY)
+  descriptionStatus PinCopyFieldStatus @default(EMPTY)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  generatedPin      GeneratedPin       @relation(fields: [generatedPinId], references: [id], onDelete: Cascade)
+}
+
+model ScheduleRun {
+  id             String            @id @default(cuid())
+  jobId          String
+  status         ScheduleRunStatus @default(DRAFT)
+  workspaceId    String?
+  accountId      String?
+  boardId        String?
+  firstPublishAt DateTime?
+  intervalMinutes Int?
+  jitterMinutes  Int?
+  errorMessage   String?
+  rawResponse    Json?
+  submittedAt    DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  job            GenerationJob     @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  items          ScheduleRunItem[]
+
+  @@index([jobId, status, createdAt])
+}
+
+model ScheduleRunItem {
+  id            String                @id @default(cuid())
+  scheduleRunId String
+  generatedPinId String
+  publerJobId   String?
+  publerPostId  String?
+  scheduledFor  DateTime?
+  status        ScheduleRunItemStatus @default(PENDING)
+  errorMessage  String?
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+  scheduleRun   ScheduleRun           @relation(fields: [scheduleRunId], references: [id], onDelete: Cascade)
+  generatedPin  GeneratedPin          @relation(fields: [generatedPinId], references: [id], onDelete: Cascade)
+
+  @@unique([scheduleRunId, generatedPinId])
+}
+
+model JobMilestone {
+  id        String              @id @default(cuid())
+  jobId      String
+  status    GenerationJobStatus
+  details   String?
+  createdAt DateTime            @default(now())
+  job       GenerationJob       @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, status])
+  @@index([jobId, createdAt])
 }
 
 model ApiKey {

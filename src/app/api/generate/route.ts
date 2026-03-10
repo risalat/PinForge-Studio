@@ -2,7 +2,10 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { authenticateApiKeyRequest } from "@/lib/auth/apiKeyAuth";
 import { isDatabaseConfigured } from "@/lib/env";
-import { generatePins } from "@/lib/jobs/generatePins";
+import { createIntakeJob } from "@/lib/jobs/generatePins";
+
+export const runtime = "nodejs";
+export const maxDuration = 60;
 
 const titleStyleOptions = ["balanced", "seo", "curiosity", "benefit"] as const;
 
@@ -45,11 +48,16 @@ export async function POST(request: Request) {
 
     const rawPayload = await request.json();
     const payload = generateSchema.parse(rawPayload);
-    const result = await generatePins(payload);
+    const result = await createIntakeJob({
+      payload,
+      userId: auth.user.id,
+    });
 
     return NextResponse.json({
       ok: true,
-      ...result,
+      jobId: result.jobId,
+      status: result.status,
+      dashboardUrl: result.dashboardUrl,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown generation error";

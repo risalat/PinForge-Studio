@@ -2,8 +2,10 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { NextResponse } from "next/server";
 import { authenticateApiKeyRequest } from "@/lib/auth/apiKeyAuth";
-import { env } from "@/lib/env";
 import { getStorageProvider } from "@/lib/storage";
+import { buildStorageAssetUrl } from "@/lib/storage/assetUrl";
+
+export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   const auth = await authenticateApiKeyRequest(request);
@@ -35,16 +37,10 @@ export async function POST(request: Request) {
     contentType: file.type || "application/octet-stream",
   });
 
-  const encodedKey = stored.key
-    .split("/")
-    .map((segment) => encodeURIComponent(segment))
-    .join("/");
-  const url = new URL(`/api/storage/${encodedKey}`, env.appUrl).toString();
-
   return NextResponse.json({
     ok: true,
     tempId,
     key: stored.key,
-    url,
+    url: stored.publicUrl ?? buildStorageAssetUrl(stored.key),
   });
 }

@@ -4,6 +4,9 @@
 
 `POST /api/generate`
 
+This endpoint is now an intake endpoint. It stores an intake job for dashboard review and does not
+generate pins or publish automatically.
+
 ## Authentication
 
 This endpoint requires:
@@ -66,20 +69,8 @@ Success:
 {
   "ok": true,
   "jobId": "cm8...",
-  "postId": "cm8...",
-  "pins": [
-    {
-      "id": "cm8...",
-      "jobId": "cm8...",
-      "templateId": "split-vertical-title",
-      "title": "Typography Pairing Ideas for Better Pinterest Pins",
-      "description": "Use this pin when you want a clear typography-focused angle for the article.",
-      "exportPath": "D:/Vibe Code Projects/Pin Forge Studio/storage/temp/jobs/cm8.../split-vertical-title-0.png",
-      "publerPostId": "123456789",
-      "scheduledAt": "2026-03-10T12:00:00.000Z",
-      "createdAt": "2026-03-09T12:00:00.000Z"
-    }
-  ]
+  "status": "RECEIVED",
+  "dashboardUrl": "https://pin-forge-studio.vercel.app/dashboard/jobs/cm8..."
 }
 ```
 
@@ -88,16 +79,16 @@ Failure:
 ```json
 {
   "ok": false,
-  "error": "OpenAI API key is required."
+  "error": "Missing Authorization bearer token."
 }
 ```
 
 ## Notes
 
 - The Studio backend derives `domain` from `postUrl` if the extension omits it.
-- AI generation uses extension-derived provider plumbing, but Studio titles are generated for the
-  whole collage pin, not per individual image.
-- Studio can store the Publer API key in dashboard settings, but workspace/account/board selection is expected to happen in a later scheduling flow.
-- Rendered assets are exposed through temporary Studio URLs so Publer can fetch them with the same `media/from-url` workflow used in the extension.
+- The API key owner becomes the owner of the intake job inside Studio.
+- The extension request stores article metadata and incoming image metadata only.
+- Pin generation, title generation, description generation, media upload, and scheduling now happen later from dashboard actions.
+- When `R2_PUBLIC_BASE_URL` is configured, uploaded temp files and rendered pins return direct R2 public URLs.
 - The extension can use `POST /api/uploads/temp` with the same bearer key when direct image URLs are
   not sufficient.

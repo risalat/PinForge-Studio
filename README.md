@@ -5,11 +5,11 @@ PinForge Studio is a local-first Pinterest pin rendering app built from the prod
 It provides:
 
 - Next.js App Router foundation
-- Prisma schema for posts, jobs, templates, and generated pins
+- Prisma schema for intake jobs, source images, generation plans, generated pins, and publishing state
 - A React-based template system
 - A Playwright screenshot renderer for 1080x1920 exports
-- Local disk storage with an R2 provider stub
-- A basic generation API, dashboard, and integration settings UI
+- Local disk storage in development and Cloudflare R2 in production
+- An intake API plus dashboard review, generation, and publishing workflow
 
 ## Stack
 
@@ -41,27 +41,35 @@ Copy-Item .env.example .env
 
 5. Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` for Supabase Auth.
 
-6. Generate the Prisma client:
+6. For production storage, set Cloudflare R2 credentials:
+
+- `R2_ACCOUNT_ID` or `R2_ENDPOINT`
+- `R2_BUCKET_NAME`
+- `R2_ACCESS_KEY_ID`
+- `R2_SECRET_ACCESS_KEY`
+- `R2_PUBLIC_BASE_URL`
+
+7. Generate the Prisma client:
 
 ```bash
 npm run prisma:generate
 ```
 
-7. Run your first migration:
+8. Run your first migration:
 
 ```bash
 npm run prisma:migrate -- --name init
 ```
 
-8. In the Supabase dashboard, create your first email/password user under `Authentication -> Users`.
+9. In the Supabase dashboard, create your first email/password user under `Authentication -> Users`.
 
-9. Install the Playwright Chromium browser:
+10. Install the Playwright Chromium browser for local development:
 
 ```bash
 npm run playwright:install
 ```
 
-10. Start the dev server:
+11. Start the dev server:
 
 ```bash
 npm run dev
@@ -79,6 +87,7 @@ npm run dev
 - `/dashboard` dashboard overview
 - `/dashboard/settings` Publer and AI integration settings
 - `/dashboard/api-keys` extension API key management
+- `/dashboard/jobs` intake job board
 - `/preview/split-vertical-title` live template preview
 - `/render/split-vertical-title` render route used by Playwright
 
@@ -86,8 +95,12 @@ npm run dev
 
 - Publer and AI credentials are configured in the dashboard, not in `.env`.
 - Dashboard access is protected by Supabase Auth. Set the same auth env vars in Vercel before using the production deployment.
-- Local file storage defaults to `./storage`.
-- The render pipeline writes PNGs under `storage/temp/jobs/{jobId}/`.
-- `R2StorageProvider` is intentionally stubbed for later production wiring.
-- The dashboard stores the Publer API key only; workspace/account/board selection can happen later in the publishing flow.
+- Local file storage defaults to `./storage` when R2 is not configured.
+- The upload endpoint stores temporary source assets at `temp/uploads/{tempId}/source.ext`.
+- `POST /api/generate` now creates an intake job only; it does not render, generate copy, or schedule automatically.
+- The render pipeline stores generated PNGs at `temp/jobs/{jobId}/{planId}-{templateId}.png`.
+- Generated pin records store a Studio asset URL in `exportPath`, not a machine-local file path.
+- When `R2_PUBLIC_BASE_URL` is configured, R2 uploads return direct public asset URLs and Publer receives those URLs for scheduling.
+- On Vercel, rendering uses a serverless Chromium binary instead of relying on `npx playwright install`.
+- The publishing flow is manual and staged: upload media, generate titles, review titles, generate descriptions, then schedule.
 - The dashboard can auto-discover provider models for Gemini, OpenAI, and OpenRouter after you enter the provider API key.

@@ -74,12 +74,14 @@ Revoking a key:
 - Dashboard pages and dashboard APIs are protected by Supabase Auth session cookies.
 - Users must sign in at `/login` before they can create API keys or store Publer/AI credentials.
 - API keys and encrypted integration settings are scoped to the signed-in Supabase user.
+- Extension intake requests create jobs owned by the API key owner.
 - To bootstrap access, create your first email/password user in the Supabase dashboard.
 
 ## Local dev vs production
 
 - Use the same `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` values in
   local `.env` and Vercel project settings.
+- In Vercel production, configure R2 with `R2_BUCKET_NAME`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_PUBLIC_BASE_URL`, and either `R2_ENDPOINT` or `R2_ACCOUNT_ID`.
 - Extension-facing routes are protected by bearer API key validation.
 - Dashboard routes are protected separately by Supabase Auth.
 
@@ -89,6 +91,10 @@ Currently protected:
 
 - `POST /api/generate`
 - `POST /api/uploads/temp`
+- `POST /api/dashboard/jobs/[jobId]/review`
+- `POST /api/dashboard/jobs/[jobId]/plans`
+- `POST /api/dashboard/jobs/[jobId]/generate`
+- `POST /api/dashboard/jobs/[jobId]/publish`
 
 Prepared for future protection:
 

@@ -1,16 +1,18 @@
-import { chromium } from "playwright";
+import serverlessChromium from "@sparticuz/chromium";
+import { chromium as localChromium } from "playwright";
+import { chromium as serverlessPlaywright } from "playwright-core";
 import { env } from "@/lib/env";
 import { getStorageProvider } from "@/lib/storage";
 import { getTemplateConfig } from "@/lib/templates/registry";
 
 type RenderPinInput = {
   jobId: string;
+  planId: string;
   templateId: string;
-  copyIndex?: number;
 };
 
-export async function renderPin({ jobId, templateId, copyIndex = 0 }: RenderPinInput) {
-  const browser = await chromium.launch({ headless: true });
+export async function renderPin({ jobId, planId, templateId }: RenderPinInput) {
+  const browser = await launchBrowser();
 
   try {
     const templateConfig = getTemplateConfig(templateId);
@@ -21,7 +23,7 @@ export async function renderPin({ jobId, templateId, copyIndex = 0 }: RenderPinI
       deviceScaleFactor: 1,
     });
 
-    const url = `${env.appUrl}/render/${templateId}?jobId=${jobId}&copyIndex=${copyIndex}`;
+    const url = `${env.appUrl}/render/${templateId}?jobId=${jobId}&planId=${planId}`;
     await page.goto(url, {
       waitUntil: "networkidle",
     });
@@ -38,7 +40,7 @@ export async function renderPin({ jobId, templateId, copyIndex = 0 }: RenderPinI
     });
 
     const storageProvider = getStorageProvider();
-    const key = `temp/jobs/${jobId}/${templateId}-${copyIndex}.png`;
+    const key = `temp/jobs/${jobId}/${planId}-${templateId}.png`;
 
     return storageProvider.upload({
       key,
@@ -48,4 +50,29 @@ export async function renderPin({ jobId, templateId, copyIndex = 0 }: RenderPinI
   } finally {
     await browser.close();
   }
+}
+
+async function launchBrowser() {
+  const executablePath = process.env.PLAYWRIGHT_EXECUTABLE_PATH?.trim();
+
+  if (executablePath) {
+    return serverlessPlaywright.launch({
+      executablePath,
+      headless: true,
+    });
+  }
+
+  if (isServerlessRuntime()) {
+    return serverlessPlaywright.launch({
+      args: serverlessChromium.args,
+      executablePath: await serverlessChromium.executablePath(),
+      headless: true,
+    });
+  }
+
+  return localChromium.launch({ headless: true });
+}
+
+function isServerlessRuntime() {
+  return process.env.VERCEL === "1" || process.env.VERCEL === "true";
 }

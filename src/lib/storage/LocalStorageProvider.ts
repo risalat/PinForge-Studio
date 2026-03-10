@@ -34,6 +34,7 @@ export class LocalStorageProvider implements StorageProvider {
     return {
       key,
       absolutePath,
+      contentType: undefined,
       body,
     };
   }

@@ -13,11 +13,14 @@
     "playwright:install": "playwright install chromium"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1005.0",
     "@prisma/client": "^6.19.0",
+    "@sparticuz/chromium": "^143.0.4",
     "@supabase/ssr": "^0.9.0",
     "@supabase/supabase-js": "^2.99.0",
     "next": "16.1.6",
     "playwright": "^1.58.2",
+    "playwright-core": "^1.58.2",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "zod": "^4.3.6"
