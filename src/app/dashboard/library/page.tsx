@@ -77,20 +77,14 @@ export default function DashboardLibraryPage() {
                   </div>
 
                   <p className="text-sm leading-7 text-[var(--dashboard-subtle)]">
-                    {template.id === "split-vertical-title"
-                      ? "Editorial split layout with kicker, title, footer sync, and image-aware preset selection."
-                      : "Split layout for strong standalone headlines with image-aware preset selection and footer harmony."}
+                    {getTemplateDescription(template.id)}
                   </p>
 
                   <div className="grid gap-3 sm:grid-cols-2">
                     <DetailCard label="Text fields" value={template.textFields.join(", ")} />
                     <DetailCard
                       label="Usage"
-                      value={
-                        template.id === "split-vertical-title"
-                          ? "Best for pins that need a subtitle and more editorial packaging."
-                          : "Best for cleaner pins with a dominant headline."
-                      }
+                      value={getTemplateUsage(template.id)}
                     />
                   </div>
                 </div>
@@ -154,4 +148,34 @@ function DetailCard({ label, value }: { label: string; value: string }) {
       <p className="mt-2 text-sm leading-6 text-[var(--dashboard-subtle)]">{value}</p>
     </div>
   );
+}
+
+function getTemplateDescription(templateId: string) {
+  switch (templateId) {
+    case "split-vertical-title":
+      return "Editorial split layout with kicker, title, footer sync, and image-aware preset selection.";
+    case "split-vertical-title-no-subtitle":
+      return "Split layout for cleaner standalone headlines with a dominant title band and footer harmony.";
+    case "split-vertical-title-number":
+      return "Split layout with a hero number badge, locked editorial typography, and stronger listicle packaging.";
+    case "single-image-subtitle-title-cta":
+      return "Single-image editorial card with a reference-locked subtitle, headline, and footer CTA treatment.";
+    default:
+      return "Locked Pinterest template ready for preview, render, and manual plan use.";
+  }
+}
+
+function getTemplateUsage(templateId: string) {
+  switch (templateId) {
+    case "split-vertical-title":
+      return "Best for pins that need a subtitle and more editorial packaging.";
+    case "split-vertical-title-no-subtitle":
+      return "Best for cleaner pins with a dominant headline.";
+    case "split-vertical-title-number":
+      return "Best for numbered listicles that need a visible count hook.";
+    case "single-image-subtitle-title-cta":
+      return "Best for single-image pins where the subtitle names a paint, product, or featured idea.";
+    default:
+      return "Best for locked template-driven render tests and job planning.";
+  }
 }

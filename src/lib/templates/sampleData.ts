@@ -22,3 +22,11 @@ export const sampleTemplateDataNumber: TemplateRenderProps = {
   itemNumber: 15,
   visualPreset: "midnight-gold",
 };
+
+export const sampleTemplateDataSingleImageSubtitleTitleCta: TemplateRenderProps = {
+  title: "13 Whimsigoth Paint Colors",
+  subtitle: "Nocturne Blue by Sherwin-Williams",
+  images: ["/sample-images/6.jpg"],
+  domain: "mightypaint.com",
+  visualPreset: "midnight-gold",
+};

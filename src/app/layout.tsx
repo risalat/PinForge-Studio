@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Cormorant_Garamond, Libre_Baskerville, Lora, Space_Grotesk } from "next/font/google";
+import { Cormorant_Garamond, Libre_Baskerville, Lora, Manrope, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 
 const spaceGrotesk = Space_Grotesk({
@@ -23,6 +23,11 @@ const lora = Lora({
   subsets: ["latin"],
 });
 
+const manrope = Manrope({
+  variable: "--font-manrope",
+  subsets: ["latin"],
+});
+
 export const metadata: Metadata = {
   title: "PinForge Studio",
   description: "Pinterest pin rendering and scheduling scaffold for PinForge.",
@@ -36,7 +41,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${spaceGrotesk.variable} ${cormorantGaramond.variable} ${libreBaskerville.variable} ${lora.variable} antialiased`}
+        className={`${spaceGrotesk.variable} ${cormorantGaramond.variable} ${libreBaskerville.variable} ${lora.variable} ${manrope.variable} antialiased`}
       >
         {children}
       </body>

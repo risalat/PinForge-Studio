@@ -1,10 +1,12 @@
 import { TemplateSplitVerticalTitle } from "@/templates/TemplateSplitVerticalTitle";
 import { TemplateSplitVerticalTitleNoSubtitle } from "@/templates/TemplateSplitVerticalTitleNoSubtitle";
 import { TemplateSplitVerticalTitleNumber } from "@/templates/TemplateSplitVerticalTitleNumber";
+import { TemplateSingleImageSubtitleTitleCta } from "@/templates/TemplateSingleImageSubtitleTitleCta";
 import type { JSX } from "react";
 import {
   sampleTemplateDataNumber,
   sampleTemplateDataNoSubtitle,
+  sampleTemplateDataSingleImageSubtitleTitleCta,
   sampleTemplateDataWithSubtitle,
 } from "@/lib/templates/sampleData";
 import type { TemplateConfig, TemplateRenderProps } from "@/lib/templates/types";
@@ -55,6 +57,21 @@ export const TEMPLATE_CONFIGS: Record<string, TemplateConfig> = {
       footer: true,
     },
   },
+  "single-image-subtitle-title-cta": {
+    id: "single-image-subtitle-title-cta",
+    name: "Single Image Subtitle Title CTA",
+    componentKey: "TemplateSingleImageSubtitleTitleCta",
+    previewPath: "/preview/single-image-subtitle-title-cta",
+    locked: true,
+    canvas: { width: 1080, height: 1920 },
+    imageSlotCount: 1,
+    textFields: ["subtitle", "title", "domain", "visualPreset"],
+    features: {
+      overlay: true,
+      numberTreatment: "none",
+      footer: true,
+    },
+  },
 };
 
 const TEMPLATE_COMPONENTS: Record<
@@ -64,6 +81,7 @@ const TEMPLATE_COMPONENTS: Record<
   "split-vertical-title": TemplateSplitVerticalTitle,
   "split-vertical-title-no-subtitle": TemplateSplitVerticalTitleNoSubtitle,
   "split-vertical-title-number": TemplateSplitVerticalTitleNumber,
+  "single-image-subtitle-title-cta": TemplateSingleImageSubtitleTitleCta,
 };
 
 export function getTemplateConfig(templateId: string) {
@@ -91,6 +109,10 @@ export function getSampleTemplateProps(templateId: string) {
 
   if (templateId === "split-vertical-title-number") {
     return sampleTemplateDataNumber;
+  }
+
+  if (templateId === "single-image-subtitle-title-cta") {
+    return sampleTemplateDataSingleImageSubtitleTitleCta;
   }
 
   return sampleTemplateDataWithSubtitle;
