@@ -48,7 +48,7 @@ export async function renderPin({ jobId, planId, templateId }: RenderPinInput) {
     });
 
     const storageProvider = getStorageProvider();
-    const key = `temp/jobs/${jobId}/${planId}-${templateId}.png`;
+    const key = createRenderedPinStorageKey(jobId, planId, templateId);
 
     return storageProvider.upload({
       key,
@@ -80,6 +80,10 @@ async function launchBrowser() {
   }
 
   return localChromium.launch({ headless: true });
+}
+
+function createRenderedPinStorageKey(jobId: string, planId: string, templateId: string) {
+  return `temp/jobs/${jobId}/${planId}-${templateId}-${Date.now()}.png`;
 }
 
 function isServerlessRuntime() {

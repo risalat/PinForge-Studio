@@ -37,6 +37,7 @@ import {
 import { buildSchedulePreview } from "@/lib/jobs/schedulePreview";
 import { renderPin } from "@/lib/renderer/renderPin";
 import { getIntegrationSettingsForUserId } from "@/lib/settings/integrationSettings";
+import { getStorageProvider } from "@/lib/storage";
 import { buildStorageAssetUrl } from "@/lib/storage/assetUrl";
 import {
   parsePlanRenderContext,
@@ -512,6 +513,7 @@ export async function updateGenerationPlanRenderContext(input: {
   }
 
   const existing = parsePlanRenderContext(plan.notes);
+  const pinsToDelete = plan.generatedPins.filter((pin) => pin.scheduleRunItems.length === 0);
   const next = {
     ...existing,
     title: input.title !== undefined ? parseEditablePinTitle(input.title) || undefined : existing.title,
@@ -546,6 +548,7 @@ export async function updateGenerationPlanRenderContext(input: {
       scheduleRunItems: { none: {} },
     },
   });
+  await deleteStoredAssetsForPins(pinsToDelete);
 
   await prisma.generationJob.update({
     where: { id: job.id },
@@ -710,6 +713,7 @@ export async function discardGenerationPlansForJob(input: {
   }
 
   const discardedPlanIds = plansToDiscard.map((plan) => plan.id);
+  const pinsToDelete = plansToDiscard.flatMap((plan) => plan.generatedPins);
 
   await prisma.$transaction(async (tx) => {
     await tx.generationPlan.deleteMany({
@@ -738,6 +742,7 @@ export async function discardGenerationPlansForJob(input: {
       },
     });
   });
+  await deleteStoredAssetsForPins(pinsToDelete);
 
   await syncJobProgressStatus(job.id);
 
@@ -823,6 +828,7 @@ export async function discardGeneratedPinsForJob(input: {
       "Generated pins discarded. Plans reset and ready for a fresh render.",
     );
   });
+  await deleteStoredAssetsForPins(pinsToDiscard);
 
   return {
     jobId: job.id,
@@ -2253,6 +2259,25 @@ async function findReusableUploadedMedia(
 
 function getPinAssetKey(pin: Pick<WorkflowJob["generatedPins"][number], "storageKey" | "exportPath">) {
   return pin.storageKey?.trim() || pin.exportPath.trim();
+}
+
+async function deleteStoredAssetsForPins(
+  pins: Array<Pick<WorkflowJob["generatedPins"][number], "storageKey">>,
+) {
+  const keys = Array.from(
+    new Set(
+      pins
+        .map((pin) => pin.storageKey?.trim())
+        .filter((key): key is string => Boolean(key)),
+    ),
+  );
+
+  if (keys.length === 0) {
+    return;
+  }
+
+  const storageProvider = getStorageProvider();
+  await Promise.allSettled(keys.map((key) => storageProvider.delete(key)));
 }
 
 function selectPinsForWorkflowAction(job: WorkflowJob, generatedPinIds?: string[]) {
