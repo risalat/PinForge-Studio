@@ -3,7 +3,7 @@ import { env } from "@/lib/env";
 
 const IV_BYTES = 12;
 
-function getKeyMaterial() {
+function getPrimaryKeyMaterial() {
   if (!env.appEncryptionKey.trim()) {
     throw new Error("APP_ENCRYPTION_KEY is required for saving integration settings.");
   }
@@ -11,8 +11,20 @@ function getKeyMaterial() {
   return createHash("sha256").update(env.appEncryptionKey).digest();
 }
 
+function getCandidateKeyMaterials() {
+  const rawKeys = [env.appEncryptionKey, ...env.appEncryptionKeyFallbacks].filter(
+    (value) => value.trim() !== "",
+  );
+
+  if (rawKeys.length === 0) {
+    throw new Error("APP_ENCRYPTION_KEY is required for saving integration settings.");
+  }
+
+  return Array.from(new Set(rawKeys)).map((value) => createHash("sha256").update(value).digest());
+}
+
 export function encryptSecret(plaintext: string) {
-  const key = getKeyMaterial();
+  const key = getPrimaryKeyMaterial();
   const iv = randomBytes(IV_BYTES);
   const cipher = createCipheriv("aes-256-gcm", key, iv);
 
@@ -27,19 +39,38 @@ export function decryptSecret(payload: string | null | undefined) {
     return "";
   }
 
-  const key = getKeyMaterial();
   const [ivHex, tagHex, encryptedHex] = payload.split(":");
   if (!ivHex || !tagHex || !encryptedHex) {
     throw new Error("Stored secret could not be decrypted.");
   }
 
-  const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(ivHex, "hex"));
-  decipher.setAuthTag(Buffer.from(tagHex, "hex"));
+  const iv = Buffer.from(ivHex, "hex");
+  const tag = Buffer.from(tagHex, "hex");
+  const encrypted = Buffer.from(encryptedHex, "hex");
+  let lastError: unknown = null;
 
-  const decrypted = Buffer.concat([
-    decipher.update(Buffer.from(encryptedHex, "hex")),
-    decipher.final(),
-  ]);
+  for (const key of getCandidateKeyMaterials()) {
+    try {
+      const decipher = createDecipheriv("aes-256-gcm", key, iv);
+      decipher.setAuthTag(tag);
 
-  return decrypted.toString("utf8");
+      const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]);
+      return decrypted.toString("utf8");
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  if (
+    lastError instanceof Error &&
+    ["Unsupported state or unable to authenticate data", "Unsupported state"].includes(
+      lastError.message,
+    )
+  ) {
+    throw new Error(
+      "Stored secret was encrypted with a different APP_ENCRYPTION_KEY. Keep the current key stable across deployments or add the previous key to APP_ENCRYPTION_KEY_FALLBACKS.",
+    );
+  }
+
+  throw new Error("Stored secret could not be decrypted.");
 }

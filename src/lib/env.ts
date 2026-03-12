@@ -11,6 +11,9 @@ export const env = {
   storageProvider: process.env.STORAGE_PROVIDER ?? (hasR2Config ? "r2" : "local"),
   localStoragePath: process.env.LOCAL_STORAGE_PATH ?? cwdStorage,
   appEncryptionKey: process.env.APP_ENCRYPTION_KEY ?? "",
+  appEncryptionKeyFallbacks: parseEncryptionFallbacks(
+    process.env.APP_ENCRYPTION_KEY_FALLBACKS ?? "",
+  ),
   supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
   supabasePublishableKey: process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? "",
   r2AccountId: process.env.R2_ACCOUNT_ID ?? "",
@@ -69,4 +72,11 @@ export function isR2Configured() {
       env.r2SecretAccessKey &&
       (env.r2Endpoint || env.r2AccountId),
   );
+}
+
+function parseEncryptionFallbacks(value: string) {
+  return value
+    .split(/[\r\n,]+/)
+    .map((item) => item.trim())
+    .filter((item) => item !== "");
 }

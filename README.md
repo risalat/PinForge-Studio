@@ -39,6 +39,10 @@ Copy-Item .env.example .env
 4. Set `APP_ENCRYPTION_KEY` to a long random secret. Studio uses this to encrypt stored Publer
    and AI credentials at rest.
 
+   - Use the same `APP_ENCRYPTION_KEY` across every deployment that shares the same database.
+   - If you rotate that key, set `APP_ENCRYPTION_KEY_FALLBACKS` to the previous key value(s)
+     so older saved credentials can still be decrypted and re-saved safely.
+
 5. Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` for Supabase Auth.
 
 6. For production storage, set Cloudflare R2 credentials:
