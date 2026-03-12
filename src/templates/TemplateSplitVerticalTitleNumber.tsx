@@ -21,6 +21,18 @@ export function TemplateSplitVerticalTitleNumber({
   const titleBandHeight = 320;
   const bottomImageHeight = 1920 - topImageHeight - titleBandHeight;
   const numberChipBackground = preset.palette.divider;
+  const numberTextColor = pickBestContrastColor(numberChipBackground, [
+    preset.palette.number,
+    preset.palette.footer,
+    preset.palette.title,
+    preset.palette.domain,
+    preset.palette.band,
+    preset.palette.canvas,
+  ]);
+  const numberChipFrameColor = withAlpha(
+    pickBestContrastColor(numberChipBackground, [preset.palette.band, preset.palette.canvas]),
+    0.96,
+  );
   const domainPillBackground = withAlpha(preset.palette.footer, 0.94);
   const imageFilter = "saturate(1.04) contrast(1.03)";
 
@@ -45,27 +57,38 @@ export function TemplateSplitVerticalTitleNumber({
           style={{ backgroundColor: preset.palette.band, height: titleBandHeight }}
         >
           <div
-            className="absolute left-1/2 top-0 flex h-[214px] w-[196px] -translate-x-1/2 -translate-y-[74%] items-center justify-center shadow-[0_24px_50px_rgba(31,18,8,0.2)]"
+            className="absolute left-1/2 top-0 flex h-[238px] w-[220px] -translate-x-1/2 -translate-y-[74%] items-center justify-center shadow-[0_26px_60px_rgba(31,18,8,0.24)]"
             style={{
-              backgroundColor: numberChipBackground,
+              backgroundColor: numberChipFrameColor,
               clipPath:
                 "polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)",
             }}
           >
-            <span
-              className="leading-none"
+            <div
+              className="flex h-[208px] w-[192px] items-center justify-center"
               style={{
-                color: preset.palette.number,
-                fontFamily: preset.typography.number.fontFamily,
-                fontWeight: preset.typography.number.fontWeight,
-                fontSize: "128px",
-                letterSpacing: preset.typography.number.letterSpacing,
-                lineHeight: preset.typography.number.lineHeight,
-                transform: "translateY(-8px)",
+                backgroundColor: numberChipBackground,
+                clipPath:
+                  "polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)",
+                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.18), inset 0 -10px 22px rgba(0,0,0,0.08)",
               }}
             >
-              {displayNumber}
-            </span>
+              <span
+                className="leading-none"
+                style={{
+                  color: numberTextColor,
+                  fontFamily: preset.typography.number.fontFamily,
+                  fontWeight: preset.typography.number.fontWeight,
+                  fontSize: "138px",
+                  letterSpacing: preset.typography.number.letterSpacing,
+                  lineHeight: preset.typography.number.lineHeight,
+                  transform: "translateY(-8px)",
+                  textShadow: "0 6px 18px rgba(255,255,255,0.12)",
+                }}
+              >
+                {displayNumber}
+              </span>
+            </div>
           </div>
 
           <div className="mt-[26px] w-full">
@@ -134,4 +157,41 @@ function withAlpha(hex: string, opacity: number) {
     .toString(16)
     .padStart(2, "0");
   return `#${normalized}${alpha}`;
+}
+
+function pickBestContrastColor(backgroundHex: string, candidates: string[]) {
+  const normalizedCandidates = candidates.filter((candidate) => isHexColor(candidate));
+  if (!isHexColor(backgroundHex) || normalizedCandidates.length === 0) {
+    return candidates[0] ?? backgroundHex;
+  }
+
+  return normalizedCandidates.reduce((best, candidate) =>
+    getContrastRatio(candidate, backgroundHex) > getContrastRatio(best, backgroundHex)
+      ? candidate
+      : best,
+  );
+}
+
+function getContrastRatio(foregroundHex: string, backgroundHex: string) {
+  const foreground = getRelativeLuminance(foregroundHex);
+  const background = getRelativeLuminance(backgroundHex);
+  const lighter = Math.max(foreground, background);
+  const darker = Math.min(foreground, background);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+function getRelativeLuminance(hex: string) {
+  const normalized = hex.replace("#", "");
+  const [r, g, b] = [0, 2, 4]
+    .map((index) => normalized.slice(index, index + 2))
+    .map((channel) => parseInt(channel, 16) / 255)
+    .map((value) =>
+      value <= 0.03928 ? value / 12.92 : Math.pow((value + 0.055) / 1.055, 2.4),
+    );
+
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+function isHexColor(value: string) {
+  return /^#[0-9a-fA-F]{6}$/.test(value);
 }
