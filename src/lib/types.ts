@@ -46,6 +46,12 @@ export interface IntegrationSettingsSummary {
   aiCustomEndpoint: string;
   hasPublerApiKey: boolean;
   hasAiApiKey: boolean;
+  canUsePublerApiKey: boolean;
+  canUseAiApiKey: boolean;
+  publerCredentialState: "missing" | "ready" | "unavailable";
+  aiCredentialState: "missing" | "ready" | "unavailable";
+  publerCredentialMessage: string;
+  aiCredentialMessage: string;
 }
 
 export interface DashboardPublerOptionsResponse {

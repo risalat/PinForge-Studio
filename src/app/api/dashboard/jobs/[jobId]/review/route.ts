@@ -15,6 +15,11 @@ const reviewSchema = z.object({
       isPreferred: z.boolean(),
     }),
   ),
+  globalKeywords: z.array(z.string().trim().min(1)).optional(),
+  titleStyle: z.enum(["balanced", "seo", "curiosity", "benefit"]).optional(),
+  toneHint: z.string().optional(),
+  listCountHint: z.number().int().positive().nullable().optional(),
+  titleVariationCount: z.number().int().positive().max(10).nullable().optional(),
 });
 
 type RouteProps = {
@@ -42,6 +47,11 @@ export async function POST(request: Request, { params }: RouteProps) {
       userId: user.id,
       jobId,
       images: payload.images,
+      globalKeywords: payload.globalKeywords,
+      titleStyle: payload.titleStyle,
+      toneHint: payload.toneHint,
+      listCountHint: payload.listCountHint,
+      titleVariationCount: payload.titleVariationCount,
     });
 
     return NextResponse.json({ ok: true });

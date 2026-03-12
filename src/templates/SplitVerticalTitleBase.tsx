@@ -1,84 +1,59 @@
 /* eslint-disable @next/next/no-img-element */
 
+import { AutoFitText } from "@/components/AutoFitText";
 import { AutoFitTitle } from "@/components/AutoFitTitle";
-import type { TemplateColorPreset, TemplateRenderProps } from "@/lib/templates/types";
+import { getSplitVerticalVisualPreset } from "@/lib/templates/visualPresets";
+import type { TemplateNumberTreatment, TemplateRenderProps } from "@/lib/templates/types";
 
 type SplitVerticalTitleBaseProps = TemplateRenderProps & {
   forceHideSubtitle?: boolean;
-};
-
-const COLOR_PRESETS: Record<
-  TemplateColorPreset,
-  {
-    canvas: string;
-    band: string;
-    footer: string;
-    kicker: string;
-    divider: string;
-    title: string;
-    domain: string;
-  }
-> = {
-  "plum-sand": {
-    canvas: "#e5dbd2",
-    band: "#e9dfd6",
-    footer: "#e9dfd6",
-    kicker: "#87604a",
-    divider: "#c88657",
-    title: "#ab612f",
-    domain: "#87604a",
-  },
-  "sage-cream": {
-    canvas: "#dde0d5",
-    band: "#eef0e8",
-    footer: "#eef0e8",
-    kicker: "#5f6b58",
-    divider: "#8fa37d",
-    title: "#55604c",
-    domain: "#5f6b58",
-  },
-  "cocoa-blush": {
-    canvas: "#e8ddd7",
-    band: "#f1e7df",
-    footer: "#f1e7df",
-    kicker: "#805f4e",
-    divider: "#d09973",
-    title: "#9e5f3c",
-    domain: "#805f4e",
-  },
-  "midnight-gold": {
-    canvas: "#d7d5d0",
-    band: "#23262d",
-    footer: "#23262d",
-    kicker: "#d7ba81",
-    divider: "#a58042",
-    title: "#f0e2bb",
-    domain: "#d7ba81",
-  },
+  numberTreatment?: TemplateNumberTreatment;
 };
 
 export function SplitVerticalTitleBase({
   title,
   subtitle,
+  itemNumber,
   images,
   domain,
-  colorPreset = "plum-sand",
+  colorPreset,
+  visualPreset,
   forceHideSubtitle = false,
+  numberTreatment = "none",
 }: SplitVerticalTitleBaseProps) {
   const firstImage = images[0] ?? "/sample-workspace-a.svg";
   const secondImage = images[1] ?? firstImage;
   const cleanedDomain = domain.replace(/^https?:\/\//, "").replace(/^www\./, "");
   const hasSubtitle = !forceHideSubtitle && Boolean(subtitle?.trim());
-  const palette = COLOR_PRESETS[colorPreset];
+  const preset = getSplitVerticalVisualPreset(visualPreset ?? colorPreset);
+  const bandHeight = hasSubtitle
+    ? preset.layout.bandHeightWithSubtitle
+    : preset.layout.bandHeightWithoutSubtitle;
+  const titleBlockHeight = hasSubtitle
+    ? preset.layout.titleBlockHeightWithSubtitle
+    : preset.layout.titleBlockHeightWithoutSubtitle;
+  const titleMinFontSize = hasSubtitle
+    ? preset.layout.titleMinSizeWithSubtitle
+    : preset.layout.titleMinSizeWithoutSubtitle;
+  const titleMaxFontSize = hasSubtitle
+    ? preset.layout.titleMaxSizeWithSubtitle
+    : preset.layout.titleMaxSizeWithoutSubtitle;
+  const titleMaxLines = hasSubtitle
+    ? preset.layout.titleMaxLinesWithSubtitle
+    : preset.layout.titleMaxLinesWithoutSubtitle;
+  const hasItemNumber = typeof itemNumber === "number" && itemNumber > 0;
+  const showNumberBadge = numberTreatment === "badge" && hasItemNumber;
+  const upperImageHeight = 730;
+  const lowerImageHeight = 1920 - upperImageHeight - bandHeight - preset.layout.footerHeight;
 
   return (
     <div
       data-pin-canvas="true"
       className="relative h-[1920px] w-[1080px] overflow-hidden"
-      style={{ backgroundColor: palette.canvas }}
+      style={{ backgroundColor: preset.palette.canvas }}
     >
       <div className="flex h-full flex-col">
-        <div className="relative h-[730px] w-full overflow-hidden">
+        <div className="relative w-full overflow-hidden" style={{ height: upperImageHeight }}>
           <img
             src={firstImage}
             alt={title}
@@ -87,37 +62,90 @@ export function SplitVerticalTitleBase({
         </div>
 
         <div
-          className="relative flex h-[410px] w-full flex-col items-center justify-center px-[92px] text-center"
-          style={{ backgroundColor: palette.band }}
+          className="relative flex w-full flex-col items-center justify-center text-center"
+          style={{
+            backgroundColor: preset.palette.band,
+            height: bandHeight,
+            paddingLeft: preset.layout.bandPaddingX,
+            paddingRight: preset.layout.bandPaddingX,
+          }}
         >
+          {showNumberBadge ? (
+            <div
+              className="mb-5 inline-flex items-center justify-center rounded-full px-6 py-3"
+              style={{
+                backgroundColor: preset.palette.footer,
+                border: `1px solid ${preset.palette.divider}`,
+              }}
+            >
+              <AutoFitText
+                as="span"
+                text={`${itemNumber} ideas`}
+                minFontSize={22}
+                maxFontSize={28}
+                lineHeight={preset.typography.number.lineHeight}
+                maxLines={1}
+                textColor={preset.palette.domain}
+                fontFamily={preset.typography.number.fontFamily}
+                fontWeight={preset.typography.number.fontWeight}
+                letterSpacing={preset.typography.number.letterSpacing}
+                textTransform={preset.typography.number.textTransform}
+                fontStyle={preset.typography.number.fontStyle}
+              />
+            </div>
+          ) : null}
+
           {hasSubtitle ? (
             <>
-              <p
-                className="font-serif text-[36px] font-semibold leading-none tracking-[0.01em]"
-                style={{ color: palette.kicker }}
-              >
-                {subtitle}
-              </p>
+              <div className="flex w-full items-center justify-center">
+                <AutoFitText
+                  as="p"
+                  text={subtitle!.trim()}
+                  minFontSize={preset.layout.subtitleMinSize}
+                  maxFontSize={preset.layout.subtitleMaxSize}
+                  lineHeight={preset.typography.subtitle.lineHeight}
+                  maxLines={preset.layout.subtitleMaxLines}
+                  className="w-full max-w-[920px]"
+                  textColor={preset.palette.subtitle}
+                  fontFamily={preset.typography.subtitle.fontFamily}
+                  fontWeight={preset.typography.subtitle.fontWeight}
+                  letterSpacing={preset.typography.subtitle.letterSpacing}
+                  textTransform={preset.typography.subtitle.textTransform}
+                  fontStyle={preset.typography.subtitle.fontStyle}
+                />
+              </div>
               <div
-                className="mt-6 h-[3px] w-[180px] rounded-full"
-                style={{ backgroundColor: palette.divider }}
+                className="rounded-full"
+                style={{
+                  marginTop: preset.layout.dividerGapTop,
+                  height: preset.layout.dividerHeight,
+                  width: preset.layout.dividerWidth,
+                  backgroundColor: preset.palette.divider,
+                }}
               />
             </>
           ) : null}
 
           <div
-            className={`flex w-full items-center justify-center ${
-              hasSubtitle ? "mt-8 h-[188px]" : "h-[238px]"
-            }`}
+            className="flex w-full items-center justify-center"
+            style={{
+              height: titleBlockHeight,
+              marginTop: hasSubtitle ? preset.layout.titleTopGapWithSubtitle : 0,
+            }}
           >
             <AutoFitTitle
               text={title}
-              minFontSize={hasSubtitle ? 56 : 64}
-              maxFontSize={hasSubtitle ? 84 : 96}
-              lineHeight={1.08}
-              maxLines={hasSubtitle ? 3 : 2}
-              className="w-full max-w-[860px] text-balance font-serif font-bold tracking-[-0.03em]"
-              textColor={palette.title}
+              minFontSize={titleMinFontSize}
+              maxFontSize={titleMaxFontSize}
+              lineHeight={preset.typography.title.lineHeight}
+              maxLines={titleMaxLines}
+              className="w-full max-w-[960px] text-balance"
+              textColor={preset.palette.title}
+              fontFamily={preset.typography.title.fontFamily}
+              fontWeight={preset.typography.title.fontWeight}
+              letterSpacing={preset.typography.title.letterSpacing}
+              textTransform={preset.typography.title.textTransform}
+              fontStyle={preset.typography.title.fontStyle}
             />
           </div>
 
@@ -126,22 +154,22 @@ export function SplitVerticalTitleBase({
             className="absolute inset-x-0 bottom-0 h-[32px]"
             style={{
               backgroundImage: [
-                `radial-gradient(circle at 2% -12px, transparent 20px, ${palette.band} 21px)`,
-                `radial-gradient(circle at 10% 40px, transparent 22px, ${palette.band} 23px)`,
-                `radial-gradient(circle at 18% -10px, transparent 20px, ${palette.band} 21px)`,
-                `radial-gradient(circle at 28% 42px, transparent 22px, ${palette.band} 23px)`,
-                `radial-gradient(circle at 38% -10px, transparent 20px, ${palette.band} 21px)`,
-                `radial-gradient(circle at 50% 40px, transparent 22px, ${palette.band} 23px)`,
-                `radial-gradient(circle at 62% -10px, transparent 20px, ${palette.band} 21px)`,
-                `radial-gradient(circle at 72% 42px, transparent 22px, ${palette.band} 23px)`,
-                `radial-gradient(circle at 82% -12px, transparent 20px, ${palette.band} 21px)`,
-                `radial-gradient(circle at 92% 40px, transparent 22px, ${palette.band} 23px)`,
+                `radial-gradient(circle at 2% -12px, transparent 20px, ${preset.palette.band} 21px)`,
+                `radial-gradient(circle at 10% 40px, transparent 22px, ${preset.palette.band} 23px)`,
+                `radial-gradient(circle at 18% -10px, transparent 20px, ${preset.palette.band} 21px)`,
+                `radial-gradient(circle at 28% 42px, transparent 22px, ${preset.palette.band} 23px)`,
+                `radial-gradient(circle at 38% -10px, transparent 20px, ${preset.palette.band} 21px)`,
+                `radial-gradient(circle at 50% 40px, transparent 22px, ${preset.palette.band} 23px)`,
+                `radial-gradient(circle at 62% -10px, transparent 20px, ${preset.palette.band} 21px)`,
+                `radial-gradient(circle at 72% 42px, transparent 22px, ${preset.palette.band} 23px)`,
+                `radial-gradient(circle at 82% -12px, transparent 20px, ${preset.palette.band} 21px)`,
+                `radial-gradient(circle at 92% 40px, transparent 22px, ${preset.palette.band} 23px)`,
               ].join(", "),
             }}
           />
         </div>
 
-        <div className="relative h-[660px] w-full overflow-hidden">
+        <div className="relative w-full overflow-hidden" style={{ height: lowerImageHeight }}>
           <img
             src={secondImage}
             alt={cleanedDomain}
@@ -150,15 +178,29 @@ export function SplitVerticalTitleBase({
         </div>
 
         <div
-          className="flex h-[120px] w-full items-center justify-center px-10"
-          style={{ backgroundColor: palette.footer }}
+          className="flex w-full items-center justify-center"
+          style={{
+            backgroundColor: preset.palette.footer,
+            height: preset.layout.footerHeight,
+            paddingLeft: preset.layout.footerPaddingX,
+            paddingRight: preset.layout.footerPaddingX,
+          }}
         >
-          <p
-            className="font-serif text-[36px] font-semibold leading-none tracking-[-0.02em]"
-            style={{ color: palette.domain }}
-          >
-            www.{cleanedDomain}
-          </p>
+          <AutoFitText
+            as="p"
+            text={`www.${cleanedDomain}`}
+            minFontSize={preset.layout.footerMinSize}
+            maxFontSize={preset.layout.footerMaxSize}
+            lineHeight={preset.typography.domain.lineHeight}
+            maxLines={1}
+            className="w-full text-center"
+            textColor={preset.palette.domain}
+            fontFamily={preset.typography.domain.fontFamily}
+            fontWeight={preset.typography.domain.fontWeight}
+            letterSpacing={preset.typography.domain.letterSpacing}
+            textTransform={preset.typography.domain.textTransform}
+            fontStyle={preset.typography.domain.fontStyle}
+          />
         </div>
       </div>
     </div>

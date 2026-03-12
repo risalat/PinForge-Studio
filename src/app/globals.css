@@ -3,6 +3,35 @@
 :root {
   --background: #f5efe6;
   --foreground: #23160d;
+  --dashboard-canvas: #f3f5fb;
+  --dashboard-sidebar: #eef2fb;
+  --dashboard-panel: rgba(255, 255, 255, 0.82);
+  --dashboard-panel-strong: #ffffff;
+  --dashboard-panel-alt: #e9eef9;
+  --dashboard-line: rgba(112, 132, 180, 0.18);
+  --dashboard-text: #111827;
+  --dashboard-subtle: #5d6b87;
+  --dashboard-muted: #7b89a7;
+  --dashboard-accent: #1e5eff;
+  --dashboard-accent-strong: #1246d8;
+  --dashboard-accent-soft: rgba(30, 94, 255, 0.12);
+  --dashboard-success: #1da97f;
+  --dashboard-warning: #d89a1d;
+  --dashboard-danger: #d85f4f;
+  --dashboard-success-soft: #eef9f4;
+  --dashboard-success-border: #bfe5d8;
+  --dashboard-success-ink: #186a53;
+  --dashboard-warning-soft: #fff7e2;
+  --dashboard-warning-border: #efdba3;
+  --dashboard-warning-ink: #8b6413;
+  --dashboard-danger-soft: #fff1ec;
+  --dashboard-danger-border: #edc1b3;
+  --dashboard-danger-ink: #953f30;
+  --dashboard-accent-soft-strong: #eef4ff;
+  --dashboard-accent-border: #c3d6ff;
+  --dashboard-shadow-sm: 0 18px 48px rgba(52, 79, 128, 0.08);
+  --dashboard-shadow-md: 0 22px 70px rgba(48, 73, 120, 0.1);
+  --dashboard-shadow-accent: 0 20px 50px rgba(30, 94, 255, 0.24);
 }
 
 @theme inline {
@@ -10,6 +39,8 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-space-grotesk);
   --font-serif: var(--font-lora);
+  --font-display: var(--font-cormorant-garamond);
+  --font-editorial: var(--font-libre-baskerville);
 }
 
 * {

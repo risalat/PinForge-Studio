@@ -2,10 +2,12 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAuthenticatedDashboardApiUser } from "@/lib/auth/dashboardSession";
 import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
+import { EditablePinDescriptionSchema, EditablePinTitleSchema } from "@/lib/ai/validators";
 import { isDatabaseConfigured } from "@/lib/env";
 import {
   generateDescriptionsForJobPins,
   generateTitlesForJobPins,
+  getJobForUser,
   saveJobPinCopyEdits,
   scheduleJobPins,
   uploadJobPinsToPubler,
@@ -29,8 +31,8 @@ const publishSchema = z.discriminatedUnion("action", [
     copies: z.array(
       z.object({
         generatedPinId: z.string().min(1),
-        title: z.string().optional(),
-        description: z.string().optional(),
+        title: EditablePinTitleSchema.optional(),
+        description: EditablePinDescriptionSchema.optional(),
       }),
     ),
   }),
@@ -59,6 +61,41 @@ type RouteProps = {
     jobId: string;
   }>;
 };
+
+export async function GET(_request: Request, { params }: RouteProps) {
+  const auth = await requireAuthenticatedDashboardApiUser();
+  if (!auth.ok) {
+    return auth.response;
+  }
+
+  if (!isDatabaseConfigured()) {
+    return NextResponse.json({ ok: false, error: "DATABASE_URL is not configured." }, { status: 500 });
+  }
+
+  try {
+    const { jobId } = await params;
+    const user = await getOrCreateDashboardUser();
+    const job = await getJobForUser(jobId, user.id);
+
+    return NextResponse.json({
+      ok: true,
+      jobStatus: job.status,
+      pins: job.generatedPins.map(serializePin),
+      latestScheduleRun: job.scheduleRuns[0]
+        ? {
+            id: job.scheduleRuns[0].id,
+            status: job.scheduleRuns[0].status,
+            submittedAt: job.scheduleRuns[0].submittedAt?.toISOString() ?? null,
+            completedAt: job.scheduleRuns[0].completedAt?.toISOString() ?? null,
+            errorMessage: job.scheduleRuns[0].errorMessage ?? null,
+          }
+        : null,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to load publish status.";
+    return NextResponse.json({ ok: false, error: message }, { status: 400 });
+  }
+}
 
 export async function POST(request: Request, { params }: RouteProps) {
   const auth = await requireAuthenticatedDashboardApiUser();
@@ -130,4 +167,22 @@ export async function POST(request: Request, { params }: RouteProps) {
     const message = error instanceof Error ? error.message : "Unable to complete publish action.";
     return NextResponse.json({ ok: false, error: message }, { status: 400 });
   }
+}
+
+function serializePin(pin: Awaited<ReturnType<typeof getJobForUser>>["generatedPins"][number]) {
+  return {
+    id: pin.id,
+    templateId: pin.templateId,
+    exportPath: pin.exportPath,
+    mediaStatus: pin.publerMedia?.status ?? "PENDING",
+    mediaId: pin.publerMedia?.mediaId ?? null,
+    mediaError: pin.publerMedia?.errorMessage ?? null,
+    title: pin.pinCopy?.title ?? "",
+    description: pin.pinCopy?.description ?? "",
+    titleStatus: pin.pinCopy?.titleStatus ?? "EMPTY",
+    descriptionStatus: pin.pinCopy?.descriptionStatus ?? "EMPTY",
+    scheduleStatus: pin.scheduleRunItems[0]?.status ?? "PENDING",
+    scheduledFor: pin.scheduleRunItems[0]?.scheduledFor?.toISOString() ?? null,
+    scheduleError: pin.scheduleRunItems[0]?.errorMessage ?? null,
+  };
 }

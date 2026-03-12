@@ -1,9 +1,12 @@
 import {
+  validateRenderCopyBatch,
   validatePinCopyBatch,
   validatePinTitleBatch,
   type PinCopy,
+  type RenderCopyOption,
   type PinTitleOption,
 } from "@/lib/ai/validators";
+import type { TemplateNumberTreatment } from "@/lib/templates/types";
 
 export type AIProvider = "custom_endpoint" | "openai" | "gemini" | "openrouter";
 export type TitleStyle = "balanced" | "seo" | "curiosity" | "benefit";
@@ -36,6 +39,15 @@ export interface GeneratePinTitleRequest {
   images?: ImageContextInput[];
 }
 
+export interface GeneratePinRenderCopyRequest extends GeneratePinTitleRequest {
+  locked_title?: string;
+  subtitle_style_hint?: string;
+  template_name?: string;
+  template_supports_subtitle?: boolean;
+  template_number_treatment?: TemplateNumberTreatment;
+  artwork_goal?: string;
+}
+
 export interface GeneratePinDescriptionRequest {
   article_title: string;
   destination_url: string;
@@ -44,7 +56,7 @@ export interface GeneratePinDescriptionRequest {
   tone_hint?: string;
 }
 
-type GenerateMode = "studio_titles" | "studio_descriptions";
+type GenerateMode = "studio_titles" | "studio_render_copy" | "studio_descriptions";
 
 const OPENAI_BASE_URL = "https://api.openai.com";
 const OPENROUTER_BASE_URL = "https://openrouter.ai";
@@ -86,6 +98,11 @@ export class AIClient {
     return validatePinTitleBatch(this.extractCandidateArray(data, ["titles", "pins", "items"]));
   }
 
+  async generatePinRenderCopy(payload: GeneratePinRenderCopyRequest): Promise<RenderCopyOption[]> {
+    const data = await this.generateStructuredOutput("studio_render_copy", payload);
+    return validateRenderCopyBatch(this.extractCandidateArray(data, ["items", "pins", "results"]));
+  }
+
   async generatePinDescriptions(payload: GeneratePinDescriptionRequest): Promise<PinCopy[]> {
     const data = await this.generateStructuredOutput("studio_descriptions", payload);
     return validatePinCopyBatch(this.extractCandidateArray(data, ["pins", "items", "results"]));
@@ -93,7 +110,7 @@ export class AIClient {
 
   private async generateStructuredOutput(
     mode: GenerateMode,
-    payload: GeneratePinTitleRequest | GeneratePinDescriptionRequest,
+    payload: GeneratePinTitleRequest | GeneratePinRenderCopyRequest | GeneratePinDescriptionRequest,
   ): Promise<unknown> {
     switch (this.config.provider) {
       case "openai":
@@ -340,7 +357,7 @@ export class AIClient {
 
   private buildMessages(
     mode: GenerateMode,
-    payload: GeneratePinTitleRequest | GeneratePinDescriptionRequest,
+    payload: GeneratePinTitleRequest | GeneratePinRenderCopyRequest | GeneratePinDescriptionRequest,
   ): Array<Record<string, string>> {
     return [
       {
@@ -354,15 +371,18 @@ export class AIClient {
 
   private buildUserPrompt(
     mode: GenerateMode,
-    payload: GeneratePinTitleRequest | GeneratePinDescriptionRequest,
+    payload: GeneratePinTitleRequest | GeneratePinRenderCopyRequest | GeneratePinDescriptionRequest,
   ) {
     if (mode === "studio_titles") {
       const titlePayload = payload as GeneratePinTitleRequest;
       return [
-        "Generate Pinterest title variations for a collage pin representing the article as a whole.",
-        "Do NOT generate one title per image. Do NOT describe individual images.",
-        "Base the titles primarily on the article title. Use optional keywords and hints when helpful.",
-        "If a list_count_hint is provided, prefer list-style framing when natural.",
+        "Generate Pinterest title variations for one specific pin.",
+        "Use the article title as the source of truth, then use the assigned image context to choose the strongest angle for this pin.",
+        "Treat headings, captions, section paths, and surrounding snippets as important signals for the pin angle.",
+        "The title should feel specific to this pin, not generic to the whole article.",
+        "Do not write one title per image. Write one strong title for the pin represented by the combined image context.",
+        "Do not invent claims that are not supported by the article title or the provided image/section context.",
+        "If a list_count_hint is provided, use numeric or list-style framing when it fits naturally.",
         this.buildTitleStyleInstruction(titlePayload.title_style ?? "balanced"),
         `Tone hint: ${titlePayload.tone_hint ?? "none"}`,
         `Variation count target: ${titlePayload.variation_count ?? 3}`,
@@ -370,10 +390,53 @@ export class AIClient {
         `Destination URL: ${titlePayload.destination_url}`,
         `Global keywords: ${(titlePayload.global_keywords ?? []).join(", ") || "none"}`,
         `List count hint: ${titlePayload.list_count_hint ?? "none"}`,
-        `Image context is secondary and provided only as optional supporting context:`,
+        "Assigned image context for this pin:",
         JSON.stringify(titlePayload.images ?? [], null, 2),
         'Return JSON with this shape: {"titles":[{"title":"..."}]}',
-        "Rules: title <= 100 chars, no hashtags, distinct variations, article-level framing only.",
+        "Rules: title <= 100 chars, no hashtags, distinct variations, specific pin-level framing, avoid generic filler.",
+      ].join("\n");
+    }
+
+    if (mode === "studio_render_copy") {
+      const renderPayload = payload as GeneratePinRenderCopyRequest;
+      return [
+        "Generate a Pinterest render package for one specific pin.",
+        "This copy is for the pin artwork itself. Optimize for visual clarity and composition first. Publish titles are generated later in the workflow.",
+        renderPayload.locked_title
+          ? renderPayload.template_supports_subtitle
+            ? "Keep the provided title exactly as written and generate a matching subtitle."
+            : "Keep the provided title exactly as written. Subtitle is optional and may be omitted."
+          : renderPayload.template_supports_subtitle
+            ? "Return one strong title and one short subtitle for the same pin."
+            : "Return one strong title for the pin artwork. Subtitle is optional and may be omitted.",
+        renderPayload.template_supports_subtitle
+          ? "This template has a subtitle slot. Keep the artwork title visually compact, ideally short enough to fit two lines. Put secondary modifiers, after-colon ideas, and texture/style details into the subtitle instead of the title."
+          : "This template has no subtitle slot. Return one clean headline for the artwork. Avoid colons, clause-heavy stacking, and keyword stuffing.",
+        renderPayload.template_number_treatment === "hero"
+          ? "This template has a dedicated number area. Do not add a small number badge or awkward miniature label language in the title."
+          : "If a list count is used, integrate it naturally into the title itself rather than as a detached tiny badge.",
+        "Use the article title as the source of truth, then use the assigned image context to choose a unique angle for this pin.",
+        "The subtitle is a short kicker, not a sentence.",
+        "Keep the subtitle to 3-5 words, maximum 40 characters, no hashtags.",
+        "The subtitle should complement the title instead of repeating it.",
+        "Avoid colons in the final artwork title when a subtitle slot exists. If there is a natural split, move the after-colon phrase into the subtitle.",
+        "If a list_count_hint is provided, use numeric or roundup framing when it fits naturally.",
+        this.buildTitleStyleInstruction(renderPayload.title_style ?? 'balanced'),
+        `Tone hint: ${renderPayload.tone_hint ?? "none"}`,
+        `Subtitle style hint: ${renderPayload.subtitle_style_hint ?? "short editorial kicker"}`,
+        `Template name: ${renderPayload.template_name ?? "unknown"}`,
+        `Template supports subtitle: ${renderPayload.template_supports_subtitle ? "yes" : "no"}`,
+        `Template number treatment: ${renderPayload.template_number_treatment ?? "none"}`,
+        `Artwork goal: ${renderPayload.artwork_goal ?? "Clean Pinterest artwork copy"}`,
+        `Locked title: ${renderPayload.locked_title ?? "none"}`,
+        `Article title: ${renderPayload.article_title}`,
+        `Destination URL: ${renderPayload.destination_url}`,
+        `Global keywords: ${(renderPayload.global_keywords ?? []).join(", ") || "none"}`,
+        `List count hint: ${renderPayload.list_count_hint ?? "none"}`,
+        "Assigned image context for this pin:",
+        JSON.stringify(renderPayload.images ?? [], null, 2),
+        'Return JSON with this shape: {"items":[{"title":"...","subtitle":"..."}]}',
+        "Rules: title <= 100 chars, subtitle <= 40 chars, subtitle <= 5 words, no hashtags, keep both specific and editorial. For subtitle templates, prefer artwork titles around 55 characters or less when possible.",
       ].join("\n");
     }
 
@@ -555,6 +618,13 @@ export async function generatePinTitle(
   return createAIClient(config).generatePinTitles(payload);
 }
 
+export async function generatePinRenderCopy(
+  payload: GeneratePinRenderCopyRequest,
+  config?: Partial<AIProviderConfig>,
+) {
+  return createAIClient(config).generatePinRenderCopy(payload);
+}
+
 export async function generatePinDescription(
   payload: GeneratePinDescriptionRequest,
   config?: Partial<AIProviderConfig>,
@@ -586,4 +656,4 @@ export async function generatePinCopy(
   }));
 }
 
-export type { PinCopy, PinTitleOption };
+export type { PinCopy, PinTitleOption, RenderCopyOption };

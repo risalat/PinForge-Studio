@@ -80,12 +80,12 @@ export function ApiKeysManager({
 
   return (
     <div className="space-y-6">
-      <section className="rounded-[28px] bg-white p-6 shadow-[0_20px_50px_rgba(60,40,18,0.08)]">
+      <section id="new-key" className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-6 shadow-[var(--dashboard-shadow-sm)]">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end">
           <div className="flex-1">
             <label
               htmlFor="api-key-name"
-              className="text-sm font-semibold uppercase tracking-[0.22em] text-[#8a572a]"
+              className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]"
             >
               New key label
             </label>
@@ -93,7 +93,7 @@ export function ApiKeysManager({
               id="api-key-name"
               value={newKeyName}
               onChange={(event) => setNewKeyName(event.target.value)}
-              className="mt-3 w-full rounded-2xl border border-[#e0cdb8] bg-[#fffaf4] px-4 py-3 text-base text-[#23160d] outline-none"
+              className="mt-3 w-full rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 text-base text-[var(--dashboard-text)] outline-none"
             />
           </div>
 
@@ -101,37 +101,37 @@ export function ApiKeysManager({
             type="button"
             onClick={handleCreate}
             disabled={isPending || newKeyName.trim() === ""}
-            className="rounded-full bg-[#2c1c12] px-5 py-3 text-sm font-semibold uppercase tracking-[0.22em] text-[#f7ede0] disabled:opacity-60"
+            className="rounded-full bg-[var(--dashboard-accent)] px-5 py-3 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
           >
             Create API key
           </button>
         </div>
 
         {generatedKey ? (
-          <div className="mt-5 rounded-2xl border border-[#d8c18d] bg-[#fff8df] p-4">
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#8a572a]">
+          <div className="mt-5 rounded-2xl border border-[var(--dashboard-accent-border)] bg-[var(--dashboard-accent-soft-strong)] p-4">
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-accent-strong)]">
               Copy this key now
             </p>
-            <p className="mt-2 text-sm leading-6 text-[#6b4b2a]">
+            <p className="mt-2 text-sm leading-6 text-[var(--dashboard-subtle)]">
               This plaintext key is shown once only. Store it in the extension settings before you
               leave this page.
             </p>
-            <code className="mt-4 block overflow-x-auto rounded-xl bg-[#2c1c12] px-4 py-3 text-sm text-[#f7ede0]">
+            <code className="mt-4 block overflow-x-auto rounded-xl bg-[#10203f] px-4 py-3 text-sm text-[#f4f8ff]">
               {generatedKey}
             </code>
           </div>
         ) : null}
 
         {error ? (
-          <div className="mt-5 rounded-2xl border border-[#e7b6a6] bg-[#fff1ed] px-4 py-3 text-sm text-[#9b4328]">
+          <div className="mt-5 rounded-2xl border border-[var(--dashboard-danger-border)] bg-[var(--dashboard-danger-soft)] px-4 py-3 text-sm text-[var(--dashboard-danger-ink)]">
             {error}
           </div>
         ) : null}
       </section>
 
-      <section className="overflow-hidden rounded-[28px] bg-white shadow-[0_20px_50px_rgba(60,40,18,0.08)]">
-        <table className="min-w-full divide-y divide-[#eadccf]">
-          <thead className="bg-[#f7efe6] text-left text-sm uppercase tracking-[0.22em] text-[#8a572a]">
+      <section className="overflow-hidden rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] shadow-[var(--dashboard-shadow-sm)]">
+        <table className="min-w-full divide-y divide-[var(--dashboard-line)]">
+          <thead className="bg-[var(--dashboard-panel-alt)] text-left text-sm uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
             <tr>
               <th className="px-5 py-4">Label</th>
               <th className="px-5 py-4">Prefix</th>
@@ -141,30 +141,30 @@ export function ApiKeysManager({
               <th className="px-5 py-4">Action</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-[#f2e6da]">
+          <tbody className="divide-y divide-[var(--dashboard-line)]">
             {apiKeys.length === 0 ? (
               <tr>
-                <td className="px-5 py-6 text-sm text-[#6e4a2b]" colSpan={6}>
+                <td className="px-5 py-6 text-sm text-[var(--dashboard-subtle)]" colSpan={6}>
                   No API keys yet.
                 </td>
               </tr>
             ) : (
               apiKeys.map((apiKey) => (
                 <tr key={apiKey.id}>
-                  <td className="px-5 py-4 font-semibold text-[#23160d]">{apiKey.name}</td>
-                  <td className="px-5 py-4 font-mono text-sm text-[#6e4a2b]">{apiKey.keyPrefix}</td>
-                  <td className="px-5 py-4 text-sm text-[#6e4a2b]">
+                  <td className="px-5 py-4 font-semibold text-[var(--dashboard-text)]">{apiKey.name}</td>
+                  <td className="px-5 py-4 font-mono text-sm text-[var(--dashboard-subtle)]">{apiKey.keyPrefix}</td>
+                  <td className="px-5 py-4 text-sm text-[var(--dashboard-subtle)]">
                     {new Date(apiKey.createdAt).toLocaleString()}
                   </td>
-                  <td className="px-5 py-4 text-sm text-[#6e4a2b]">
+                  <td className="px-5 py-4 text-sm text-[var(--dashboard-subtle)]">
                     {apiKey.lastUsedAt ? new Date(apiKey.lastUsedAt).toLocaleString() : "Never"}
                   </td>
                   <td className="px-5 py-4">
                     <span
                       className={`rounded-full px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] ${
                         apiKey.isActive
-                          ? "bg-[#e8f4e8] text-[#40633e]"
-                          : "bg-[#f3e2e0] text-[#924d3c]"
+                          ? "bg-[var(--dashboard-success-soft)] text-[var(--dashboard-success-ink)]"
+                          : "bg-[var(--dashboard-danger-soft)] text-[var(--dashboard-danger-ink)]"
                       }`}
                     >
                       {apiKey.isActive ? "Active" : "Revoked"}
@@ -176,12 +176,12 @@ export function ApiKeysManager({
                         type="button"
                         onClick={() => handleRevoke(apiKey.id)}
                         disabled={isPending}
-                        className="rounded-full border border-[#d8b690] px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#8a572a] disabled:opacity-60"
+                        className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-subtle)] disabled:opacity-60"
                       >
                         Revoke
                       </button>
                     ) : (
-                      <span className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8a572a]">
+                      <span className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
                         Inactive
                       </span>
                     )}

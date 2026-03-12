@@ -10,12 +10,19 @@ import {
 } from "@prisma/client";
 import {
   generatePinDescription,
+  generatePinRenderCopy,
   generatePinTitle,
+  type GeneratePinRenderCopyRequest,
   type GeneratePinDescriptionRequest,
   type GeneratePinTitleRequest,
   type PinCopy as AIPinCopy,
   type PinTitleOption,
 } from "@/lib/ai";
+import {
+  EditablePinDescriptionSchema,
+  EditablePinSubtitleSchema,
+  EditablePinTitleSchema,
+} from "@/lib/ai/validators";
 import { env } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
 import {
@@ -31,7 +38,14 @@ import { buildSchedulePreview } from "@/lib/jobs/schedulePreview";
 import { renderPin } from "@/lib/renderer/renderPin";
 import { getIntegrationSettingsForUserId } from "@/lib/settings/integrationSettings";
 import { buildStorageAssetUrl } from "@/lib/storage/assetUrl";
+import {
+  parsePlanRenderContext,
+  serializePlanRenderContext,
+  toPlanVisualPreset,
+} from "@/lib/templates/planRenderContext";
 import { getTemplateConfig, TEMPLATE_CONFIGS } from "@/lib/templates/registry";
+import { recommendSplitVerticalVisualPresetWithImageAwareness } from "@/lib/templates/visualPresets";
+import type { TemplateNumberTreatment } from "@/lib/templates/types";
 import type { GenerateRequestPayload } from "@/lib/types";
 import { resolveDomain } from "@/lib/types";
 
@@ -68,6 +82,7 @@ const jobDetailInclude = {
         include: {
           pinCopy: true,
           publerMedia: true,
+          scheduleRunItems: true,
         },
       },
     },
@@ -206,12 +221,16 @@ export async function saveJobImageSelections(input: {
     isSelected: boolean;
     isPreferred: boolean;
   }>;
+  globalKeywords?: string[];
+  titleStyle?: GeneratePinTitleRequest["title_style"];
+  toneHint?: string;
+  listCountHint?: number | null;
+  titleVariationCount?: number | null;
 }) {
   const job = await getOwnedJobOrThrow(input.jobId, input.userId);
-
-  await prisma.$transaction(async (tx) => {
-    for (const image of input.images) {
-      await tx.jobSourceImage.updateMany({
+  await prisma.$transaction([
+    ...input.images.map((image) =>
+      prisma.jobSourceImage.updateMany({
         where: {
           id: image.id,
           jobId: job.id,
@@ -220,20 +239,42 @@ export async function saveJobImageSelections(input: {
           isSelected: image.isSelected,
           isPreferred: image.isSelected ? image.isPreferred : false,
         },
-      });
-    }
-
-    await tx.generationJob.update({
+      }),
+    ),
+    prisma.generationJob.update({
       where: { id: job.id },
-      data: { status: GenerationJobStatus.REVIEWING },
-    });
-    await upsertJobMilestoneTx(
-      tx,
-      job.id,
-      GenerationJobStatus.REVIEWING,
-      "Source image review updated.",
-    );
-  });
+      data: {
+        status: GenerationJobStatus.REVIEWING,
+        globalKeywords:
+          input.globalKeywords !== undefined
+            ? normalizeKeywords(input.globalKeywords)
+            : undefined,
+        titleStyle: input.titleStyle ?? undefined,
+        toneHint:
+          input.toneHint !== undefined ? input.toneHint.trim() || null : undefined,
+        listCountHint:
+          input.listCountHint !== undefined ? input.listCountHint : undefined,
+        titleVariationCount:
+          input.titleVariationCount !== undefined ? input.titleVariationCount : undefined,
+      },
+    }),
+    prisma.jobMilestone.upsert({
+      where: {
+        jobId_status: {
+          jobId: job.id,
+          status: GenerationJobStatus.REVIEWING,
+        },
+      },
+      update: {
+        details: "Source image review updated.",
+      },
+      create: {
+        jobId: job.id,
+        status: GenerationJobStatus.REVIEWING,
+        details: "Source image review updated.",
+      },
+    }),
+  ]);
 }
 
 export async function createAssistedGenerationPlans(input: {
@@ -259,17 +300,47 @@ export async function createAssistedGenerationPlans(input: {
   const baseSortOrder = job.generationPlans.length;
   const preferredImages = selectedImages.filter((image) => image.isPreferred);
   const imagePool = preferredImages.length > 0 ? [...preferredImages, ...selectedImages] : selectedImages;
-
-  await prisma.$transaction(async (tx) => {
-    for (let index = 0; index < input.pinCount; index += 1) {
-      const templateId = eligibleTemplateIds[Math.floor(Math.random() * eligibleTemplateIds.length)];
+  const preparedPlans = await Promise.all(
+    Array.from({ length: input.pinCount }).map(async (_, index) => {
+      const templateId =
+        eligibleTemplateIds[Math.floor(Math.random() * eligibleTemplateIds.length)];
       const template = getTemplateConfig(templateId);
 
       if (!template) {
-        continue;
+        return null;
       }
 
-      await tx.template.upsert({
+      const assignedImages = Array.from({ length: template.imageSlotCount }).map(
+        (_, slotIndex) => imagePool[(index + slotIndex) % imagePool.length],
+      );
+      const renderContext = await buildSeedPlanRenderContext(
+        job,
+        assignedImages.map((sourceImage) => ({
+          sourceImage,
+        })),
+      );
+
+      return {
+        template,
+        templateId,
+        sortOrder: baseSortOrder + index,
+        notes: serializePlanRenderContext(renderContext),
+        assignedImages,
+      };
+    }),
+  );
+
+  const templatesToUpsert = Array.from(
+    new Map(
+      preparedPlans
+        .filter((preparedPlan): preparedPlan is NonNullable<typeof preparedPlans[number]> => Boolean(preparedPlan))
+        .map((preparedPlan) => [preparedPlan.template.id, preparedPlan.template]),
+    ).values(),
+  );
+
+  await prisma.$transaction([
+    ...templatesToUpsert.map((template) =>
+      prisma.template.upsert({
         where: { id: template.id },
         update: {
           name: template.name,
@@ -284,46 +355,52 @@ export async function createAssistedGenerationPlans(input: {
           configJson: template as unknown as Prisma.InputJsonValue,
           isActive: true,
         },
-      });
-
-      const plan = await tx.generationPlan.create({
-        data: {
-          jobId: job.id,
-          mode: GenerationPlanMode.ASSISTED_AUTO,
-          templateId,
-          sortOrder: baseSortOrder + index,
-          status: GenerationPlanStatus.READY,
-        },
-      });
-
-      const assignments = Array.from({ length: template.imageSlotCount }).map((_, slotIndex) => {
-        const image = imagePool[(index + slotIndex) % imagePool.length];
-        return {
-          planId: plan.id,
-          sourceImageId: image.id,
-          slotIndex,
-        };
-      });
-
-      await tx.generationPlanImageAssignment.createMany({
-        data: assignments,
-      });
-    }
-
-    await tx.generationJob.update({
+      }),
+    ),
+    ...preparedPlans
+      .filter((preparedPlan): preparedPlan is NonNullable<typeof preparedPlans[number]> => Boolean(preparedPlan))
+      .map((preparedPlan) =>
+        prisma.generationPlan.create({
+          data: {
+            jobId: job.id,
+            mode: GenerationPlanMode.ASSISTED_AUTO,
+            templateId: preparedPlan.templateId,
+            sortOrder: preparedPlan.sortOrder,
+            status: GenerationPlanStatus.READY,
+            notes: preparedPlan.notes,
+            imageAssignments: {
+              create: preparedPlan.assignedImages.map((image, slotIndex) => ({
+                sourceImageId: image.id,
+                slotIndex,
+              })),
+            },
+          },
+        }),
+      ),
+    prisma.generationJob.update({
       where: { id: job.id },
       data: {
         status: GenerationJobStatus.READY_FOR_GENERATION,
         requestedPinCount: input.pinCount,
       },
-    });
-    await upsertJobMilestoneTx(
-      tx,
-      job.id,
-      GenerationJobStatus.READY_FOR_GENERATION,
-      "Assisted generation plans prepared.",
-    );
-  });
+    }),
+    prisma.jobMilestone.upsert({
+      where: {
+        jobId_status: {
+          jobId: job.id,
+          status: GenerationJobStatus.READY_FOR_GENERATION,
+        },
+      },
+      update: {
+        details: "Assisted generation plans prepared.",
+      },
+      create: {
+        jobId: job.id,
+        status: GenerationJobStatus.READY_FOR_GENERATION,
+        details: "Assisted generation plans prepared.",
+      },
+    }),
+  ]);
 }
 
 export async function createManualGenerationPlan(input: {
@@ -366,6 +443,17 @@ export async function createManualGenerationPlan(input: {
     },
   });
 
+  const manualAssignedImages = Array.from({ length: template.imageSlotCount }).map(
+    (_, slotIndex) =>
+      job.sourceImages.find((image) => image.id === chosenIds[slotIndex % chosenIds.length])!,
+  );
+  const manualRenderContext = await buildSeedPlanRenderContext(
+    job,
+    manualAssignedImages.map((sourceImage) => ({
+      sourceImage,
+    })),
+  );
+
   const plan = await prisma.generationPlan.create({
     data: {
       jobId: job.id,
@@ -373,6 +461,7 @@ export async function createManualGenerationPlan(input: {
       templateId: input.templateId,
       sortOrder: job.generationPlans.length,
       status: GenerationPlanStatus.READY,
+      notes: serializePlanRenderContext(manualRenderContext),
       imageAssignments: {
         create: Array.from({ length: template.imageSlotCount }).map((_, slotIndex) => ({
           sourceImageId: chosenIds[slotIndex % chosenIds.length],
@@ -395,20 +484,97 @@ export async function createManualGenerationPlan(input: {
   return plan;
 }
 
+export async function updateGenerationPlanRenderContext(input: {
+  userId: string;
+  jobId: string;
+  planId: string;
+  title?: string;
+  subtitle?: string;
+  itemNumber?: number | null;
+  visualPreset?: string | null;
+}) {
+  const job = await getOwnedJobOrThrow(input.jobId, input.userId);
+  const plan = job.generationPlans.find((entry) => entry.id === input.planId);
+
+  if (!plan) {
+    throw new Error("Generation plan not found.");
+  }
+
+  const existing = parsePlanRenderContext(plan.notes);
+  const next = {
+    ...existing,
+    title: input.title !== undefined ? parseEditablePinTitle(input.title) || undefined : existing.title,
+    subtitle:
+      input.subtitle !== undefined
+        ? parseEditablePinSubtitle(input.subtitle) || undefined
+        : existing.subtitle,
+    itemNumber:
+      input.itemNumber !== undefined
+        ? parseEditableItemNumber(input.itemNumber)
+        : existing.itemNumber,
+    visualPreset:
+      input.visualPreset !== undefined
+        ? toPlanVisualPreset(input.visualPreset ?? undefined)
+        : existing.visualPreset,
+  };
+
+  await prisma.generationPlan.update({
+    where: { id: plan.id },
+    data: {
+      notes: serializePlanRenderContext(next),
+      status:
+        plan.status === GenerationPlanStatus.GENERATED
+          ? GenerationPlanStatus.READY
+          : plan.status,
+    },
+  });
+
+  await prisma.generatedPin.deleteMany({
+    where: {
+      planId: plan.id,
+      scheduleRunItems: { none: {} },
+    },
+  });
+
+  await prisma.generationJob.update({
+    where: { id: job.id },
+    data: {
+      status: GenerationJobStatus.READY_FOR_GENERATION,
+    },
+  });
+
+  await recordJobMilestone(
+    job.id,
+    GenerationJobStatus.READY_FOR_GENERATION,
+    "Plan render settings updated.",
+  );
+}
+
 export async function generatePinsForJob(input: {
   userId: string;
   jobId: string;
+  planIds?: string[];
 }) {
   const job = await getOwnedJobOrThrow(input.jobId, input.userId);
+  const settings = await getIntegrationSettingsForUserId(input.userId);
   const pendingPlanStatuses = new Set<GenerationPlanStatus>([
     GenerationPlanStatus.DRAFT,
     GenerationPlanStatus.READY,
     GenerationPlanStatus.FAILED,
   ]);
-  const pendingPlans = job.generationPlans.filter((plan) => pendingPlanStatuses.has(plan.status));
+  const selectedPlanIds = input.planIds?.length ? new Set(input.planIds) : null;
+  const pendingPlans = job.generationPlans.filter(
+    (plan) =>
+      pendingPlanStatuses.has(plan.status) &&
+      (!selectedPlanIds || selectedPlanIds.has(plan.id)),
+  );
 
   if (pendingPlans.length === 0) {
-    throw new Error("Create at least one generation plan before rendering pins.");
+    throw new Error(
+      selectedPlanIds
+        ? "Select at least one ready plan before rendering pins."
+        : "Create at least one generation plan before rendering pins.",
+    );
   }
 
   const generatedPins = [];
@@ -436,6 +602,18 @@ export async function generatePinsForJob(input: {
       },
     });
 
+    const renderCopy = await generateRenderCopyForPlan(job, plan, settings);
+    const nextRenderContext = serializePlanRenderContext({
+      ...parsePlanRenderContext(plan.notes),
+      ...renderCopy,
+    });
+    await prisma.generationPlan.update({
+      where: { id: plan.id },
+      data: {
+        notes: nextRenderContext,
+      },
+    });
+
     const exportObject = await renderPin({
       jobId: job.id,
       planId: plan.id,
@@ -451,7 +629,10 @@ export async function generatePinsForJob(input: {
         exportPath: exportUrl,
         storageKey: exportObject.key,
         pinCopy: {
-          create: {},
+          create: {
+            title: renderCopy.title,
+            titleStatus: PinCopyFieldStatus.GENERATED,
+          },
         },
         publerMedia: {
           create: {
@@ -490,6 +671,154 @@ export async function generatePinsForJob(input: {
   };
 }
 
+export async function discardGenerationPlansForJob(input: {
+  userId: string;
+  jobId: string;
+  planIds?: string[];
+}) {
+  const job = await getOwnedJobOrThrow(input.jobId, input.userId);
+  const selectedPlanIds = input.planIds?.length ? new Set(input.planIds) : null;
+  const plansToDiscard = job.generationPlans.filter(
+    (plan) => !selectedPlanIds || selectedPlanIds.has(plan.id),
+  );
+
+  if (plansToDiscard.length === 0) {
+    return {
+      jobId: job.id,
+      discardedPlanCount: 0,
+    };
+  }
+
+  const scheduledPlans = plansToDiscard.filter((plan) =>
+    plan.generatedPins.some((pin) => pin.scheduleRunItems.length > 0),
+  );
+  if (scheduledPlans.length > 0) {
+    throw new Error(
+      "Plans that already entered scheduling cannot be discarded from this screen.",
+    );
+  }
+
+  const discardedPlanIds = plansToDiscard.map((plan) => plan.id);
+
+  await prisma.$transaction(async (tx) => {
+    await tx.generationPlan.deleteMany({
+      where: {
+        id: { in: discardedPlanIds },
+      },
+    });
+
+    const remainingPlans = await tx.generationPlan.findMany({
+      where: { jobId: job.id },
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+      select: { id: true },
+    });
+
+    for (const [sortOrder, plan] of remainingPlans.entries()) {
+      await tx.generationPlan.update({
+        where: { id: plan.id },
+        data: { sortOrder },
+      });
+    }
+
+    await tx.scheduleRun.deleteMany({
+      where: {
+        jobId: job.id,
+        items: { none: {} },
+      },
+    });
+  });
+
+  await syncJobProgressStatus(job.id);
+
+  const remainingPlanCount = await prisma.generationPlan.count({
+    where: { jobId: job.id },
+  });
+  if (remainingPlanCount > 0) {
+    await recordJobMilestone(
+      job.id,
+      GenerationJobStatus.READY_FOR_GENERATION,
+      `${plansToDiscard.length} generation plan${plansToDiscard.length === 1 ? "" : "s"} discarded.`,
+    );
+  }
+
+  return {
+    jobId: job.id,
+    discardedPlanCount: plansToDiscard.length,
+  };
+}
+
+export async function discardGeneratedPinsForJob(input: {
+  userId: string;
+  jobId: string;
+  generatedPinIds?: string[];
+}) {
+  const job = await getOwnedJobOrThrow(input.jobId, input.userId);
+
+  if (job.generatedPins.length === 0) {
+    return {
+      jobId: job.id,
+      discardedPinCount: 0,
+    };
+  }
+
+  const pinsToDiscard = selectPinsForWorkflowAction(job, input.generatedPinIds);
+  const scheduledPins = pinsToDiscard.filter((pin) => pin.scheduleRunItems.length > 0);
+  if (scheduledPins.length > 0) {
+    throw new Error(
+      "Generated pins that already entered scheduling cannot be discarded from this screen.",
+    );
+  }
+
+  const affectedPlanIds = Array.from(new Set(pinsToDiscard.map((pin) => pin.planId)));
+  const discardedPinIds = pinsToDiscard.map((pin) => pin.id);
+  const discardedPinCount = pinsToDiscard.length;
+
+  await prisma.$transaction(async (tx) => {
+    await tx.generatedPin.deleteMany({
+      where: {
+        id: { in: discardedPinIds },
+      },
+    });
+
+    if (affectedPlanIds.length > 0) {
+      await tx.generationPlan.updateMany({
+        where: {
+          id: { in: affectedPlanIds },
+        },
+        data: {
+          status: GenerationPlanStatus.READY,
+        },
+      });
+    }
+
+    await tx.scheduleRun.deleteMany({
+      where: {
+        jobId: job.id,
+        items: { none: {} },
+      },
+    });
+
+    await tx.generationJob.update({
+      where: { id: job.id },
+      data: {
+        status: GenerationJobStatus.READY_FOR_GENERATION,
+      },
+    });
+
+    await upsertJobMilestoneTx(
+      tx,
+      job.id,
+      GenerationJobStatus.READY_FOR_GENERATION,
+      "Generated pins discarded. Plans reset and ready for a fresh render.",
+    );
+  });
+
+  return {
+    jobId: job.id,
+    discardedPinCount,
+  };
+}
+
 export async function uploadJobPinsToPubler(input: {
   userId: string;
   jobId: string;
@@ -523,6 +852,32 @@ export async function uploadJobPinsToPubler(input: {
     result.processed += 1;
 
     try {
+      const reusableMedia = await findReusableUploadedMedia(job.id, pin);
+      if (reusableMedia?.mediaId) {
+        await prisma.publerMedia.upsert({
+          where: { generatedPinId: pin.id },
+          update: {
+            status: MediaUploadStatus.UPLOADED,
+            sourceUrl: pin.exportPath,
+            uploadJobId: reusableMedia.uploadJobId,
+            mediaId: reusableMedia.mediaId,
+            rawResponse: reusableMedia.rawResponse as Prisma.InputJsonValue,
+            errorMessage: null,
+          },
+          create: {
+            generatedPinId: pin.id,
+            status: MediaUploadStatus.UPLOADED,
+            sourceUrl: pin.exportPath,
+            uploadJobId: reusableMedia.uploadJobId,
+            mediaId: reusableMedia.mediaId,
+            rawResponse: reusableMedia.rawResponse as Prisma.InputJsonValue,
+          },
+        });
+
+        result.succeeded += 1;
+        continue;
+      }
+
       await prisma.publerMedia.upsert({
         where: { generatedPinId: pin.id },
         update: {
@@ -617,12 +972,24 @@ export async function generateTitlesForJobPins(input: {
     result.processed += 1;
 
     try {
-      const titleDrafts = await generatePinTitle(buildTitleRequest(job, pin.template.name), {
-        provider: settings.aiProvider,
-        apiKey: settings.aiApiKey,
-        model: settings.aiModel,
-        customEndpoint: settings.aiCustomEndpoint,
-      });
+      const titleDrafts = await generatePinTitle(
+        buildTitleRequest(job, {
+          templateName: pin.template.name,
+          templateSupportsSubtitle:
+            getTemplateConfig(pin.templateId)?.textFields.includes("subtitle") ?? false,
+          numberTreatment:
+            getTemplateConfig(pin.templateId)?.features.numberTreatment ?? "none",
+          imageAssignments: pin.plan.imageAssignments,
+          itemNumber:
+            parsePlanRenderContext(pin.plan.notes).itemNumber ?? job.sourceImages.length,
+        }),
+        {
+          provider: settings.aiProvider,
+          apiKey: settings.aiApiKey,
+          model: settings.aiModel,
+          customEndpoint: settings.aiCustomEndpoint,
+        },
+      );
       const title = titleDrafts[0]?.title?.trim();
       if (!title) {
         throw new Error("AI title generation returned an empty title.");
@@ -669,40 +1036,52 @@ export async function saveJobPinCopyEdits(input: {
   const job = await getOwnedJobOrThrow(input.jobId, input.userId);
   const pinIds = new Set(job.generatedPins.map((pin) => pin.id));
   const result = createStepResultAccumulator();
+  const copyOperations: Prisma.PrismaPromise<unknown>[] = [];
 
-  await prisma.$transaction(async (tx) => {
-    for (const copy of input.copies) {
-      if (!pinIds.has(copy.generatedPinId)) {
-        result.skipped += 1;
-        continue;
-      }
+  for (const copy of input.copies) {
+    if (!pinIds.has(copy.generatedPinId)) {
+      result.skipped += 1;
+      continue;
+    }
 
-      result.processed += 1;
+    result.processed += 1;
+    const validatedTitle =
+      copy.title !== undefined ? parseEditablePinTitle(copy.title) : undefined;
+    const validatedDescription =
+      copy.description !== undefined
+        ? parseEditablePinDescription(copy.description)
+        : undefined;
 
-      await tx.pinCopy.upsert({
+    copyOperations.push(
+      prisma.pinCopy.upsert({
         where: { generatedPinId: copy.generatedPinId },
         update: {
-          title: copy.title !== undefined ? copy.title.trim() || null : undefined,
-          description: copy.description !== undefined ? copy.description.trim() || null : undefined,
+          title: validatedTitle !== undefined ? validatedTitle || null : undefined,
+          description:
+            validatedDescription !== undefined ? validatedDescription || null : undefined,
           titleStatus:
-            copy.title !== undefined ? PinCopyFieldStatus.FINALIZED : undefined,
+            validatedTitle !== undefined ? PinCopyFieldStatus.FINALIZED : undefined,
           descriptionStatus:
-            copy.description !== undefined ? PinCopyFieldStatus.FINALIZED : undefined,
+            validatedDescription !== undefined ? PinCopyFieldStatus.FINALIZED : undefined,
         },
         create: {
           generatedPinId: copy.generatedPinId,
-          title: copy.title?.trim() || null,
-          description: copy.description?.trim() || null,
-          titleStatus: copy.title ? PinCopyFieldStatus.FINALIZED : PinCopyFieldStatus.EMPTY,
-          descriptionStatus: copy.description
+          title: validatedTitle || null,
+          description: validatedDescription || null,
+          titleStatus: validatedTitle ? PinCopyFieldStatus.FINALIZED : PinCopyFieldStatus.EMPTY,
+          descriptionStatus: validatedDescription
             ? PinCopyFieldStatus.FINALIZED
             : PinCopyFieldStatus.EMPTY,
         },
-      });
+      }),
+    );
 
-      result.succeeded += 1;
-    }
-  });
+    result.succeeded += 1;
+  }
+
+  if (copyOperations.length > 0) {
+    await prisma.$transaction(copyOperations);
+  }
 
   await syncJobProgressStatus(job.id);
 
@@ -902,6 +1281,12 @@ export async function scheduleJobPins(input: {
     primaryBoardPercent,
   });
   const assignedBoardByPinId = new Map(boardAssignments.map((assignment) => [assignment.pinId, assignment.boardId]));
+  const scheduledAssetKeys = new Set(
+    job.generatedPins
+      .filter((pin) => pin.id !== undefined && hasSuccessfulSchedule(pin))
+      .map((pin) => getPinAssetKey(pin))
+      .filter((value): value is string => Boolean(value)),
+  );
 
   for (const pin of selectedPins) {
     const preview = previewByPinId.get(pin.id);
@@ -910,6 +1295,12 @@ export async function scheduleJobPins(input: {
     const title = pin.pinCopy?.title?.trim();
     const description = pin.pinCopy?.description?.trim();
     const assignedBoardId = assignedBoardByPinId.get(pin.id) ?? selectedBoardIds[0];
+    const assetKey = getPinAssetKey(pin);
+
+    if (assetKey && scheduledAssetKeys.has(assetKey)) {
+      result.skipped += 1;
+      continue;
+    }
 
     const item = await prisma.scheduleRunItem.create({
       data: {
@@ -988,6 +1379,9 @@ export async function scheduleJobPins(input: {
         status: "scheduled",
         postId: outcome?.postId,
       });
+      if (assetKey) {
+        scheduledAssetKeys.add(assetKey);
+      }
       result.succeeded += 1;
     } catch (error) {
       const reason = error instanceof Error ? error.message : "Unable to schedule pin in Publer.";
@@ -1106,6 +1500,154 @@ function normalizeKeywords(keywords?: string[]) {
   return (keywords ?? []).map((keyword) => keyword.trim()).filter((keyword) => keyword !== "");
 }
 
+async function buildSeedPlanRenderContext(
+  job: {
+    articleTitleSnapshot: string;
+    domainSnapshot: string;
+    sourceImages: Array<{ id: string }>;
+  },
+  assignments: Array<{
+    sourceImage: {
+      url?: string;
+      alt: string | null;
+      caption: string | null;
+      nearestHeading: string | null;
+      sectionHeadingPath: string[];
+      surroundingTextSnippet: string | null;
+    };
+  }>,
+) {
+  const visualPreset = await recommendSplitVerticalVisualPresetWithImageAwareness({
+    articleTitle: job.articleTitleSnapshot,
+    pinTitle: job.articleTitleSnapshot,
+    domain: job.domainSnapshot,
+    imageSignals: assignments.map((assignment) => assignment.sourceImage),
+  });
+
+  return {
+    itemNumber: job.sourceImages.length,
+    visualPreset,
+  };
+}
+
+async function generateRenderCopyForPlan(
+  job: WorkflowJob,
+  plan: WorkflowJob["generationPlans"][number],
+  settings: Awaited<ReturnType<typeof getIntegrationSettingsForUserId>>,
+) {
+  const templateConfig = getTemplateConfig(plan.templateId);
+  if (!templateConfig) {
+    throw new Error(`Unknown template configuration: ${plan.templateId}`);
+  }
+
+  const existing = parsePlanRenderContext(plan.notes);
+  const supportsSubtitle = templateConfig.textFields.includes("subtitle");
+  const numberTreatment = templateConfig.features.numberTreatment;
+  const itemNumber = existing.itemNumber ?? job.sourceImages.length;
+  let title = existing.title?.trim();
+  let subtitle = existing.subtitle?.trim();
+
+  if (!title || (supportsSubtitle && !subtitle)) {
+    const renderCopy = await generatePinRenderCopy(
+      buildRenderCopyRequest(job, {
+        templateName: plan.template.name,
+        templateSupportsSubtitle: supportsSubtitle,
+        numberTreatment,
+        imageAssignments: plan.imageAssignments,
+        itemNumber,
+        lockedTitle: title,
+      }),
+      {
+        provider: settings.aiProvider,
+        apiKey: settings.aiApiKey,
+        model: settings.aiModel,
+        customEndpoint: settings.aiCustomEndpoint,
+      },
+    );
+
+    title = title || renderCopy[0]?.title?.trim();
+    subtitle = subtitle || renderCopy[0]?.subtitle?.trim();
+  }
+
+  if (!title) {
+    throw new Error("AI title generation returned an empty title.");
+  }
+
+  if (supportsSubtitle && !subtitle) {
+    subtitle = buildSubtitleFromTitle(title, job.articleTitleSnapshot);
+  }
+
+  const shapedCopy = shapeRenderCopyForTemplate({
+    title,
+    subtitle,
+    itemNumber,
+    articleTitle: job.articleTitleSnapshot,
+    supportsSubtitle,
+    numberTreatment,
+  });
+
+  const visualPreset =
+    existing.visualPreset ||
+    (await recommendSplitVerticalVisualPresetWithImageAwareness({
+      articleTitle: job.articleTitleSnapshot,
+      pinTitle: shapedCopy.title,
+      subtitle: shapedCopy.subtitle,
+      domain: job.domainSnapshot,
+      imageSignals: plan.imageAssignments.map((assignment) => assignment.sourceImage),
+    }));
+
+  return {
+    title: shapedCopy.title,
+    subtitle: shapedCopy.subtitle,
+    itemNumber,
+    visualPreset,
+  };
+}
+
+function buildRenderCopyRequest(
+  job: {
+    articleTitleSnapshot: string;
+    postUrlSnapshot: string;
+    globalKeywords: string[];
+    titleStyle: string | null;
+    toneHint: string | null;
+    listCountHint: number | null;
+    titleVariationCount?: number | null;
+  },
+  pin: {
+    templateName: string;
+    templateSupportsSubtitle: boolean;
+    numberTreatment: TemplateNumberTreatment;
+    imageAssignments: Array<{
+      sourceImage: {
+        url: string;
+        alt: string | null;
+        caption: string | null;
+        nearestHeading: string | null;
+        sectionHeadingPath: string[];
+        surroundingTextSnippet: string | null;
+      };
+    }>;
+    itemNumber?: number;
+    lockedTitle?: string;
+  },
+): GeneratePinRenderCopyRequest {
+  const titleRequest = buildTitleRequest(job, pin);
+  return {
+    ...titleRequest,
+    locked_title: pin.lockedTitle?.trim() || undefined,
+    subtitle_style_hint: pin.templateSupportsSubtitle
+      ? "Very short editorial kicker, 3 to 5 words."
+      : "No subtitle slot. Keep any secondary angle out of the artwork title.",
+    template_name: pin.templateName,
+    template_supports_subtitle: pin.templateSupportsSubtitle,
+    template_number_treatment: pin.numberTreatment,
+    artwork_goal: pin.templateSupportsSubtitle
+      ? "Create a clean Pinterest title + subtitle pairing for the artwork."
+      : "Create one clean Pinterest artwork headline that reads well without a subtitle.",
+  };
+}
+
 function buildTitleRequest(
   job: {
     articleTitleSnapshot: string;
@@ -1114,10 +1656,30 @@ function buildTitleRequest(
     titleStyle: string | null;
     toneHint: string | null;
     listCountHint: number | null;
+    titleVariationCount?: number | null;
+    sourceImages?: Array<{ id: string }>;
   },
-  templateName: string,
+  pin: {
+    templateName: string;
+    templateSupportsSubtitle: boolean;
+    numberTreatment: TemplateNumberTreatment;
+    imageAssignments: Array<{
+      sourceImage: {
+        url: string;
+        alt: string | null;
+        caption: string | null;
+        nearestHeading: string | null;
+        sectionHeadingPath: string[];
+        surroundingTextSnippet: string | null;
+      };
+    }>;
+    itemNumber?: number;
+  },
 ): GeneratePinTitleRequest {
-  const toneParts = [job.toneHint?.trim(), `Template: ${templateName}`].filter(Boolean);
+  const toneParts = [job.toneHint?.trim(), `Template: ${pin.templateName}`].filter(Boolean);
+  const images = pin.imageAssignments.map((assignment) =>
+    buildDedupedImageContext(assignment.sourceImage),
+  );
 
   return {
     article_title: job.articleTitleSnapshot,
@@ -1125,9 +1687,297 @@ function buildTitleRequest(
     global_keywords: job.globalKeywords,
     title_style: toTitleStyle(job.titleStyle),
     tone_hint: toneParts.length > 0 ? toneParts.join(" | ") : undefined,
-    list_count_hint: job.listCountHint ?? undefined,
-    variation_count: 1,
+    list_count_hint: pin.itemNumber ?? job.listCountHint ?? undefined,
+    variation_count: job.titleVariationCount ?? 3,
+    images,
   };
+}
+
+function buildDedupedImageContext(sourceImage: {
+  url: string;
+  alt: string | null;
+  caption: string | null;
+  nearestHeading: string | null;
+  sectionHeadingPath: string[];
+  surroundingTextSnippet: string | null;
+}) {
+  const used = new Set<string>();
+  const alt = takeUniqueText(sourceImage.alt, used);
+  const caption = takeUniqueText(sourceImage.caption, used);
+  const nearestHeading = takeUniqueText(sourceImage.nearestHeading, used);
+  const sectionHeadingPath = sourceImage.sectionHeadingPath
+    .map((value) => takeUniqueText(value, used))
+    .filter((value): value is string => Boolean(value));
+  const surroundingTextSnippet = takeUniqueText(sourceImage.surroundingTextSnippet, used);
+  const preferredKeywords = dedupeTextValues([
+    sourceImage.nearestHeading,
+    sourceImage.caption,
+    ...sourceImage.sectionHeadingPath,
+    sourceImage.alt,
+  ]).filter((value) => !used.has(normalizeContextText(value)));
+
+  return {
+    image_url: sourceImage.url,
+    alt: alt ?? undefined,
+    caption: caption ?? undefined,
+    nearest_heading: nearestHeading ?? undefined,
+    section_heading_path: sectionHeadingPath.length > 0 ? sectionHeadingPath : undefined,
+    surrounding_text_snippet: surroundingTextSnippet ?? undefined,
+    preferred_keywords: preferredKeywords.length > 0 ? preferredKeywords : undefined,
+  };
+}
+
+function takeUniqueText(value: string | null | undefined, used: Set<string>) {
+  const normalized = normalizeContextText(value);
+  if (!normalized || used.has(normalized)) {
+    return undefined;
+  }
+
+  used.add(normalized);
+  return value?.trim();
+}
+
+function dedupeTextValues(values: Array<string | null | undefined>) {
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const value of values) {
+    const normalized = normalizeContextText(value);
+    if (!normalized || seen.has(normalized)) {
+      continue;
+    }
+
+    seen.add(normalized);
+    result.push(value!.trim());
+  }
+
+  return result;
+}
+
+function normalizeContextText(value: string | null | undefined) {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  return trimmed.toLowerCase().replace(/\s+/g, " ");
+}
+
+function parseEditablePinTitle(value: string) {
+  return EditablePinTitleSchema.parse(value);
+}
+
+function parseEditablePinDescription(value: string) {
+  return EditablePinDescriptionSchema.parse(value);
+}
+
+function parseEditablePinSubtitle(value: string) {
+  return EditablePinSubtitleSchema.parse(value);
+}
+
+function parseEditableItemNumber(value: number | null) {
+  if (value === null) {
+    return undefined;
+  }
+
+  const next = Number(value);
+  if (!Number.isFinite(next) || next <= 0) {
+    throw new Error("Item number must be a positive integer.");
+  }
+
+  return Math.floor(next);
+}
+
+function buildSubtitleFromTitle(title: string, articleTitle: string) {
+  const normalizedTitle = title.trim().toLowerCase();
+  const articleWords = articleTitle
+    .replace(/[^\w\s]/g, " ")
+    .split(/\s+/)
+    .map((word) => word.trim())
+    .filter(Boolean);
+
+  const filteredWords = articleWords.filter((word) => !normalizedTitle.includes(word.toLowerCase()));
+  const fallbackWords = filteredWords.length > 0 ? filteredWords : articleWords;
+  const subtitle = fallbackWords.slice(0, 5).join(" ").trim();
+
+  return subtitle || undefined;
+}
+
+function shapeRenderCopyForTemplate(input: {
+  title: string;
+  subtitle?: string;
+  itemNumber?: number;
+  articleTitle: string;
+  supportsSubtitle: boolean;
+  numberTreatment: TemplateNumberTreatment;
+}) {
+  let title = normalizeRenderText(input.title);
+  let subtitle: string | undefined = normalizeRenderText(input.subtitle) || undefined;
+
+  if (input.supportsSubtitle) {
+    const split = splitRenderTitle(title);
+    if (split) {
+      title = split.title;
+      if (shouldUseSplitSubtitle(split.subtitle, subtitle)) {
+        subtitle = split.subtitle;
+      }
+    }
+
+    title = integrateItemNumberIntoRenderTitle(title, input.itemNumber);
+    subtitle = subtitle ? normalizeSubtitleKicker(subtitle, title, input.articleTitle) : undefined;
+
+    return {
+      title,
+      subtitle,
+    };
+  }
+
+  title = collapseSingleFieldRenderTitle({
+    title,
+    subtitle,
+    itemNumber: input.itemNumber,
+  });
+
+  return {
+    title,
+    subtitle: undefined,
+  };
+}
+
+function collapseSingleFieldRenderTitle(input: {
+  title: string;
+  subtitle?: string;
+  itemNumber?: number;
+}) {
+  const split = splitRenderTitle(input.title);
+  let headline = split?.title ?? input.title;
+
+  headline = headline
+    .replace(/\s*[|/]\s*/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim()
+    .replace(/[,:;.\-–—]+$/g, "")
+    .trim();
+
+  headline = integrateItemNumberIntoRenderTitle(headline, input.itemNumber);
+
+  if (headline.length > 70 && split?.title) {
+    headline = integrateItemNumberIntoRenderTitle(split.title, input.itemNumber);
+  }
+
+  if (headline.length > 80 && input.subtitle) {
+    headline = headline.replace(/\s+/g, " ").split(/\s+/).slice(0, 10).join(" ");
+  }
+
+  return headline;
+}
+
+function integrateItemNumberIntoRenderTitle(title: string, itemNumber?: number) {
+  const cleanedTitle = normalizeRenderText(title);
+  if (!itemNumber || cleanedTitle === "") {
+    return cleanedTitle;
+  }
+
+  if (startsWithNumericCount(cleanedTitle)) {
+    return cleanedTitle;
+  }
+
+  return `${itemNumber} ${cleanedTitle}`.trim();
+}
+
+function splitRenderTitle(title: string) {
+  const separators = [":", " - ", " – ", " — "];
+
+  for (const separator of separators) {
+    const index = title.indexOf(separator);
+    if (index <= 0) {
+      continue;
+    }
+
+    const left = normalizeRenderText(title.slice(0, index));
+    const right = normalizeRenderText(title.slice(index + separator.length));
+    if (left && right) {
+      return {
+        title: left,
+        subtitle: right,
+      };
+    }
+  }
+
+  return null;
+}
+
+function normalizeSubtitleKicker(subtitle: string, title: string, articleTitle: string) {
+  const next = normalizeRenderText(subtitle)
+    .replace(/[.:;,\-–—]+$/g, "")
+    .trim();
+
+  if (!next) {
+    return undefined;
+  }
+
+  const normalizedTitle = normalizeContextText(title);
+  const normalizedSubtitle = normalizeContextText(next);
+  if (normalizedSubtitle === normalizedTitle) {
+    return buildSubtitleFromTitle(title, articleTitle);
+  }
+
+  return next;
+}
+
+function shouldUseSplitSubtitle(splitSubtitle: string, currentSubtitle?: string) {
+  const candidate = normalizeRenderText(splitSubtitle);
+  if (!candidate) {
+    return false;
+  }
+
+  if (!currentSubtitle) {
+    return true;
+  }
+
+  const current = normalizeRenderText(currentSubtitle);
+  if (!current) {
+    return true;
+  }
+
+  const currentWordCount = wordCount(current);
+  const candidateWordCount = wordCount(candidate);
+  const currentLooksGeneric = looksGenericSubtitle(current);
+  const candidateLooksSpecific = !looksGenericSubtitle(candidate);
+
+  return (
+    candidateWordCount <= 5 &&
+    candidate.length <= 40 &&
+    (currentLooksGeneric || (candidateLooksSpecific && candidateWordCount >= currentWordCount))
+  );
+}
+
+function normalizeRenderText(value: string | undefined) {
+  return value?.replace(/\s+/g, " ").trim() ?? "";
+}
+
+function startsWithNumericCount(value: string) {
+  return /^\d+\b/.test(value.trim());
+}
+
+function wordCount(value: string) {
+  return value.trim().split(/\s+/).filter(Boolean).length;
+}
+
+function looksGenericSubtitle(value: string) {
+  const normalized = normalizeContextText(value);
+  return [
+    "design details",
+    "organic design details",
+    "earthy details",
+    "cozy details",
+    "editorial details",
+    "styled spaces",
+    "soft styling",
+    "warm styling",
+    "design inspiration",
+    "natural styling",
+  ].some((term) => normalized === term || normalized.endsWith(` ${term}`));
 }
 
 function buildDescriptionRequest(
@@ -1333,6 +2183,40 @@ async function resolveAccessiblePublerWorkspaceId(input: {
   throw new Error(
     "The selected Publer workspace is not accessible with the current API key. Refresh destination and choose an available workspace.",
   );
+}
+
+async function findReusableUploadedMedia(
+  jobId: string,
+  pin: WorkflowJob["generatedPins"][number],
+) {
+  const assetConditions: Prisma.GeneratedPinWhereInput[] = [];
+  if (pin.storageKey?.trim()) {
+    assetConditions.push({ storageKey: pin.storageKey.trim() });
+  }
+  assetConditions.push({ exportPath: pin.exportPath });
+
+  return prisma.publerMedia.findFirst({
+    where: {
+      status: MediaUploadStatus.UPLOADED,
+      mediaId: {
+        not: null,
+      },
+      generatedPin: {
+        jobId,
+        id: {
+          not: pin.id,
+        },
+        OR: assetConditions,
+      },
+    },
+    orderBy: {
+      updatedAt: "desc",
+    },
+  });
+}
+
+function getPinAssetKey(pin: Pick<WorkflowJob["generatedPins"][number], "storageKey" | "exportPath">) {
+  return pin.storageKey?.trim() || pin.exportPath.trim();
 }
 
 function selectPinsForWorkflowAction(job: WorkflowJob, generatedPinIds?: string[]) {

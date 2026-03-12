@@ -1,6 +1,5 @@
-"use client";
-
-import { useLayoutEffect, useRef, useState } from "react";
+import { AutoFitText } from "@/components/AutoFitText";
+import type { CSSProperties } from "react";
 
 type AutoFitTitleProps = {
   text: string;
@@ -10,6 +9,11 @@ type AutoFitTitleProps = {
   lineHeight: number;
   maxLines: number;
   textColor?: string;
+  fontFamily?: string;
+  fontWeight?: CSSProperties["fontWeight"];
+  letterSpacing?: string;
+  textTransform?: CSSProperties["textTransform"];
+  fontStyle?: CSSProperties["fontStyle"];
 };
 
 export function AutoFitTitle({
@@ -20,72 +24,27 @@ export function AutoFitTitle({
   lineHeight,
   maxLines,
   textColor,
+  fontFamily,
+  fontWeight,
+  letterSpacing,
+  textTransform,
+  fontStyle,
 }: AutoFitTitleProps) {
-  const elementRef = useRef<HTMLHeadingElement>(null);
-  const [fontSize, setFontSize] = useState(maxFontSize);
-
-  useLayoutEffect(() => {
-    let cancelled = false;
-
-    async function fitText() {
-      if (typeof document !== "undefined" && "fonts" in document) {
-        await document.fonts.ready;
-      }
-
-      if (cancelled || !elementRef.current) {
-        return;
-      }
-
-      const element = elementRef.current;
-      element.dataset.autofitReady = "false";
-      const maxHeight = Math.ceil(maxLines * maxFontSize * lineHeight);
-
-      let nextSize = maxFontSize;
-      element.style.fontSize = `${nextSize}px`;
-      element.style.lineHeight = String(lineHeight);
-
-      while (nextSize > minFontSize) {
-        const computedLineHeight = Number.parseFloat(getComputedStyle(element).lineHeight);
-        const allowedHeight = Math.ceil(computedLineHeight * maxLines);
-
-        if (
-          element.scrollHeight <= allowedHeight + 2 &&
-          element.scrollWidth <= element.clientWidth + 2 &&
-          element.scrollHeight <= maxHeight + 2
-        ) {
-          break;
-        }
-
-        nextSize -= 2;
-        element.style.fontSize = `${nextSize}px`;
-      }
-
-      if (!cancelled) {
-        setFontSize(nextSize);
-        element.dataset.autofitReady = "true";
-      }
-    }
-
-    void fitText();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [lineHeight, maxFontSize, maxLines, minFontSize, text]);
-
   return (
-    <h1
-      ref={elementRef}
-      data-autofit="true"
-      data-autofit-ready="false"
+    <AutoFitText
+      as="h1"
+      text={text}
       className={className}
-      style={{
-        fontSize,
-        lineHeight,
-        color: textColor,
-      }}
-    >
-      {text}
-    </h1>
+      minFontSize={minFontSize}
+      maxFontSize={maxFontSize}
+      lineHeight={lineHeight}
+      maxLines={maxLines}
+      textColor={textColor}
+      fontFamily={fontFamily}
+      fontWeight={fontWeight}
+      letterSpacing={letterSpacing}
+      textTransform={textTransform}
+      fontStyle={fontStyle}
+    />
   );
 }

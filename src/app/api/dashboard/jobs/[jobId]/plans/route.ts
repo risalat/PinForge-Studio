@@ -2,8 +2,14 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAuthenticatedDashboardApiUser } from "@/lib/auth/dashboardSession";
 import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
+import { EditablePinSubtitleSchema, EditablePinTitleSchema } from "@/lib/ai/validators";
 import { isDatabaseConfigured } from "@/lib/env";
-import { createAssistedGenerationPlans, createManualGenerationPlan } from "@/lib/jobs/generatePins";
+import {
+  createAssistedGenerationPlans,
+  createManualGenerationPlan,
+  discardGenerationPlansForJob,
+  updateGenerationPlanRenderContext,
+} from "@/lib/jobs/generatePins";
 
 export const runtime = "nodejs";
 
@@ -17,6 +23,18 @@ const plansSchema = z.discriminatedUnion("mode", [
     mode: z.literal("manual"),
     templateId: z.string().min(1),
     sourceImageIds: z.array(z.string().min(1)).min(1),
+  }),
+  z.object({
+    mode: z.literal("update_render_context"),
+    planId: z.string().min(1),
+    title: EditablePinTitleSchema.optional(),
+    subtitle: EditablePinSubtitleSchema.optional(),
+    itemNumber: z.number().int().positive().max(999).nullable().optional(),
+    visualPreset: z.string().nullable().optional(),
+  }),
+  z.object({
+    mode: z.literal("discard"),
+    planIds: z.array(z.string().min(1)).min(1).optional(),
   }),
 ]);
 
@@ -48,12 +66,33 @@ export async function POST(request: Request, { params }: RouteProps) {
         pinCount: payload.pinCount,
         templateIds: payload.templateIds,
       });
-    } else {
+    } else if (payload.mode === "manual") {
       await createManualGenerationPlan({
         userId: user.id,
         jobId,
         templateId: payload.templateId,
         sourceImageIds: payload.sourceImageIds,
+      });
+    } else if (payload.mode === "update_render_context") {
+      await updateGenerationPlanRenderContext({
+        userId: user.id,
+        jobId,
+        planId: payload.planId,
+        title: payload.title,
+        subtitle: payload.subtitle,
+        itemNumber: payload.itemNumber,
+        visualPreset: payload.visualPreset,
+      });
+    } else {
+      const result = await discardGenerationPlansForJob({
+        userId: user.id,
+        jobId,
+        planIds: payload.planIds,
+      });
+
+      return NextResponse.json({
+        ok: true,
+        discardedPlanCount: result.discardedPlanCount,
       });
     }
 

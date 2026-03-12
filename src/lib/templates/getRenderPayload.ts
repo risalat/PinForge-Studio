@@ -1,7 +1,8 @@
 import { isDatabaseConfigured } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
+import { parsePlanRenderContext } from "@/lib/templates/planRenderContext";
 import { getSampleTemplateProps } from "@/lib/templates/registry";
-import { templateColorPresets, type TemplateRenderProps } from "@/lib/templates/types";
+import { templateVisualPresets, type TemplateRenderProps } from "@/lib/templates/types";
 
 export async function getRenderPayload(
   templateId: string,
@@ -41,12 +42,18 @@ export async function getRenderPayload(
           .map((assignment) => assignment.sourceImage.url)
           .filter((value) => value.trim() !== "")
       : [];
+    const renderContext = parsePlanRenderContext(selectedPlan?.notes);
 
     return {
-      title: job.articleTitleSnapshot,
-      subtitle: undefined,
+      title: renderContext.title?.trim() || job.articleTitleSnapshot,
+      subtitle: renderContext.subtitle?.trim() || undefined,
+      itemNumber:
+        typeof renderContext.itemNumber === "number" ? renderContext.itemNumber : undefined,
       domain: job.domainSnapshot,
-      colorPreset: toColorPreset(undefined, templateId),
+      visualPreset: toVisualPreset(
+        renderContext.visualPreset ?? renderContext.colorPreset,
+        templateId,
+      ),
       images: imageUrls.length > 0 ? imageUrls : getSampleTemplateProps(templateId).images,
     };
   } catch {
@@ -54,13 +61,13 @@ export async function getRenderPayload(
   }
 }
 
-function toColorPreset(value: unknown, templateId: string) {
+function toVisualPreset(value: unknown, templateId: string) {
   if (
     typeof value === "string" &&
-    templateColorPresets.includes(value as (typeof templateColorPresets)[number])
+    templateVisualPresets.includes(value as (typeof templateVisualPresets)[number])
   ) {
-    return value as (typeof templateColorPresets)[number];
+    return value as (typeof templateVisualPresets)[number];
   }
 
-  return getSampleTemplateProps(templateId).colorPreset;
+  return getSampleTemplateProps(templateId).visualPreset;
 }

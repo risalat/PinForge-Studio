@@ -25,6 +25,14 @@ export function SettingsManager({
   const [aiModels, setAiModels] = useState<string[]>([]);
   const [hasStoredPublerKey, setHasStoredPublerKey] = useState(initialSettings.hasPublerApiKey);
   const [hasStoredAiKey, setHasStoredAiKey] = useState(initialSettings.hasAiApiKey);
+  const [canUseStoredPublerKey, setCanUseStoredPublerKey] = useState(initialSettings.canUsePublerApiKey);
+  const [canUseStoredAiKey, setCanUseStoredAiKey] = useState(initialSettings.canUseAiApiKey);
+  const [publerCredentialMessage, setPublerCredentialMessage] = useState(
+    initialSettings.publerCredentialMessage,
+  );
+  const [aiCredentialMessage, setAiCredentialMessage] = useState(
+    initialSettings.aiCredentialMessage,
+  );
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -33,7 +41,7 @@ export function SettingsManager({
   const canLoadAiModels =
     aiProvider === "custom_endpoint"
       ? aiCustomEndpoint.trim() !== ""
-      : aiApiKey.trim() !== "" || (hasStoredAiKey && aiProvider === storedAiProvider);
+      : aiApiKey.trim() !== "" || (canUseStoredAiKey && aiProvider === storedAiProvider);
 
   async function loadAiModels(options?: { silent?: boolean }) {
     if (!canLoadAiModels) {
@@ -120,7 +128,11 @@ export function SettingsManager({
 
       setHasStoredPublerKey(json.settings.hasPublerApiKey);
       setHasStoredAiKey(json.settings.hasAiApiKey);
+      setCanUseStoredPublerKey(json.settings.canUsePublerApiKey);
+      setCanUseStoredAiKey(json.settings.canUseAiApiKey);
       setStoredAiProvider(json.settings.aiProvider);
+      setPublerCredentialMessage(json.settings.publerCredentialMessage);
+      setAiCredentialMessage(json.settings.aiCredentialMessage);
       setPublerApiKey("");
       setAiApiKey("");
       setSuccess("Settings saved. Publer board selection can happen later during scheduling.");
@@ -147,26 +159,26 @@ export function SettingsManager({
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [aiProvider, aiApiKey, aiCustomEndpoint, hasStoredAiKey, storedAiProvider]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [aiProvider, aiApiKey, aiCustomEndpoint, canUseStoredAiKey, storedAiProvider]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="space-y-6">
-      <section className="rounded-[28px] bg-white p-6 shadow-[0_20px_50px_rgba(60,40,18,0.08)]">
+      <section className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-6 shadow-[var(--dashboard-shadow-sm)]">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[#8a572a]">
+          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
             Publer
           </p>
-          <h2 className="mt-2 text-2xl font-black uppercase tracking-[-0.04em]">
+          <h2 className="mt-2 text-2xl font-black tracking-[-0.04em]">
             Publishing access
           </h2>
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-[#6e4a2b]">
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--dashboard-subtle)]">
             Store only the Publer API key here. Workspace, Pinterest account, and board selection
             will happen later in the scheduling flow after pins are generated.
           </p>
         </div>
 
         <div className="mt-5">
-          <label className="text-sm font-semibold uppercase tracking-[0.2em] text-[#8a572a]">
+          <label className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
             Publer API key
           </label>
           <input
@@ -178,26 +190,31 @@ export function SettingsManager({
                 ? "Stored key present. Re-enter only to replace it."
                 : "Paste Publer API key"
             }
-            className="mt-3 w-full rounded-2xl border border-[#e0cdb8] bg-[#fffaf4] px-4 py-3 outline-none"
+            className="mt-3 w-full rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 outline-none"
           />
-          <p className="mt-2 text-xs text-[#8a572a]">
+          <p className="mt-2 text-xs text-[var(--dashboard-muted)]">
             {hasStoredPublerKey
               ? "A Publer key is already stored securely. Leaving this blank keeps the saved key."
               : "This key will be reused later when you open the publishing flow for generated pins."}
           </p>
+          {hasStoredPublerKey && !canUseStoredPublerKey ? (
+            <p className="mt-3 rounded-2xl border border-[var(--dashboard-warning-border)] bg-[var(--dashboard-warning-soft)] px-4 py-3 text-sm text-[var(--dashboard-warning-ink)]">
+              Stored Publer key is not usable in the current environment. {publerCredentialMessage}
+            </p>
+          ) : null}
         </div>
       </section>
 
-      <section className="rounded-[28px] bg-white p-6 shadow-[0_20px_50px_rgba(60,40,18,0.08)]">
+      <section className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-6 shadow-[var(--dashboard-shadow-sm)]">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[#8a572a]">
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
               AI
             </p>
-            <h2 className="mt-2 text-2xl font-black uppercase tracking-[-0.04em]">
+            <h2 className="mt-2 text-2xl font-black tracking-[-0.04em]">
               Copy generation settings
             </h2>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-[#6e4a2b]">
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--dashboard-subtle)]">
               Choose a provider, paste the API key, and Studio will load the available model list
               automatically so you can lock the model once.
             </p>
@@ -206,7 +223,7 @@ export function SettingsManager({
             type="button"
             onClick={() => void loadAiModels()}
             disabled={isLoadingAiModels || !canLoadAiModels || aiProvider === "custom_endpoint"}
-            className="rounded-full border border-[#d8b690] px-5 py-3 text-sm font-semibold uppercase tracking-[0.2em] text-[#8a572a] disabled:opacity-60"
+            className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-5 py-3 text-sm font-semibold text-[var(--dashboard-subtle)] disabled:opacity-60"
           >
             {isLoadingAiModels ? "Loading..." : "Refresh models"}
           </button>
@@ -214,7 +231,7 @@ export function SettingsManager({
 
         <div className="mt-5 grid gap-4 md:grid-cols-2">
           <div>
-            <label className="text-sm font-semibold uppercase tracking-[0.2em] text-[#8a572a]">
+            <label className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
               Provider
             </label>
             <select
@@ -225,7 +242,7 @@ export function SettingsManager({
                 setAiModel("");
                 setAiModels([]);
               }}
-              className="mt-3 w-full rounded-2xl border border-[#e0cdb8] bg-[#fffaf4] px-4 py-3 outline-none"
+              className="mt-3 w-full rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 outline-none"
             >
               {aiProviderOptions.map((provider) => (
                 <option key={provider.value} value={provider.value}>
@@ -236,7 +253,7 @@ export function SettingsManager({
           </div>
 
           <div>
-            <label className="text-sm font-semibold uppercase tracking-[0.2em] text-[#8a572a]">
+            <label className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
               API key
             </label>
             <input
@@ -249,26 +266,31 @@ export function SettingsManager({
                   ? "Stored key present. Re-enter only to replace it."
                   : "Paste AI provider API key"
               }
-              className="mt-3 w-full rounded-2xl border border-[#e0cdb8] bg-[#fffaf4] px-4 py-3 outline-none"
+              className="mt-3 w-full rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 outline-none"
             />
-            <p className="mt-2 text-xs text-[#8a572a]">
+            <p className="mt-2 text-xs text-[var(--dashboard-muted)]">
               {hasStoredAiKey && aiProvider === storedAiProvider
                 ? `A ${getAiProviderLabel(storedAiProvider)} key is already stored securely.`
                 : "After you leave this field, Studio will try to load the model catalog."}
             </p>
+            {hasStoredAiKey && !canUseStoredAiKey ? (
+              <p className="mt-3 rounded-2xl border border-[var(--dashboard-warning-border)] bg-[var(--dashboard-warning-soft)] px-4 py-3 text-sm text-[var(--dashboard-warning-ink)]">
+                Stored AI key is not usable in the current environment. {aiCredentialMessage}
+              </p>
+            ) : null}
           </div>
 
           {aiProvider === "custom_endpoint" ? (
             <div className="md:col-span-2">
-              <label className="text-sm font-semibold uppercase tracking-[0.2em] text-[#8a572a]">
+              <label className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
                 Custom endpoint
               </label>
               <input
                 value={aiCustomEndpoint}
                 onChange={(event) => setAiCustomEndpoint(event.target.value)}
-                className="mt-3 w-full rounded-2xl border border-[#e0cdb8] bg-[#fffaf4] px-4 py-3 outline-none"
+                className="mt-3 w-full rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 outline-none"
               />
-              <p className="mt-2 text-xs text-[#8a572a]">
+              <p className="mt-2 text-xs text-[var(--dashboard-muted)]">
                 Custom endpoints use a manual model ID. Studio will keep the provider architecture
                 but will not auto-discover models here.
               </p>
@@ -276,13 +298,13 @@ export function SettingsManager({
           ) : null}
 
           <div>
-            <label className="text-sm font-semibold uppercase tracking-[0.2em] text-[#8a572a]">
+            <label className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
               Model list
             </label>
             <select
               value={aiModel}
               onChange={(event) => setAiModel(event.target.value)}
-              className="mt-3 w-full rounded-2xl border border-[#e0cdb8] bg-[#fffaf4] px-4 py-3 outline-none"
+              className="mt-3 w-full rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 outline-none"
             >
               <option value="">Select model</option>
               {aiModels.map((model) => (
@@ -294,7 +316,7 @@ export function SettingsManager({
           </div>
 
           <div>
-            <label className="text-sm font-semibold uppercase tracking-[0.2em] text-[#8a572a]">
+            <label className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
               Model ID
             </label>
             <input
@@ -303,7 +325,7 @@ export function SettingsManager({
               placeholder={
                 aiProvider === "custom_endpoint" ? "Type model id" : "Select above or type model id"
               }
-              className="mt-3 w-full rounded-2xl border border-[#e0cdb8] bg-[#fffaf4] px-4 py-3 outline-none"
+              className="mt-3 w-full rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 outline-none"
             />
           </div>
         </div>
@@ -314,13 +336,17 @@ export function SettingsManager({
           type="button"
           onClick={() => void handleSave()}
           disabled={isSaving}
-          className="rounded-full bg-[#2c1c12] px-6 py-3 text-sm font-semibold uppercase tracking-[0.22em] text-[#f7ede0] disabled:opacity-60"
+          className="rounded-full bg-[var(--dashboard-accent)] px-6 py-3 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
         >
           {isSaving ? "Saving..." : "Save settings"}
         </button>
 
-        {success ? <p className="text-sm text-[#40633e]">{success}</p> : null}
-        {error ? <p className="text-sm text-[#9b4328]">{error}</p> : null}
+        {success ? (
+          <p className="rounded-full border border-[var(--dashboard-success-border)] bg-[var(--dashboard-success-soft)] px-4 py-2 text-sm text-[var(--dashboard-success-ink)]">{success}</p>
+        ) : null}
+        {error ? (
+          <p className="rounded-full border border-[var(--dashboard-danger-border)] bg-[var(--dashboard-danger-soft)] px-4 py-2 text-sm text-[var(--dashboard-danger-ink)]">{error}</p>
+        ) : null}
       </div>
     </div>
   );

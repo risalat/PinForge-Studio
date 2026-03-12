@@ -23,6 +23,12 @@ export type IntegrationSettingsSummary = {
   aiCustomEndpoint: string;
   hasPublerApiKey: boolean;
   hasAiApiKey: boolean;
+  canUsePublerApiKey: boolean;
+  canUseAiApiKey: boolean;
+  publerCredentialState: "missing" | "ready" | "unavailable";
+  aiCredentialState: "missing" | "ready" | "unavailable";
+  publerCredentialMessage: string;
+  aiCredentialMessage: string;
 };
 
 const DEFAULT_SETTINGS: IntegrationSettings = {
@@ -72,6 +78,9 @@ export async function getIntegrationSettingsSummary(): Promise<IntegrationSettin
     },
   });
 
+  const publerCredential = summarizeStoredSecret(settings?.publerApiKeyEnc);
+  const aiCredential = summarizeStoredSecret(settings?.aiApiKeyEnc);
+
   return {
     publerWorkspaceId: settings?.publerWorkspaceId ?? "",
     publerAccountId: settings?.publerAccountId ?? "",
@@ -79,8 +88,14 @@ export async function getIntegrationSettingsSummary(): Promise<IntegrationSettin
     aiProvider: toAiProvider(settings?.aiProvider),
     aiModel: settings?.aiModel ?? "",
     aiCustomEndpoint: settings?.aiCustomEndpoint ?? "",
-    hasPublerApiKey: Boolean(settings?.publerApiKeyEnc),
-    hasAiApiKey: Boolean(settings?.aiApiKeyEnc),
+    hasPublerApiKey: publerCredential.hasStoredValue,
+    hasAiApiKey: aiCredential.hasStoredValue,
+    canUsePublerApiKey: publerCredential.canUseValue,
+    canUseAiApiKey: aiCredential.canUseValue,
+    publerCredentialState: publerCredential.state,
+    aiCredentialState: aiCredential.state,
+    publerCredentialMessage: publerCredential.message,
+    aiCredentialMessage: aiCredential.message,
   };
 }
 
@@ -138,4 +153,35 @@ function toAiProvider(value: string | null | undefined): AIProvider {
   }
 
   return DEFAULT_SETTINGS.aiProvider;
+}
+
+function summarizeStoredSecret(payload: string | null | undefined) {
+  if (!payload) {
+    return {
+      hasStoredValue: false,
+      canUseValue: false,
+      state: "missing" as const,
+      message: "",
+    };
+  }
+
+  try {
+    decryptSecret(payload);
+    return {
+      hasStoredValue: true,
+      canUseValue: true,
+      state: "ready" as const,
+      message: "",
+    };
+  } catch (error) {
+    return {
+      hasStoredValue: true,
+      canUseValue: false,
+      state: "unavailable" as const,
+      message:
+        error instanceof Error
+          ? error.message
+          : "Stored secret is not usable in the current environment.",
+    };
+  }
 }

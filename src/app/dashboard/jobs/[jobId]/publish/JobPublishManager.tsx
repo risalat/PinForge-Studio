@@ -2,6 +2,7 @@
 
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { buildSchedulePreview } from "@/lib/jobs/schedulePreview";
@@ -41,7 +42,6 @@ type PublerBoard = {
 
 type JobPublishManagerProps = {
   jobId: string;
-  jobStatus: string;
   pins: PinItem[];
   defaults: {
     workspaceId: string;
@@ -51,6 +51,12 @@ type JobPublishManagerProps = {
   integrationReady: {
     hasPublerApiKey: boolean;
     hasAiApiKey: boolean;
+    canUsePublerApiKey: boolean;
+    canUseAiApiKey: boolean;
+    publerCredentialState: "missing" | "ready" | "unavailable";
+    aiCredentialState: "missing" | "ready" | "unavailable";
+    publerCredentialMessage: string;
+    aiCredentialMessage: string;
   };
   latestScheduleRun: {
     id: string;
@@ -79,6 +85,8 @@ type BannerState = {
   message: string;
 } | null;
 
+type PublishSectionKey = "upload" | "titles" | "descriptions" | "schedule";
+
 type PublerOptionsResponse = {
   ok: boolean;
   error?: string;
@@ -90,16 +98,27 @@ type PublerOptionsResponse = {
 };
 
 type BoardDistributionMode = "round_robin" | "first_selected" | "primary_weighted";
+const TITLE_MAX_LENGTH = 100;
+const DESCRIPTION_MAX_LENGTH = 500;
+
+type PublishStatusResponse = {
+  ok: boolean;
+  error?: string;
+  jobStatus?: string;
+  pins?: PinItem[];
+  latestScheduleRun?: JobPublishManagerProps["latestScheduleRun"];
+};
 
 export function JobPublishManager({
   jobId,
-  jobStatus,
   pins,
   defaults,
   integrationReady,
   latestScheduleRun,
 }: JobPublishManagerProps) {
   const router = useRouter();
+  const [livePins, setLivePins] = useState<PinItem[]>(pins);
+  const [liveLatestScheduleRun, setLiveLatestScheduleRun] = useState(latestScheduleRun);
   const [copyState, setCopyState] = useState(
     pins.map((pin) => ({
       generatedPinId: pin.id,
@@ -125,9 +144,17 @@ export function JobPublishManager({
   const [accounts, setAccounts] = useState<PublerAccount[]>([]);
   const [boards, setBoards] = useState<PublerBoard[]>([]);
   const [optionsError, setOptionsError] = useState<string | null>(null);
-  const [banner, setBanner] = useState<BannerState>(null);
+  const [sectionFeedback, setSectionFeedback] = useState<Record<PublishSectionKey, BannerState>>({
+    upload: null,
+    titles: null,
+    descriptions: null,
+    schedule: null,
+  });
   const [isLoadingOptions, setIsLoadingOptions] = useState(false);
+  const [isRefreshingStatus, setIsRefreshingStatus] = useState(false);
+  const [activeAction, setActiveAction] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const currentPins = livePins;
 
   const copyByPinId = useMemo(
     () =>
@@ -143,9 +170,15 @@ export function JobPublishManager({
     [copyState],
   );
 
+  useEffect(() => {
+    setLivePins(pins);
+    setLiveLatestScheduleRun(latestScheduleRun);
+    setCopyState((current) => mergeCopyStateWithPins(current, pins));
+  }, [latestScheduleRun, pins]);
+
   const selectedPins = useMemo(
-    () => pins.filter((pin) => selectedPinIds.includes(pin.id)),
-    [pins, selectedPinIds],
+    () => currentPins.filter((pin) => selectedPinIds.includes(pin.id)),
+    [currentPins, selectedPinIds],
   );
 
   const selectedBoards = useMemo(
@@ -166,17 +199,43 @@ export function JobPublishManager({
 
   const summary = useMemo(
     () => ({
-      uploaded: pins.filter((pin) => pin.mediaStatus === "UPLOADED").length,
-      mediaFailed: pins.filter((pin) => pin.mediaStatus === "FAILED").length,
-      titlesReady: pins.filter((pin) => Boolean(copyByPinId.get(pin.id)?.title.trim())).length,
-      descriptionsReady: pins.filter((pin) =>
+      uploaded: currentPins.filter((pin) => pin.mediaStatus === "UPLOADED").length,
+      mediaFailed: currentPins.filter((pin) => pin.mediaStatus === "FAILED").length,
+      mediaUploading: currentPins.filter((pin) => pin.mediaStatus === "UPLOADING").length,
+      titlesReady: currentPins.filter((pin) => Boolean(copyByPinId.get(pin.id)?.title.trim())).length,
+      descriptionsReady: currentPins.filter((pin) =>
         Boolean(copyByPinId.get(pin.id)?.description.trim()),
       ).length,
-      scheduled: pins.filter((pin) => pin.scheduleStatus === "SCHEDULED").length,
-      scheduleFailed: pins.filter((pin) => pin.scheduleStatus === "FAILED").length,
+      scheduled: currentPins.filter((pin) => pin.scheduleStatus === "SCHEDULED").length,
+      scheduleFailed: currentPins.filter((pin) => pin.scheduleStatus === "FAILED").length,
     }),
-    [copyByPinId, pins],
+    [copyByPinId, currentPins],
   );
+
+  const failedUploadPins = useMemo(
+    () => currentPins.filter((pin) => pin.mediaStatus === "FAILED"),
+    [currentPins],
+  );
+  const selectedUploadPins = useMemo(
+    () => currentPins.filter((pin) => selectedPinIds.includes(pin.id)),
+    [currentPins, selectedPinIds],
+  );
+  const selectedUploadProgress = useMemo(() => {
+    const total = selectedUploadPins.length;
+    const uploaded = selectedUploadPins.filter((pin) => pin.mediaStatus === "UPLOADED").length;
+    const failed = selectedUploadPins.filter((pin) => pin.mediaStatus === "FAILED").length;
+    const uploading = selectedUploadPins.filter((pin) => pin.mediaStatus === "UPLOADING").length;
+    const completed = uploaded + failed;
+
+    return {
+      total,
+      uploaded,
+      failed,
+      uploading,
+      completed,
+      percent: total > 0 ? Math.round((completed / total) * 100) : 0,
+    };
+  }, [selectedUploadPins]);
 
   const canScheduleSelected = useMemo(
     () =>
@@ -225,8 +284,30 @@ export function JobPublishManager({
     [boardDistributionMode, primaryBoardId, primaryBoardPercent, schedulePreview, selectedBoardIds, selectedBoards],
   );
 
+  const publerRuntimeState = useMemo(
+    () =>
+      resolvePublerRuntimeState({
+        integrationReady,
+        isLoadingOptions,
+        optionsError,
+        workspacesCount: workspaces.length,
+        accountId,
+        selectedBoardCount: selectedBoardIds.length,
+      }),
+    [
+      accountId,
+      integrationReady,
+      isLoadingOptions,
+      optionsError,
+      selectedBoardIds.length,
+      workspaces.length,
+    ],
+  );
+
+  const aiRuntimeState = useMemo(() => resolveAiRuntimeState(integrationReady), [integrationReady]);
+
   useEffect(() => {
-    if (!integrationReady.hasPublerApiKey) {
+    if (!integrationReady.canUsePublerApiKey) {
       return;
     }
 
@@ -235,7 +316,7 @@ export function JobPublishManager({
       nextWorkspaceId: defaults.workspaceId,
       nextAccountId: defaults.accountId,
     });
-  }, [defaults.accountId, defaults.workspaceId, integrationReady.hasPublerApiKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [defaults.accountId, defaults.workspaceId, integrationReady.canUsePublerApiKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (selectedBoardIds.length === 0) {
@@ -249,6 +330,52 @@ export function JobPublishManager({
       setPrimaryBoardId(selectedBoardIds[0]);
     }
   }, [primaryBoardId, selectedBoardIds]);
+
+  useEffect(() => {
+    if (activeAction !== "upload_media" && !currentPins.some((pin) => pin.mediaStatus === "UPLOADING")) {
+      return;
+    }
+
+    let isCancelled = false;
+    const refresh = async () => {
+      try {
+        setIsRefreshingStatus(true);
+        const response = await fetch(`/api/dashboard/jobs/${jobId}/publish`, {
+          method: "GET",
+          cache: "no-store",
+        });
+        const data = (await response.json()) as PublishStatusResponse;
+        if (!response.ok || !data.ok) {
+          throw new Error(data.error ?? "Unable to refresh publish status.");
+        }
+        if (isCancelled) {
+          return;
+        }
+
+        setLiveLatestScheduleRun(data.latestScheduleRun ?? null);
+        if (data.pins) {
+          setLivePins(data.pins);
+          setCopyState((current) => mergeCopyStateWithPins(current, data.pins ?? []));
+        }
+      } catch {
+        // Keep the last known UI state if polling fails temporarily.
+      } finally {
+        if (!isCancelled) {
+          setIsRefreshingStatus(false);
+        }
+      }
+    };
+
+    void refresh();
+    const interval = setInterval(() => {
+      void refresh();
+    }, 2000);
+
+    return () => {
+      isCancelled = true;
+      clearInterval(interval);
+    };
+  }, [activeAction, currentPins, jobId]);
 
   async function loadPublerOptions(input?: {
     preserveCurrentSelection?: boolean;
@@ -339,29 +466,76 @@ export function JobPublishManager({
     return data.result;
   }
 
-  function handleAction(payload: unknown, fallbackMessage: string) {
+  function handleAction(payload: unknown, fallbackMessage: string, section?: PublishSectionKey) {
     startTransition(async () => {
       try {
-        setBanner(null);
+        const action = typeof payload === "object" && payload && "action" in payload
+          ? String((payload as { action?: string }).action ?? "")
+          : "";
+        const feedbackSection = section ?? resolveSectionForAction(action);
+        if (feedbackSection) {
+          setSectionFeedback((current) => ({
+            ...current,
+            [feedbackSection]: null,
+          }));
+        }
+        if (action) {
+          setActiveAction(action);
+        }
         const result = await runAction(payload);
-        setBanner({
-          tone: result && result.failed > 0 ? "warning" : "success",
-          message: result?.message ?? "Action completed.",
-        });
+        if (feedbackSection) {
+          setSectionFeedback((current) => ({
+            ...current,
+            [feedbackSection]: {
+              tone: result && result.failed > 0 ? "warning" : "success",
+              message: result?.message ?? "Action completed.",
+            },
+          }));
+        }
+        if (action) {
+          const response = await fetch(`/api/dashboard/jobs/${jobId}/publish`, {
+            method: "GET",
+            cache: "no-store",
+          });
+          const data = (await response.json()) as PublishStatusResponse;
+          if (response.ok && data.ok) {
+            setLiveLatestScheduleRun(data.latestScheduleRun ?? null);
+            if (data.pins) {
+              setLivePins(data.pins);
+              setCopyState((current) => mergeCopyStateWithPins(current, data.pins ?? []));
+            }
+          }
+        }
         router.refresh();
       } catch (error) {
-        setBanner({
-          tone: "error",
-          message: error instanceof Error ? error.message : fallbackMessage,
-        });
+        const action = typeof payload === "object" && payload && "action" in payload
+          ? String((payload as { action?: string }).action ?? "")
+          : "";
+        const feedbackSection = section ?? resolveSectionForAction(action);
+        if (feedbackSection) {
+          setSectionFeedback((current) => ({
+            ...current,
+            [feedbackSection]: {
+              tone: "error",
+              message: error instanceof Error ? error.message : fallbackMessage,
+            },
+          }));
+        }
+      } finally {
+        setActiveAction(null);
       }
     });
   }
 
   function updateCopy(generatedPinId: string, key: "title" | "description", value: string) {
+    const nextValue =
+      key === "title"
+        ? value.slice(0, TITLE_MAX_LENGTH)
+        : value.slice(0, DESCRIPTION_MAX_LENGTH);
+
     setCopyState((current) =>
       current.map((item) =>
-        item.generatedPinId === generatedPinId ? { ...item, [key]: value } : item,
+        item.generatedPinId === generatedPinId ? { ...item, [key]: nextValue } : item,
       ),
     );
   }
@@ -393,102 +567,164 @@ export function JobPublishManager({
     });
   }
 
-  function moveBoard(boardId: string, direction: "up" | "down") {
-    setSelectedBoardIds((current) => {
-      const index = current.indexOf(boardId);
-      if (index === -1) {
-        return current;
-      }
-
-      const nextIndex = direction === "up" ? index - 1 : index + 1;
-      if (nextIndex < 0 || nextIndex >= current.length) {
-        return current;
-      }
-
-      const next = [...current];
-      const [moved] = next.splice(index, 1);
-      next.splice(nextIndex, 0, moved);
-      return next;
-    });
-  }
-
   function selectBy(predicate: (pin: PinItem) => boolean) {
-    setSelectedPinIds(pins.filter(predicate).map((pin) => pin.id));
+    setSelectedPinIds(currentPins.filter(predicate).map((pin) => pin.id));
   }
 
   function formatPreviewDate(value: Date) {
     return value.toLocaleString();
   }
 
+  function triggerUploadSelected() {
+    handleAction(
+      {
+        action: "upload_media",
+        generatedPinIds: selectedPinIds,
+        workspaceId,
+      },
+      "Unable to upload media.",
+      "upload",
+    );
+  }
+
+  function triggerGenerateTitles() {
+    handleAction(
+      { action: "generate_titles", generatedPinIds: selectedPinIds },
+      "Unable to generate titles.",
+      "titles",
+    );
+  }
+
+  function triggerGenerateDescriptions() {
+    handleAction(
+      { action: "generate_descriptions", generatedPinIds: selectedPinIds },
+      "Unable to generate descriptions.",
+      "descriptions",
+    );
+  }
+
+  function triggerScheduleSelected() {
+    handleAction(
+      {
+        action: "schedule",
+        generatedPinIds: selectedPinIds,
+        firstPublishAt,
+        intervalMinutes: intervalDays * 24 * 60,
+        jitterMinutes: jitterDays * 24 * 60,
+        workspaceId,
+        accountId,
+        boardIds: selectedBoardIds,
+        boardDistributionMode,
+        primaryBoardId,
+        primaryBoardPercent,
+      },
+      "Unable to schedule pins.",
+      "schedule",
+    );
+  }
+
   return (
     <div className="space-y-6">
-      {banner ? (
-        <div
-          className={`rounded-2xl border px-4 py-3 text-sm ${
-            banner.tone === "error"
-              ? "border-[#ebc0b0] bg-[#fff4ef] text-[#8f3d24]"
-              : banner.tone === "warning"
-                ? "border-[#ead6a5] bg-[#fff9e8] text-[#7f5a12]"
-                : "border-[#c8dec1] bg-[#f2fbef] text-[#355c2f]"
-          }`}
-        >
-          {banner.message}
+      <section className="sticky top-[92px] z-10 rounded-[24px] border border-[var(--dashboard-line)] bg-[color:var(--dashboard-panel)]/95 px-3 py-3 shadow-[var(--dashboard-shadow-sm)] backdrop-blur-xl">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full bg-[var(--dashboard-panel-alt)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-text)]">
+              {selectedPinIds.length}/{currentPins.length} selected
+            </span>
+            <StepJump href="#publish-destination" label="Destination" />
+            <StepJump href="#publish-upload" label="Upload" />
+            <StepJump href="#publish-titles" label="Titles" />
+            <StepJump href="#publish-descriptions" label="Descriptions" />
+            <StepJump href="#publish-schedule" label="Schedule" />
+            <StepJump href="#publish-pins" label="Pins" />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <ToolbarButton
+              label="Upload"
+              onClick={triggerUploadSelected}
+              disabled={
+                isPending ||
+                selectedPins.length === 0 ||
+                !integrationReady.canUsePublerApiKey ||
+                !workspaceId
+              }
+              tone="primary"
+            />
+            <ToolbarButton
+              label="Titles"
+              onClick={triggerGenerateTitles}
+              disabled={isPending || selectedPins.length === 0 || !integrationReady.canUseAiApiKey}
+            />
+            <ToolbarButton
+              label="Descriptions"
+              onClick={triggerGenerateDescriptions}
+              disabled={isPending || selectedPins.length === 0 || !integrationReady.canUseAiApiKey}
+            />
+            <ToolbarButton
+              label="Schedule"
+              onClick={triggerScheduleSelected}
+              disabled={
+                isPending ||
+                !firstPublishAt ||
+                !canScheduleSelected ||
+                selectedPins.length === 0 ||
+                !workspaceId ||
+                !accountId ||
+                selectedBoardIds.length === 0 ||
+                (boardDistributionMode === "primary_weighted" &&
+                  (!primaryBoardId || !selectedBoardIds.includes(primaryBoardId)))
+              }
+            />
+          </div>
         </div>
-      ) : null}
-
-      <section className="grid gap-4 md:grid-cols-4">
-        <SummaryCard label="Job status" value={formatLabel(jobStatus)} />
-        <SummaryCard label="Media uploaded" value={`${summary.uploaded}/${pins.length}`} />
-        <SummaryCard label="Descriptions ready" value={`${summary.descriptionsReady}/${pins.length}`} />
-        <SummaryCard label="Scheduled" value={`${summary.scheduled}/${pins.length}`} />
       </section>
 
-      <section className="rounded-3xl border border-[#e8d7c5] bg-white p-5">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h2 className="text-xl font-bold">Workflow readiness</h2>
-            <p className="mt-2 text-sm text-[#6e4a2b]">
-              Work pin-by-pin when needed. Each step accepts the currently selected pins and keeps
-              successful records intact.
-            </p>
+      <section className="rounded-[24px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-4 py-3 shadow-[var(--dashboard-shadow-sm)]">
+        <div className="grid gap-3 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] xl:items-start">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <SummaryCard label="Media" value={`${summary.uploaded}/${currentPins.length}`} />
+            <SummaryCard label="Descriptions" value={`${summary.descriptionsReady}/${currentPins.length}`} />
+            <SummaryCard label="Scheduled" value={`${summary.scheduled}/${currentPins.length}`} />
           </div>
-          <div className="grid gap-2 text-sm text-[#6e4a2b]">
-            <p>
-              <strong>Publer API key:</strong>{" "}
-              {integrationReady.hasPublerApiKey ? "Configured" : "Missing"}
-            </p>
-            <p>
-              <strong>AI provider key:</strong>{" "}
-              {integrationReady.hasAiApiKey ? "Configured" : "Missing"}
-            </p>
+          <div className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <InlineState label="Publer" value={publerRuntimeState.label} tone={publerRuntimeState.tone} />
+              <InlineState label="AI" value={aiRuntimeState.label} tone={aiRuntimeState.tone} />
+              {liveLatestScheduleRun ? (
+                <InlineState
+                  label="Latest run"
+                  value={formatLabel(liveLatestScheduleRun.status)}
+                  tone={
+                    liveLatestScheduleRun.status === "FAILED"
+                      ? "danger"
+                      : liveLatestScheduleRun.status === "COMPLETED"
+                        ? "success"
+                        : "neutral"
+                  }
+                />
+              ) : null}
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+              <StateDetail label="Publer" value={publerRuntimeState.detail} tone={publerRuntimeState.tone} />
+              <StateDetail label="AI" value={aiRuntimeState.detail} tone={aiRuntimeState.tone} />
+              {liveLatestScheduleRun?.errorMessage ? (
+                <StateDetail label="Run" value={liveLatestScheduleRun.errorMessage} tone="danger" />
+              ) : null}
+            </div>
           </div>
         </div>
-
-        {latestScheduleRun ? (
-          <div className="mt-4 rounded-2xl border border-[#eadacc] bg-[#fcf7f0] p-4 text-sm text-[#6e4a2b]">
-            <p className="font-semibold text-[#23160d]">Latest schedule run</p>
-            <p className="mt-1">
-              {formatLabel(latestScheduleRun.status)}
-              {latestScheduleRun.completedAt
-                ? ` - completed ${new Date(latestScheduleRun.completedAt).toLocaleString()}`
-                : latestScheduleRun.submittedAt
-                  ? ` - submitted ${new Date(latestScheduleRun.submittedAt).toLocaleString()}`
-                  : ""}
-            </p>
-            {latestScheduleRun.errorMessage ? (
-              <p className="mt-2 text-[#8f3d24]">{latestScheduleRun.errorMessage}</p>
-            ) : null}
-          </div>
-        ) : null}
       </section>
 
-      <section className="rounded-3xl border border-[#e8d7c5] bg-white p-5">
-        <div className="flex flex-wrap items-start justify-between gap-4">
+      <section id="publish-destination" className="rounded-[24px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-4 shadow-[var(--dashboard-shadow-sm)]">
+        <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h2 className="text-xl font-bold">Publishing destination</h2>
-            <p className="mt-2 text-sm text-[#6e4a2b]">
-              Choose the Publer workspace, Pinterest account, and one or more preferred boards
-              before uploading media. Board order becomes the scheduling priority.
+            <h2 className="text-lg font-bold">Publishing destination</h2>
+            <p className="mt-1 text-sm text-[var(--dashboard-subtle)]">
+              {workspaceId ? "Workspace ready" : "Choose a workspace"}
+              {accountId ? ", account ready" : ", account missing"}
+              {selectedBoards.length > 0
+                ? `, ${selectedBoards.length} board${selectedBoards.length === 1 ? "" : "s"} selected`
+                : ", no boards selected"}.
             </p>
           </div>
           <button
@@ -500,15 +736,15 @@ export function JobPublishManager({
                 nextAccountId: accountId,
               })
             }
-            disabled={isLoadingOptions || !integrationReady.hasPublerApiKey}
-            className="rounded-full border border-[#d8b690] px-4 py-2 text-sm font-semibold text-[#8a572a] disabled:opacity-60"
+            disabled={isLoadingOptions || !integrationReady.canUsePublerApiKey}
+            className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] disabled:opacity-60"
           >
             {isLoadingOptions ? "Refreshing..." : "Refresh destination"}
           </button>
         </div>
 
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
-          <label className="block text-sm font-semibold text-[#6e4a2b]">
+        <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(240px,0.7fr)]">
+          <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
             Workspace
             <select
               value={workspaceId}
@@ -523,7 +759,7 @@ export function JobPublishManager({
                   nextAccountId: accountId,
                 });
               }}
-              className="mt-2 w-full rounded-xl border border-[#dcc8b2] bg-[#fffaf4] px-3 py-2"
+              className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-2"
             >
               <option value="">Select workspace</option>
               {workspaces.map((workspace) => (
@@ -533,7 +769,7 @@ export function JobPublishManager({
               ))}
             </select>
           </label>
-          <label className="block text-sm font-semibold text-[#6e4a2b]">
+          <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
             Pinterest account
             <select
               value={accountId}
@@ -548,7 +784,7 @@ export function JobPublishManager({
                   nextAccountId: nextValue,
                 });
               }}
-              className="mt-2 w-full rounded-xl border border-[#dcc8b2] bg-[#fffaf4] px-3 py-2"
+              className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-2"
             >
               <option value="">Select account</option>
               {accounts.map((account) => (
@@ -558,172 +794,84 @@ export function JobPublishManager({
               ))}
             </select>
           </label>
+          <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
+            Distribution
+            <select
+              value={boardDistributionMode}
+              onChange={(event) =>
+                setBoardDistributionMode(event.target.value as BoardDistributionMode)
+              }
+              className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-2"
+            >
+              <option value="round_robin">Round robin</option>
+              <option value="first_selected">First selected only</option>
+              <option value="primary_weighted">Primary weighted</option>
+            </select>
+          </label>
         </div>
 
-        <div className="mt-4 rounded-2xl border border-[#eadacc] bg-[#fcf7f0] p-4">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <p className="text-sm font-semibold text-[#23160d]">Preferred Pinterest boards</p>
-              <p className="mt-1 text-sm text-[#6e4a2b]">
-                Select multiple boards to spread pins out. Move boards up or down to control
-                preference order.
-              </p>
-            </div>
-            <label className="block text-sm font-semibold text-[#6e4a2b]">
-              Distribution
-              <select
-                value={boardDistributionMode}
-                onChange={(event) =>
-                  setBoardDistributionMode(event.target.value as BoardDistributionMode)
-                }
-                className="mt-2 w-full rounded-xl border border-[#dcc8b2] bg-white px-3 py-2"
-              >
-                <option value="round_robin">Round robin across selected boards</option>
-                <option value="first_selected">Use the first selected board for all pins</option>
-                <option value="primary_weighted">Favor one primary board</option>
-              </select>
-            </label>
-          </div>
-
-          {boardDistributionMode === "primary_weighted" ? (
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
-              <label className="block text-sm font-semibold text-[#6e4a2b]">
-                Primary board
-                <select
-                  value={primaryBoardId}
-                  onChange={(event) => setPrimaryBoardId(event.target.value)}
-                  className="mt-2 w-full rounded-xl border border-[#dcc8b2] bg-white px-3 py-2"
-                >
-                  <option value="">Select primary board</option>
-                  {selectedBoards.map((board) => (
-                    <option key={board.id} value={board.id}>
-                      {board.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block text-sm font-semibold text-[#6e4a2b]">
-                Primary board share (%)
-                <input
-                  type="number"
-                  min={0}
-                  max={100}
-                  step="1"
-                  value={primaryBoardPercent}
-                  onChange={(event) => setPrimaryBoardPercent(Number(event.target.value) || 0)}
-                  className="mt-2 w-full rounded-xl border border-[#dcc8b2] bg-white px-3 py-2"
-                />
-                <span className="mt-2 block text-xs font-normal text-[#6e4a2b]">
-                  Default is 60%. Remaining pins are distributed across the other selected boards.
-                </span>
-              </label>
-            </div>
-          ) : null}
-
-          {boards.length === 0 ? (
-            <p className="mt-4 text-sm text-[#6e4a2b]">
-              Load a workspace and Pinterest account to choose boards.
-            </p>
-          ) : (
-            <div className="mt-4 space-y-4">
-              <div className="rounded-2xl border border-[#eadacc] bg-white p-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <p className="text-sm font-semibold text-[#23160d]">
-                    Selected boards: {selectedBoards.length}
-                  </p>
-                  {selectedBoards.length > 0 ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedBoardIds([]);
-                        setPrimaryBoardId("");
-                      }}
-                      className="rounded-full border border-[#d8b690] px-3 py-1 text-xs font-semibold text-[#8a572a]"
-                    >
-                      Clear selected
-                    </button>
-                  ) : null}
-                </div>
-
-                {selectedBoards.length === 0 ? (
-                  <p className="mt-3 text-sm text-[#6e4a2b]">
-                    No boards selected yet. Open the picker below and search by board name.
-                  </p>
-                ) : (
-                  <div className="mt-3 space-y-2">
-                    {selectedBoards.map((board, index) => (
-                      <div
-                        key={board.id}
-                        className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#eadacc] bg-[#fffaf4] px-3 py-2"
-                      >
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold text-[#23160d]">
-                            {board.name}
-                          </p>
-                          <p className="text-xs uppercase tracking-[0.16em] text-[#8a572a]">
-                            {boardDistributionMode === "primary_weighted" && primaryBoardId === board.id
-                              ? `Primary - priority ${index + 1}`
-                              : `Priority ${index + 1}`}
-                          </p>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          {boardDistributionMode === "primary_weighted" ? (
-                            <button
-                              type="button"
-                              onClick={() => setPrimaryBoardId(board.id)}
-                              disabled={primaryBoardId === board.id}
-                              className="rounded-full border border-[#d8b690] px-3 py-1 text-xs font-semibold text-[#8a572a] disabled:opacity-50"
-                            >
-                              Make primary
-                            </button>
-                          ) : null}
-                          <button
-                            type="button"
-                            onClick={() => moveBoard(board.id, "up")}
-                            disabled={index === 0}
-                            className="rounded-full border border-[#d8b690] px-3 py-1 text-xs font-semibold text-[#8a572a] disabled:opacity-50"
-                          >
-                            Up
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => moveBoard(board.id, "down")}
-                            disabled={index === selectedBoards.length - 1}
-                            className="rounded-full border border-[#d8b690] px-3 py-1 text-xs font-semibold text-[#8a572a] disabled:opacity-50"
-                          >
-                            Down
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => toggleBoard(board.id, false)}
-                            className="rounded-full border border-[#d8b690] px-3 py-1 text-xs font-semibold text-[#8a572a]"
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+        <div className="mt-4 rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-alt)] p-4">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-start">
+            <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm font-semibold text-[var(--dashboard-text)]">Boards</p>
+              <div className="flex items-center gap-2 text-xs text-[var(--dashboard-muted)]">
+                <span>{selectedBoards.length} selected</span>
+                {selectedBoards.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedBoardIds([]);
+                      setPrimaryBoardId("");
+                    }}
+                    className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-3 py-1 font-semibold text-[var(--dashboard-subtle)]"
+                  >
+                    Clear
+                  </button>
+                ) : null}
               </div>
+            </div>
 
-              <details className="rounded-2xl border border-[#eadacc] bg-white">
-                <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-[#23160d]">
-                  Search and select boards
+            {selectedBoards.length > 0 ? (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {selectedBoards.map((board, index) => (
+                  <button
+                    key={board.id}
+                    type="button"
+                    onClick={() => toggleBoard(board.id, false)}
+                    className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-2 text-sm text-[var(--dashboard-text)]"
+                  >
+                    {board.name}
+                    {boardDistributionMode === "primary_weighted" && primaryBoardId === board.id
+                      ? " • Primary"
+                      : ` • ${index + 1}`}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-3 text-sm text-[var(--dashboard-subtle)]">
+                Select boards after loading a workspace and Pinterest account.
+              </p>
+            )}
+
+            {boards.length > 0 ? (
+              <details className="mt-4 rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)]">
+                <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-[var(--dashboard-text)]">
+                  Search and manage boards
                 </summary>
-                <div className="border-t border-[#f0e3d7] px-4 py-4">
-                  <label className="block text-sm font-semibold text-[#6e4a2b]">
-                    Search boards
+                <div className="border-t border-[var(--dashboard-line)] px-4 py-4">
+                  <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
+                    Search
                     <input
                       value={boardSearchQuery}
                       onChange={(event) => setBoardSearchQuery(event.target.value)}
-                      placeholder="Search by board name"
-                      className="mt-2 w-full rounded-xl border border-[#dcc8b2] bg-[#fffaf4] px-3 py-2"
+                      placeholder="Board name"
+                      className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-alt)] px-3 py-2"
                     />
                   </label>
                   <div className="mt-3 max-h-72 space-y-2 overflow-y-auto pr-1">
                     {filteredBoards.length === 0 ? (
-                      <p className="text-sm text-[#6e4a2b]">No boards match this search.</p>
+                      <p className="text-sm text-[var(--dashboard-subtle)]">No boards match this search.</p>
                     ) : (
                       filteredBoards.map((board) => {
                         const isSelected = selectedBoardIds.includes(board.id);
@@ -733,8 +881,8 @@ export function JobPublishManager({
                             key={board.id}
                             className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-2 ${
                               isSelected
-                                ? "border-[#8a572a] bg-[#fffaf4]"
-                                : "border-[#eadacc] bg-white"
+                                ? "border-[var(--dashboard-accent)] bg-[var(--dashboard-accent-soft)]"
+                                : "border-[var(--dashboard-line)] bg-[var(--dashboard-panel)]"
                             }`}
                           >
                             <span className="flex min-w-0 items-center gap-3">
@@ -743,11 +891,11 @@ export function JobPublishManager({
                                 checked={isSelected}
                                 onChange={(event) => toggleBoard(board.id, event.target.checked)}
                               />
-                              <span className="truncate text-sm font-semibold text-[#23160d]">
+                              <span className="truncate text-sm font-semibold text-[var(--dashboard-text)]">
                                 {board.name}
                               </span>
                             </span>
-                            <span className="text-xs uppercase tracking-[0.16em] text-[#8a572a]">
+                            <span className="text-xs uppercase tracking-[0.16em] text-[var(--dashboard-muted)]">
                               {isSelected ? "Selected" : "Available"}
                             </span>
                           </label>
@@ -757,84 +905,204 @@ export function JobPublishManager({
                   </div>
                 </div>
               </details>
+            ) : null}
             </div>
-          )}
+
+            <div className="w-full xl:w-[300px] xl:min-w-[300px]">
+            {boardDistributionMode === "primary_weighted" ? (
+              <div className="grid gap-3 rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-3">
+                <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
+                  Primary board
+                  <select
+                    value={primaryBoardId}
+                    onChange={(event) => setPrimaryBoardId(event.target.value)}
+                    className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-alt)] px-3 py-2"
+                  >
+                    <option value="">Select primary board</option>
+                    {selectedBoards.map((board) => (
+                      <option key={board.id} value={board.id}>
+                        {board.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
+                  Primary share (%)
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step="1"
+                    value={primaryBoardPercent}
+                    onChange={(event) => setPrimaryBoardPercent(Number(event.target.value) || 0)}
+                    className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-alt)] px-3 py-2"
+                  />
+                </label>
+              </div>
+            ) : null}
+
+            <div className="mt-3 rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 text-sm text-[var(--dashboard-subtle)]">
+              <div className="flex flex-wrap items-center gap-2">
+                <InlineState label="Publer" value={publerRuntimeState.label} tone={publerRuntimeState.tone} />
+                {isRefreshingStatus ? (
+                  <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-muted)]">
+                    Refreshing
+                  </span>
+                ) : null}
+              </div>
+              <p className="mt-2">{publerRuntimeState.detail}</p>
+              {optionsError ? (
+                <div className="mt-3 rounded-2xl border border-[var(--dashboard-danger-border)] bg-[var(--dashboard-danger-soft)] px-3 py-3 text-sm text-[var(--dashboard-danger-ink)]">
+                  {optionsError}
+                </div>
+              ) : null}
+            </div>
+            </div>
+          </div>
         </div>
 
-        {optionsError ? (
-          <p className="mt-3 text-sm text-[#8f3d24]">{optionsError}</p>
-        ) : isLoadingOptions ? (
-          <p className="mt-3 text-sm text-[#6e4a2b]">Loading Publer workspace data...</p>
-        ) : (
-          <p className="mt-3 text-sm text-[#6e4a2b]">
-            {workspaceId
-              ? `Workspace selected${accountId ? ", account selected" : ""}${selectedBoardIds.length > 0 ? `, ${selectedBoardIds.length} board${selectedBoardIds.length === 1 ? "" : "s"} selected` : ""}.`
-              : "Select a workspace first to upload media into Publer."}
-          </p>
-        )}
-      </section>
-
-      <section className="rounded-3xl border border-[#e8d7c5] bg-white p-5">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h2 className="text-xl font-bold">Selected pins</h2>
-            <p className="mt-2 text-sm text-[#6e4a2b]">
-              {selectedPinIds.length} of {pins.length} pins selected for the next action.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <SelectionButton label="All" onClick={() => setSelectedPinIds(pins.map((pin) => pin.id))} />
-            <SelectionButton
-              label="Media failed"
-              onClick={() => selectBy((pin) => pin.mediaStatus === "FAILED")}
-            />
-            <SelectionButton
-              label="Missing descriptions"
-              onClick={() => selectBy((pin) => !copyByPinId.get(pin.id)?.description.trim())}
-            />
-            <SelectionButton
-              label="Schedule failed"
-              onClick={() => selectBy((pin) => pin.scheduleStatus === "FAILED")}
-            />
-          </div>
-        </div>
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.9fr)]">
         <div className="space-y-4">
-          <StepCard
-            title="Step 1 - Upload media"
-            subtitle="Upload rendered PNGs to Publer and preserve media IDs per pin."
-            countLabel={`${summary.uploaded} uploaded - ${summary.mediaFailed} failed`}
-            actionLabel="Upload selected pins"
-            disabled={
-              isPending ||
-              selectedPins.length === 0 ||
-              !integrationReady.hasPublerApiKey ||
-              !workspaceId
-            }
-            onClick={() =>
-              handleAction(
-                {
-                  action: "upload_media",
-                  generatedPinIds: selectedPinIds,
-                  workspaceId,
-                },
-                "Unable to upload media.",
-              )
-            }
-          />
+          <section id="publish-upload" className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-5 shadow-[var(--dashboard-shadow-sm)]">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-bold">Step 1 - Upload media</h2>
+              </div>
+              <p className="text-sm font-semibold text-[var(--dashboard-muted)]">
+                {summary.uploaded} uploaded - {summary.mediaFailed} failed
+              </p>
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() =>
+                  handleAction(
+                    {
+                      action: "upload_media",
+                      generatedPinIds: selectedPinIds,
+                      workspaceId,
+                    },
+                    "Unable to upload media.",
+                    "upload",
+                  )
+                }
+                disabled={
+                  isPending ||
+                  selectedPins.length === 0 ||
+                  !integrationReady.canUsePublerApiKey ||
+                  !workspaceId
+                }
+                className="rounded-full bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
+              >
+                Upload selected pins
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const failedPinIds = failedUploadPins.map((pin) => pin.id);
+                  if (failedPinIds.length === 0) {
+                    return;
+                  }
+                  setSelectedPinIds(failedPinIds);
+                  handleAction(
+                    {
+                      action: "upload_media",
+                      generatedPinIds: failedPinIds,
+                      workspaceId,
+                    },
+                    "Unable to retry failed uploads.",
+                    "upload",
+                  );
+                }}
+                disabled={
+                  isPending ||
+                  failedUploadPins.length === 0 ||
+                  !integrationReady.canUsePublerApiKey ||
+                  !workspaceId
+                }
+                className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] disabled:opacity-60"
+              >
+                Retry failed uploads
+              </button>
+            </div>
+            {sectionFeedback.upload ? <SectionFeedback feedback={sectionFeedback.upload} className="mt-4" /> : null}
+
+            <div className="mt-4 rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-alt)] p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-[var(--dashboard-subtle)]">
+                <p className="font-semibold text-[var(--dashboard-text)]">Upload progress</p>
+                <p>
+                  {selectedUploadProgress.completed}/{selectedUploadProgress.total} processed
+                  {selectedUploadProgress.uploading > 0
+                    ? ` - ${selectedUploadProgress.uploading} uploading`
+                    : ""}
+                </p>
+              </div>
+              <div className="mt-3 h-3 overflow-hidden rounded-full bg-[var(--dashboard-panel)]">
+                <div
+                  className="h-full rounded-full bg-[var(--dashboard-accent)] transition-all"
+                  style={{ width: `${selectedUploadProgress.percent}%` }}
+                />
+              </div>
+              <div className="mt-3 grid gap-2 text-sm text-[var(--dashboard-subtle)] md:grid-cols-4">
+                <p>
+                  <strong>{selectedUploadProgress.uploaded}</strong> uploaded
+                </p>
+                <p>
+                  <strong>{selectedUploadProgress.failed}</strong> failed
+                </p>
+                <p>
+                  <strong>{selectedUploadProgress.uploading}</strong> uploading
+                </p>
+                <p>
+                  <strong>{selectedUploadProgress.total - selectedUploadProgress.completed - selectedUploadProgress.uploading}</strong>{" "}
+                  pending
+                </p>
+              </div>
+              <div className="mt-4 max-h-52 space-y-2 overflow-y-auto pr-1">
+                {selectedUploadPins.length === 0 ? (
+                  <p className="text-sm text-[var(--dashboard-subtle)]">
+                    Select one or more pins to watch upload progress.
+                  </p>
+                ) : (
+                  selectedUploadPins.map((pin) => (
+                    <div
+                      key={pin.id}
+                      className="flex items-center justify-between gap-3 rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-2"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-[var(--dashboard-text)]">
+                          {pin.templateId}
+                        </p>
+                        <p className="truncate text-xs text-[var(--dashboard-subtle)]">
+                          {pin.mediaError || pin.mediaId || "Waiting for upload"}
+                        </p>
+                      </div>
+                      <StatusChip
+                        label={formatLabel(pin.mediaStatus)}
+                        tone={toneForStatus(pin.mediaStatus)}
+                      />
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </section>
 
           <StepCard
+            id="publish-titles"
             title="Step 2 - Titles"
-            subtitle="Generate draft titles from article context, then keep editing inline."
             countLabel={`${summary.titlesReady} ready`}
             actionLabel="Generate titles for selected pins"
-            disabled={isPending || selectedPins.length === 0 || !integrationReady.hasAiApiKey}
+            disabled={isPending || selectedPins.length === 0 || !integrationReady.canUseAiApiKey}
+            feedback={sectionFeedback.titles}
             onClick={() =>
               handleAction(
                 { action: "generate_titles", generatedPinIds: selectedPinIds },
                 "Unable to generate titles.",
+                "titles",
               )
             }
             secondaryAction={{
@@ -843,35 +1111,34 @@ export function JobPublishManager({
                 handleAction(
                   { action: "save_copy", copies: copyState },
                   "Unable to save copy edits.",
+                  "titles",
                 ),
-              disabled: isPending || pins.length === 0,
+              disabled: isPending || currentPins.length === 0,
             }}
           />
 
           <StepCard
+            id="publish-descriptions"
             title="Step 3 - Descriptions"
-            subtitle="Generate descriptions only after titles are present. Final edits stay editable below."
             countLabel={`${summary.descriptionsReady} ready`}
             actionLabel="Generate descriptions for selected pins"
-            disabled={isPending || selectedPins.length === 0 || !integrationReady.hasAiApiKey}
+            disabled={isPending || selectedPins.length === 0 || !integrationReady.canUseAiApiKey}
+            feedback={sectionFeedback.descriptions}
             onClick={() =>
               handleAction(
                 { action: "generate_descriptions", generatedPinIds: selectedPinIds },
                 "Unable to generate descriptions.",
+                "descriptions",
               )
             }
           />
 
-          <section className="rounded-3xl border border-[#e8d7c5] bg-white p-5">
+          <section id="publish-schedule" className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-5 shadow-[var(--dashboard-shadow-sm)]">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <h2 className="text-xl font-bold">Step 4 - Scheduling</h2>
-                <p className="mt-2 text-sm text-[#6e4a2b]">
-                  The preview below uses the same timing and board distribution rules that Studio
-                  sends to Publer.
-                </p>
               </div>
-              <div className="text-sm text-[#6e4a2b]">
+              <div className="text-sm text-[var(--dashboard-subtle)]">
                 <p>
                   <strong>{summary.scheduled}</strong> scheduled
                 </p>
@@ -882,16 +1149,16 @@ export function JobPublishManager({
             </div>
 
             <div className="mt-4 grid gap-4 md:grid-cols-2">
-              <label className="block text-sm font-semibold text-[#6e4a2b]">
+              <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
                 First publish datetime
                 <input
                   type="datetime-local"
                   value={firstPublishAt}
                   onChange={(event) => setFirstPublishAt(event.target.value)}
-                  className="mt-2 w-full rounded-xl border border-[#dcc8b2] bg-[#fffaf4] px-3 py-2"
+                  className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-2"
                 />
               </label>
-              <label className="block text-sm font-semibold text-[#6e4a2b]">
+              <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
                 Interval days
                 <input
                   type="number"
@@ -899,10 +1166,10 @@ export function JobPublishManager({
                   step="1"
                   value={intervalDays}
                   onChange={(event) => setIntervalDays(Number(event.target.value) || 1)}
-                  className="mt-2 w-full rounded-xl border border-[#dcc8b2] bg-[#fffaf4] px-3 py-2"
+                  className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-2"
                 />
               </label>
-              <label className="block text-sm font-semibold text-[#6e4a2b]">
+              <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
                 Jitter days
                 <input
                   type="number"
@@ -910,11 +1177,11 @@ export function JobPublishManager({
                   step="1"
                   value={jitterDays}
                   onChange={(event) => setJitterDays(Number(event.target.value) || 0)}
-                  className="mt-2 w-full rounded-xl border border-[#dcc8b2] bg-[#fffaf4] px-3 py-2"
+                  className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-2"
                 />
               </label>
-              <div className="rounded-2xl border border-[#eadacc] bg-[#fcf7f0] p-4 text-sm text-[#6e4a2b]">
-                <p className="font-semibold text-[#23160d]">Selection summary</p>
+              <div className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-alt)] p-4 text-sm text-[var(--dashboard-subtle)]">
+                <p className="font-semibold text-[var(--dashboard-text)]">Selection summary</p>
                 <p className="mt-2">{selectedPins.length} pins will be submitted in this run.</p>
                 <p className="mt-1">
                   {canScheduleSelected
@@ -934,6 +1201,7 @@ export function JobPublishManager({
                 ) : null}
               </div>
             </div>
+            {sectionFeedback.schedule ? <SectionFeedback feedback={sectionFeedback.schedule} className="mt-4" /> : null}
 
             <div className="mt-4 flex flex-wrap gap-3">
               <button
@@ -954,6 +1222,7 @@ export function JobPublishManager({
                       primaryBoardPercent,
                     },
                     "Unable to schedule pins.",
+                    "schedule",
                   )
                 }
                 disabled={
@@ -967,7 +1236,7 @@ export function JobPublishManager({
                   (boardDistributionMode === "primary_weighted" &&
                     (!primaryBoardId || !selectedBoardIds.includes(primaryBoardId)))
                 }
-                className="rounded-full bg-[#2c1c12] px-4 py-2 text-sm font-semibold text-[#f7ede0] disabled:opacity-60"
+                className="rounded-full bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
               >
                 Schedule selected pins
               </button>
@@ -978,30 +1247,30 @@ export function JobPublishManager({
                     (pin) => pin.scheduleStatus === "FAILED" || pin.scheduleStatus === "PENDING",
                   )
                 }
-                className="rounded-full border border-[#d8b690] px-4 py-2 text-sm font-semibold text-[#8a572a]"
+                className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)]"
               >
                 Target unscheduled pins
               </button>
             </div>
 
-            <div className="mt-5 overflow-hidden rounded-2xl border border-[#eadacc]">
-              <div className="grid grid-cols-[minmax(0,1fr)_180px_180px_120px] bg-[#f7efe6] px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-[#8a572a]">
+            <div className="mt-5 overflow-hidden rounded-2xl border border-[var(--dashboard-line)]">
+              <div className="grid grid-cols-[minmax(0,1fr)_180px_180px_120px] bg-[var(--dashboard-panel-alt)] px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
                 <span>Pin</span>
                 <span>Board</span>
                 <span>Planned time</span>
                 <span>Jitter</span>
               </div>
               {schedulePreviewRows.length === 0 ? (
-                <p className="px-4 py-4 text-sm text-[#6e4a2b]">
+                <p className="px-4 py-4 text-sm text-[var(--dashboard-subtle)]">
                   Select pins, boards, and a first publish time to preview the schedule.
                 </p>
               ) : (
                 schedulePreviewRows.map((item) => {
-                  const pin = pins.find((candidate) => candidate.id === item.pinId);
+                  const pin = currentPins.find((candidate) => candidate.id === item.pinId);
                   return (
                     <div
                       key={item.pinId}
-                      className="grid grid-cols-[minmax(0,1fr)_180px_180px_120px] items-center gap-4 border-t border-[#f0e3d7] px-4 py-3 text-sm text-[#4f3725]"
+                      className="grid grid-cols-[minmax(0,1fr)_180px_180px_120px] items-center gap-4 border-t border-[var(--dashboard-line)] px-4 py-3 text-sm text-[var(--dashboard-subtle)]"
                     >
                       <span className="truncate">{pin?.templateId ?? item.pinId}</span>
                       <span className="truncate">{item.board?.name ?? "No board selected"}</span>
@@ -1015,10 +1284,32 @@ export function JobPublishManager({
           </section>
         </div>
 
-        <section className="rounded-3xl border border-[#e8d7c5] bg-white p-5">
-          <h2 className="text-xl font-bold">Pins</h2>
+        <section id="publish-pins" className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-5 shadow-[var(--dashboard-shadow-sm)]">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-bold">Pins</h2>
+              <p className="mt-1 text-sm text-[var(--dashboard-subtle)]">
+                {selectedPinIds.length} of {currentPins.length} selected for the next action.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <SelectionButton label="All" onClick={() => setSelectedPinIds(currentPins.map((pin) => pin.id))} />
+              <SelectionButton
+                label="Media failed"
+                onClick={() => selectBy((pin) => pin.mediaStatus === "FAILED")}
+              />
+              <SelectionButton
+                label="Missing descriptions"
+                onClick={() => selectBy((pin) => !copyByPinId.get(pin.id)?.description.trim())}
+              />
+              <SelectionButton
+                label="Schedule failed"
+                onClick={() => selectBy((pin) => pin.scheduleStatus === "FAILED")}
+              />
+            </div>
+          </div>
           <div className="mt-4 space-y-4">
-            {pins.map((pin) => {
+            {currentPins.map((pin) => {
               const copy = copyByPinId.get(pin.id);
               const isSelected = selectedPinIds.includes(pin.id);
 
@@ -1026,17 +1317,19 @@ export function JobPublishManager({
                 <article
                   key={pin.id}
                   className={`rounded-2xl border p-4 ${
-                    isSelected ? "border-[#8a572a] bg-[#fffaf4]" : "border-[#eadacc]"
+                    isSelected
+                      ? "border-[var(--dashboard-accent)] bg-white shadow-[var(--dashboard-shadow-sm)]"
+                      : "border-[var(--dashboard-line)] bg-[var(--dashboard-panel)]"
                   }`}
                 >
                   <div className="mb-3 flex items-center justify-between gap-3">
-                    <label className="flex items-center gap-2 text-sm font-semibold text-[#6e4a2b]">
+                    <label className="flex items-center gap-2 text-sm font-semibold text-[var(--dashboard-subtle)]">
                       <input
                         type="checkbox"
                         checked={isSelected}
                         onChange={(event) => togglePin(pin.id, event.target.checked)}
                       />
-                      Target this pin
+                      Include in next action
                     </label>
                     <div className="flex flex-wrap gap-2 text-xs font-semibold uppercase tracking-[0.14em]">
                       <StatusChip label={`Media ${formatLabel(pin.mediaStatus)}`} tone={toneForStatus(pin.mediaStatus)} />
@@ -1056,44 +1349,56 @@ export function JobPublishManager({
                     <img
                       src={pin.exportPath}
                       alt={copy?.title || "Generated pin"}
-                      className="w-full rounded-xl border border-[#eadacc]"
+                      className="w-full rounded-xl border border-[var(--dashboard-line)]"
                     />
                     <div className="space-y-3">
-                      <p className="text-sm font-semibold text-[#23160d]">{pin.templateId}</p>
-                      <label className="block text-sm font-semibold text-[#6e4a2b]">
-                        Title
+                      <p className="text-sm font-semibold text-[var(--dashboard-text)]">{pin.templateId}</p>
+                      <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
+                        <span className="flex items-center justify-between gap-3">
+                          <span>Title</span>
+                          <span className="text-xs font-medium text-[var(--dashboard-muted)]">
+                            {(copy?.title ?? "").length}/{TITLE_MAX_LENGTH}
+                          </span>
+                        </span>
                         <input
                           value={copy?.title ?? ""}
                           onChange={(event) => updateCopy(pin.id, "title", event.target.value)}
-                          className="mt-2 w-full rounded-xl border border-[#dcc8b2] bg-[#fffaf4] px-3 py-2"
+                          maxLength={TITLE_MAX_LENGTH}
+                          className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-white px-3 py-2"
                         />
                       </label>
 
-                      <label className="block text-sm font-semibold text-[#6e4a2b]">
-                        Description
+                      <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
+                        <span className="flex items-center justify-between gap-3">
+                          <span>Description</span>
+                          <span className="text-xs font-medium text-[var(--dashboard-muted)]">
+                            {(copy?.description ?? "").length}/{DESCRIPTION_MAX_LENGTH}
+                          </span>
+                        </span>
                         <textarea
                           value={copy?.description ?? ""}
                           onChange={(event) => updateCopy(pin.id, "description", event.target.value)}
+                          maxLength={DESCRIPTION_MAX_LENGTH}
                           rows={4}
-                          className="mt-2 w-full rounded-xl border border-[#dcc8b2] bg-[#fffaf4] px-3 py-2"
+                          className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-white px-3 py-2"
                         />
                       </label>
 
-                      <div className="grid gap-2 text-sm text-[#6e4a2b]">
+                      <div className="grid gap-2 text-sm text-[var(--dashboard-subtle)]">
                         <p>
-                          <strong>Media ID:</strong> {pin.mediaId || "Not uploaded yet"}
+                          <strong>Media ID:</strong> {pin.mediaId || "No Publer media saved yet"}
                         </p>
                         <p>
                           <strong>Scheduled for:</strong>{" "}
-                          {pin.scheduledFor ? new Date(pin.scheduledFor).toLocaleString() : "Not scheduled"}
+                          {pin.scheduledFor ? new Date(pin.scheduledFor).toLocaleString() : "No schedule submitted"}
                         </p>
                         {pin.mediaError ? (
-                          <p className="text-[#8f3d24]">
+                          <p className="text-[var(--dashboard-danger)]">
                             <strong>Media error:</strong> {pin.mediaError}
                           </p>
                         ) : null}
                         {pin.scheduleError ? (
-                          <p className="text-[#8f3d24]">
+                          <p className="text-[var(--dashboard-danger)]">
                             <strong>Schedule error:</strong> {pin.scheduleError}
                           </p>
                         ) : null}
@@ -1112,20 +1417,119 @@ export function JobPublishManager({
 
 function SummaryCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-3xl border border-[#eadacc] bg-white p-4">
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8a572a]">{label}</p>
-      <p className="mt-2 text-2xl font-bold text-[#23160d]">{value}</p>
+    <div className="rounded-3xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-4 shadow-[var(--dashboard-shadow-sm)]">
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">{label}</p>
+      <p className="mt-2 text-2xl font-bold text-[var(--dashboard-text)]">{value}</p>
     </div>
   );
 }
 
+function InlineState({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: "neutral" | "success" | "danger";
+}) {
+  const className =
+    tone === "success"
+      ? "border-[var(--dashboard-success-border)] bg-[var(--dashboard-success-soft)] text-[var(--dashboard-success-ink)]"
+      : tone === "danger"
+        ? "border-[var(--dashboard-danger-border)] bg-[var(--dashboard-danger-soft)] text-[var(--dashboard-danger-ink)]"
+        : "border-[var(--dashboard-line)] bg-[var(--dashboard-panel-alt)] text-[var(--dashboard-subtle)]";
+
+  return (
+    <div className={`rounded-full border px-3 py-2 text-sm ${className}`}>
+      <span className="font-semibold">{label}:</span> {value}
+    </div>
+  );
+}
+
+function StateDetail({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: "neutral" | "success" | "danger";
+}) {
+  const className =
+    tone === "success"
+      ? "text-[var(--dashboard-success-ink)]"
+      : tone === "danger"
+        ? "text-[var(--dashboard-danger-ink)]"
+        : "text-[var(--dashboard-subtle)]";
+
+  return (
+    <p className={`text-sm ${className}`}>
+      <span className="font-semibold">{label}:</span> {value}
+    </p>
+  );
+}
+
+function SectionFeedback({
+  feedback,
+  className = "",
+}: {
+  feedback: BannerState;
+  className?: string;
+}) {
+  if (!feedback) {
+    return null;
+  }
+
+  const toneClass =
+    feedback.tone === "error"
+      ? "border-[var(--dashboard-danger-border)] bg-[var(--dashboard-danger-soft)] text-[var(--dashboard-danger-ink)]"
+      : feedback.tone === "warning"
+        ? "border-[var(--dashboard-warning-border)] bg-[var(--dashboard-warning-soft)] text-[var(--dashboard-warning-ink)]"
+        : "border-[var(--dashboard-success-border)] bg-[var(--dashboard-success-soft)] text-[var(--dashboard-success-ink)]";
+
+  return (
+    <div className={`rounded-2xl border px-4 py-3 text-sm ${toneClass} ${className}`.trim()}>
+      {feedback.message}
+    </div>
+  );
+}
+
+function ToolbarButton({
+  label,
+  onClick,
+  disabled,
+  tone = "secondary",
+}: {
+  label: string;
+  onClick: () => void;
+  disabled: boolean;
+  tone?: "primary" | "secondary";
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={
+        tone === "primary"
+          ? "rounded-full bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
+          : "rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] disabled:opacity-60"
+      }
+    >
+      {label}
+    </button>
+  );
+}
+
 function StepCard(input: {
+  id?: string;
   title: string;
-  subtitle: string;
   countLabel: string;
   actionLabel: string;
   disabled: boolean;
   onClick: () => void;
+  feedback?: BannerState;
   secondaryAction?: {
     label: string;
     onClick: () => void;
@@ -1133,20 +1537,19 @@ function StepCard(input: {
   };
 }) {
   return (
-    <section className="rounded-3xl border border-[#e8d7c5] bg-white p-5">
+    <section id={input.id} className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-5 shadow-[var(--dashboard-shadow-sm)]">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold">{input.title}</h2>
-          <p className="mt-2 text-sm text-[#6e4a2b]">{input.subtitle}</p>
         </div>
-        <p className="text-sm font-semibold text-[#8a572a]">{input.countLabel}</p>
+        <p className="text-sm font-semibold text-[var(--dashboard-muted)]">{input.countLabel}</p>
       </div>
       <div className="mt-4 flex flex-wrap gap-3">
         <button
           type="button"
           onClick={input.onClick}
           disabled={input.disabled}
-          className="rounded-full bg-[#2c1c12] px-4 py-2 text-sm font-semibold text-[#f7ede0] disabled:opacity-60"
+          className="rounded-full bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
         >
           {input.actionLabel}
         </button>
@@ -1155,13 +1558,25 @@ function StepCard(input: {
             type="button"
             onClick={input.secondaryAction.onClick}
             disabled={input.secondaryAction.disabled}
-            className="rounded-full border border-[#d8b690] px-4 py-2 text-sm font-semibold text-[#8a572a] disabled:opacity-60"
+            className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] disabled:opacity-60"
           >
             {input.secondaryAction.label}
           </button>
         ) : null}
       </div>
+      {input.feedback ? <SectionFeedback feedback={input.feedback} className="mt-4" /> : null}
     </section>
+  );
+}
+
+function StepJump({ href, label }: { href: string; label: string }) {
+  return (
+    <Link
+      href={href}
+      className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] transition hover:border-[var(--dashboard-accent)] hover:text-[var(--dashboard-accent-strong)]"
+    >
+      {label}
+    </Link>
   );
 }
 
@@ -1170,7 +1585,7 @@ function SelectionButton({ label, onClick }: { label: string; onClick: () => voi
     <button
       type="button"
       onClick={onClick}
-      className="rounded-full border border-[#d8b690] px-4 py-2 text-sm font-semibold text-[#8a572a]"
+      className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)]"
     >
       {label}
     </button>
@@ -1186,12 +1601,12 @@ function StatusChip({
 }) {
   const className =
     tone === "good"
-      ? "border-[#c8dec1] bg-[#f2fbef] text-[#355c2f]"
+      ? "border-[var(--dashboard-success-border)] bg-[var(--dashboard-success-soft)] text-[var(--dashboard-success-ink)]"
       : tone === "warning"
-        ? "border-[#ead6a5] bg-[#fff9e8] text-[#7f5a12]"
+        ? "border-[var(--dashboard-warning-border)] bg-[var(--dashboard-warning-soft)] text-[var(--dashboard-warning-ink)]"
         : tone === "bad"
-          ? "border-[#ebc0b0] bg-[#fff4ef] text-[#8f3d24]"
-          : "border-[#e0d5c8] bg-[#f8f3ed] text-[#6e4a2b]";
+          ? "border-[var(--dashboard-danger-border)] bg-[var(--dashboard-danger-soft)] text-[var(--dashboard-danger-ink)]"
+          : "border-[var(--dashboard-line)] bg-[var(--dashboard-panel-alt)] text-[var(--dashboard-subtle)]";
 
   return <span className={`rounded-full border px-2 py-1 ${className}`}>{label}</span>;
 }
@@ -1212,6 +1627,29 @@ function toneForStatus(status: string) {
     return "warning" as const;
   }
   return "neutral" as const;
+}
+
+function mergeCopyStateWithPins(
+  current: Array<{ generatedPinId: string; title: string; description: string }>,
+  pins: PinItem[],
+) {
+  const currentByPinId = new Map(current.map((item) => [item.generatedPinId, item]));
+
+  return pins.map((pin) => {
+    const existing = currentByPinId.get(pin.id);
+
+    return {
+      generatedPinId: pin.id,
+      title:
+        existing && existing.title.trim() !== ""
+          ? existing.title
+          : pin.title,
+      description:
+        existing && existing.description.trim() !== ""
+          ? existing.description
+          : pin.description,
+    };
+  });
 }
 
 function buildBoardPreviewAssignments(input: {
@@ -1288,4 +1726,106 @@ function formatLabel(value: string) {
     .split("_")
     .map((part) => part.charAt(0) + part.slice(1).toLowerCase())
     .join(" ");
+}
+
+function resolvePublerRuntimeState(input: {
+  integrationReady: JobPublishManagerProps["integrationReady"];
+  isLoadingOptions: boolean;
+  optionsError: string | null;
+  workspacesCount: number;
+  accountId: string;
+  selectedBoardCount: number;
+}) {
+  if (input.integrationReady.publerCredentialState === "missing") {
+    return {
+      label: "Missing",
+      tone: "danger" as const,
+      detail: "Save a Publer API key in Integrations before uploading media or scheduling.",
+    };
+  }
+
+  if (input.integrationReady.publerCredentialState === "unavailable") {
+    return {
+      label: "Unavailable",
+      tone: "danger" as const,
+      detail:
+        input.integrationReady.publerCredentialMessage ||
+        "The saved Publer key is not usable in the current environment.",
+    };
+  }
+
+  if (input.optionsError) {
+    return {
+      label: "Action needed",
+      tone: "danger" as const,
+      detail: input.optionsError,
+    };
+  }
+
+  if (input.isLoadingOptions) {
+    return {
+      label: "Loading",
+      tone: "neutral" as const,
+      detail: "Loading Publer workspaces, accounts, and boards.",
+    };
+  }
+
+  if (input.workspacesCount === 0) {
+    return {
+      label: "No workspace",
+      tone: "danger" as const,
+      detail: "The saved Publer key did not return any accessible workspaces.",
+    };
+  }
+
+  return {
+    label: "Verified",
+    tone: "success" as const,
+    detail:
+      input.accountId && input.selectedBoardCount > 0
+        ? `${input.selectedBoardCount} board${input.selectedBoardCount === 1 ? "" : "s"} ready for distribution.`
+        : "Publer access is working. Pick an account and boards to continue.",
+  };
+}
+
+function resolveAiRuntimeState(integrationReady: JobPublishManagerProps["integrationReady"]) {
+  if (integrationReady.aiCredentialState === "missing") {
+    return {
+      label: "Missing",
+      tone: "danger" as const,
+      detail: "Save an AI provider key in Integrations before generating titles or descriptions.",
+    };
+  }
+
+  if (integrationReady.aiCredentialState === "unavailable") {
+    return {
+      label: "Unavailable",
+      tone: "danger" as const,
+      detail:
+        integrationReady.aiCredentialMessage ||
+        "The saved AI key is not usable in the current environment.",
+    };
+  }
+
+  return {
+    label: "Ready",
+    tone: "success" as const,
+    detail: "AI copy generation is available for title and description actions.",
+  };
+}
+
+function resolveSectionForAction(action: string): PublishSectionKey | undefined {
+  switch (action) {
+    case "upload_media":
+      return "upload";
+    case "generate_titles":
+    case "save_copy":
+      return "titles";
+    case "generate_descriptions":
+      return "descriptions";
+    case "schedule":
+      return "schedule";
+    default:
+      return undefined;
+  }
 }

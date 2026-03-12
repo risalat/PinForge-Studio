@@ -27,10 +27,16 @@ export async function renderPin({ jobId, planId, templateId }: RenderPinInput) {
 
     const url = `${env.appUrl}/render/${templateId}?jobId=${jobId}&planId=${planId}`;
     await page.goto(url, {
-      waitUntil: "networkidle",
+      waitUntil: isServerlessRuntime() ? "networkidle" : "domcontentloaded",
+      timeout: isServerlessRuntime() ? 30_000 : 60_000,
     });
     await page.waitForFunction(() => document.fonts?.status === "loaded");
     await page.locator("[data-pin-canvas='true']").waitFor();
+    await page.waitForFunction(() =>
+      Array.from(
+        document.querySelectorAll<HTMLImageElement>("[data-pin-canvas='true'] img"),
+      ).every((img) => img.complete && img.naturalWidth > 0),
+    );
     await page.waitForFunction(() =>
       Array.from(document.querySelectorAll("[data-autofit='true']")).every(
         (node) => node.getAttribute("data-autofit-ready") === "true",
