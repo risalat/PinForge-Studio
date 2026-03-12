@@ -78,6 +78,10 @@ Template id / slug:
 - Keep text roles explicit.
   - Title, subtitle, number, and footer/domain should each have deliberate font, spacing, and color decisions.
   - Do not rely on generic font classes when the visual hierarchy matters.
+- Lock typography at the template level.
+  - Once a template is locked, its font families, weights, spacing, and text transforms are part of the template definition.
+  - Visual presets may change color treatment, but they must not swap a locked template's typography.
+  - Different templates should have intentionally different typography systems when the references call for it.
 - Start visually faithful, then systematize.
   - First match the reference layout closely.
   - After that, connect the template into shared preset, autofit, and render-context systems where appropriate.

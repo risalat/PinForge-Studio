@@ -4,6 +4,28 @@ import { AutoFitTitle } from "@/components/AutoFitTitle";
 import { getSplitVerticalVisualPreset } from "@/lib/templates/visualPresets";
 import type { TemplateRenderProps } from "@/lib/templates/types";
 
+const HERO_NUMBER_TEMPLATE_TYPOGRAPHY = {
+  title: {
+    fontFamily: "var(--font-space-grotesk), sans-serif",
+    fontWeight: 600,
+    letterSpacing: "-0.018em",
+    lineHeight: 1.18,
+  },
+  number: {
+    fontFamily: "var(--font-cormorant-garamond), serif",
+    fontWeight: 700,
+    letterSpacing: "-0.06em",
+    lineHeight: 1,
+  },
+  domain: {
+    fontFamily: "var(--font-space-grotesk), sans-serif",
+    fontWeight: 700,
+    letterSpacing: "0.18em",
+    lineHeight: 1,
+    textTransform: "uppercase" as const,
+  },
+} as const;
+
 export function TemplateSplitVerticalTitleNumber({
   title,
   images,
@@ -77,11 +99,11 @@ export function TemplateSplitVerticalTitleNumber({
                 className="leading-none"
                 style={{
                   color: numberTextColor,
-                  fontFamily: preset.typography.number.fontFamily,
-                  fontWeight: preset.typography.number.fontWeight,
+                  fontFamily: HERO_NUMBER_TEMPLATE_TYPOGRAPHY.number.fontFamily,
+                  fontWeight: HERO_NUMBER_TEMPLATE_TYPOGRAPHY.number.fontWeight,
                   fontSize: "138px",
-                  letterSpacing: preset.typography.number.letterSpacing,
-                  lineHeight: preset.typography.number.lineHeight,
+                  letterSpacing: HERO_NUMBER_TEMPLATE_TYPOGRAPHY.number.letterSpacing,
+                  lineHeight: HERO_NUMBER_TEMPLATE_TYPOGRAPHY.number.lineHeight,
                   transform: "translateY(-8px)",
                   textShadow: "0 6px 18px rgba(255,255,255,0.12)",
                 }}
@@ -94,15 +116,15 @@ export function TemplateSplitVerticalTitleNumber({
           <div className="mt-[26px] w-full">
             <AutoFitTitle
               text={title}
-              minFontSize={62}
+              minFontSize={52}
               maxFontSize={104}
               maxLines={2}
-              lineHeight={1.18}
-              className="mx-auto w-full max-w-[1020px] text-balance uppercase"
+              lineHeight={HERO_NUMBER_TEMPLATE_TYPOGRAPHY.title.lineHeight}
+              className="mx-auto w-full max-w-[1020px] uppercase"
               textColor={preset.palette.title}
-              fontFamily={preset.typography.title.fontFamily}
-              fontWeight={preset.typography.title.fontWeight}
-              letterSpacing={preset.typography.title.letterSpacing}
+              fontFamily={HERO_NUMBER_TEMPLATE_TYPOGRAPHY.title.fontFamily}
+              fontWeight={HERO_NUMBER_TEMPLATE_TYPOGRAPHY.title.fontWeight}
+              letterSpacing={HERO_NUMBER_TEMPLATE_TYPOGRAPHY.title.letterSpacing}
             />
           </div>
         </section>
@@ -128,13 +150,12 @@ export function TemplateSplitVerticalTitleNumber({
               <span
                 style={{
                   color: preset.palette.domain,
-                  fontFamily: preset.typography.domain.fontFamily,
-                  fontWeight: preset.typography.domain.fontWeight,
+                  fontFamily: HERO_NUMBER_TEMPLATE_TYPOGRAPHY.domain.fontFamily,
+                  fontWeight: HERO_NUMBER_TEMPLATE_TYPOGRAPHY.domain.fontWeight,
                   fontSize: "28px",
-                  letterSpacing: preset.typography.domain.letterSpacing,
-                  lineHeight: preset.typography.domain.lineHeight,
-                  textTransform: preset.typography.domain.textTransform,
-                  fontStyle: preset.typography.domain.fontStyle,
+                  letterSpacing: HERO_NUMBER_TEMPLATE_TYPOGRAPHY.domain.letterSpacing,
+                  lineHeight: HERO_NUMBER_TEMPLATE_TYPOGRAPHY.domain.lineHeight,
+                  textTransform: HERO_NUMBER_TEMPLATE_TYPOGRAPHY.domain.textTransform,
                   whiteSpace: "nowrap",
                 }}
               >

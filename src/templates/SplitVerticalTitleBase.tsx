@@ -3,11 +3,19 @@
 import { AutoFitText } from "@/components/AutoFitText";
 import { AutoFitTitle } from "@/components/AutoFitTitle";
 import { getSplitVerticalVisualPreset } from "@/lib/templates/visualPresets";
+import type { TemplateTextRoleStyle } from "@/lib/templates/types";
 import type { TemplateNumberTreatment, TemplateRenderProps } from "@/lib/templates/types";
 
 type SplitVerticalTitleBaseProps = TemplateRenderProps & {
   forceHideSubtitle?: boolean;
   numberTreatment?: TemplateNumberTreatment;
+  typography: {
+    title: TemplateTextRoleStyle;
+    subtitle: TemplateTextRoleStyle;
+    number: TemplateTextRoleStyle;
+    domain: TemplateTextRoleStyle;
+  };
+  titleClassName?: string;
 };
 
 export function SplitVerticalTitleBase({
@@ -20,6 +28,8 @@ export function SplitVerticalTitleBase({
   visualPreset,
   forceHideSubtitle = false,
   numberTreatment = "none",
+  typography,
+  titleClassName = "w-full max-w-[960px]",
 }: SplitVerticalTitleBaseProps) {
   const firstImage = images[0] ?? "/sample-workspace-a.svg";
   const secondImage = images[1] ?? firstImage;
@@ -83,14 +93,14 @@ export function SplitVerticalTitleBase({
                 text={`${itemNumber} ideas`}
                 minFontSize={22}
                 maxFontSize={28}
-                lineHeight={preset.typography.number.lineHeight}
+                lineHeight={typography.number.lineHeight}
                 maxLines={1}
                 textColor={preset.palette.domain}
-                fontFamily={preset.typography.number.fontFamily}
-                fontWeight={preset.typography.number.fontWeight}
-                letterSpacing={preset.typography.number.letterSpacing}
-                textTransform={preset.typography.number.textTransform}
-                fontStyle={preset.typography.number.fontStyle}
+                fontFamily={typography.number.fontFamily}
+                fontWeight={typography.number.fontWeight}
+                letterSpacing={typography.number.letterSpacing}
+                textTransform={typography.number.textTransform}
+                fontStyle={typography.number.fontStyle}
               />
             </div>
           ) : null}
@@ -103,15 +113,15 @@ export function SplitVerticalTitleBase({
                   text={subtitle!.trim()}
                   minFontSize={preset.layout.subtitleMinSize}
                   maxFontSize={preset.layout.subtitleMaxSize}
-                  lineHeight={preset.typography.subtitle.lineHeight}
+                  lineHeight={typography.subtitle.lineHeight}
                   maxLines={preset.layout.subtitleMaxLines}
                   className="w-full max-w-[920px]"
                   textColor={preset.palette.subtitle}
-                  fontFamily={preset.typography.subtitle.fontFamily}
-                  fontWeight={preset.typography.subtitle.fontWeight}
-                  letterSpacing={preset.typography.subtitle.letterSpacing}
-                  textTransform={preset.typography.subtitle.textTransform}
-                  fontStyle={preset.typography.subtitle.fontStyle}
+                  fontFamily={typography.subtitle.fontFamily}
+                  fontWeight={typography.subtitle.fontWeight}
+                  letterSpacing={typography.subtitle.letterSpacing}
+                  textTransform={typography.subtitle.textTransform}
+                  fontStyle={typography.subtitle.fontStyle}
                 />
               </div>
               <div
@@ -137,15 +147,15 @@ export function SplitVerticalTitleBase({
               text={title}
               minFontSize={titleMinFontSize}
               maxFontSize={titleMaxFontSize}
-              lineHeight={preset.typography.title.lineHeight}
+              lineHeight={typography.title.lineHeight}
               maxLines={titleMaxLines}
-              className="w-full max-w-[960px] text-balance"
+              className={titleClassName}
               textColor={preset.palette.title}
-              fontFamily={preset.typography.title.fontFamily}
-              fontWeight={preset.typography.title.fontWeight}
-              letterSpacing={preset.typography.title.letterSpacing}
-              textTransform={preset.typography.title.textTransform}
-              fontStyle={preset.typography.title.fontStyle}
+              fontFamily={typography.title.fontFamily}
+              fontWeight={typography.title.fontWeight}
+              letterSpacing={typography.title.letterSpacing}
+              textTransform={typography.title.textTransform}
+              fontStyle={typography.title.fontStyle}
             />
           </div>
 
@@ -191,15 +201,15 @@ export function SplitVerticalTitleBase({
             text={`www.${cleanedDomain}`}
             minFontSize={preset.layout.footerMinSize}
             maxFontSize={preset.layout.footerMaxSize}
-            lineHeight={preset.typography.domain.lineHeight}
+            lineHeight={typography.domain.lineHeight}
             maxLines={1}
             className="w-full text-center"
             textColor={preset.palette.domain}
-            fontFamily={preset.typography.domain.fontFamily}
-            fontWeight={preset.typography.domain.fontWeight}
-            letterSpacing={preset.typography.domain.letterSpacing}
-            textTransform={preset.typography.domain.textTransform}
-            fontStyle={preset.typography.domain.fontStyle}
+            fontFamily={typography.domain.fontFamily}
+            fontWeight={typography.domain.fontWeight}
+            letterSpacing={typography.domain.letterSpacing}
+            textTransform={typography.domain.textTransform}
+            fontStyle={typography.domain.fontStyle}
           />
         </div>
       </div>
