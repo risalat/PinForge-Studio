@@ -11,6 +11,7 @@ const TEMPLATE_TYPOGRAPHY = {
     fontWeight: 600,
     letterSpacing: "0.005em",
     lineHeight: 1.14,
+    textTransform: "none" as const,
   },
   title: {
     fontFamily: "var(--font-manrope), sans-serif",
@@ -53,7 +54,7 @@ export function TemplateSingleImageSubtitleTitleCta({
     preset.palette.footer,
     "#2f658a",
   ], 2.6);
-  const dividerColor = withAlpha(subtitleColor, 0.32);
+  const dividerColor = withAlpha(subtitleColor, 0.5);
   const footerBackground = deepenHex(preset.palette.footer, 0.28);
   const footerTextColor = ensureContrastColor(footerBackground, preset.palette.domain, [
     "#f7f1df",
@@ -103,7 +104,7 @@ export function TemplateSingleImageSubtitleTitleCta({
           />
 
           <div
-            className="mx-auto mt-[28px] h-[2px] w-[248px] rounded-full"
+            className="mx-auto mt-[28px] h-[3px] w-[264px] rounded-full"
             style={{ backgroundColor: dividerColor }}
           />
 
