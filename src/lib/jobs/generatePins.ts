@@ -44,12 +44,21 @@ import {
   toPlanVisualPreset,
 } from "@/lib/templates/planRenderContext";
 import { getTemplateConfig, TEMPLATE_CONFIGS } from "@/lib/templates/registry";
-import { recommendSplitVerticalVisualPresetWithImageAwareness } from "@/lib/templates/visualPresets";
-import type { TemplateNumberTreatment } from "@/lib/templates/types";
+import {
+  recommendSplitVerticalVisualPresetWithImageAwareness,
+  splitVerticalBoldPresetIds,
+} from "@/lib/templates/visualPresets";
+import {
+  templateVisualPresets,
+  type TemplateNumberTreatment,
+  type TemplateVisualPresetId,
+} from "@/lib/templates/types";
 import type { GenerateRequestPayload } from "@/lib/types";
 import { resolveDomain } from "@/lib/types";
 
 export type GeneratePinsInput = GenerateRequestPayload;
+
+type AssistedPresetStrategy = "recommended" | "random_all" | "random_bold";
 
 const jobListInclude = {
   sourceImages: true,
@@ -282,6 +291,7 @@ export async function createAssistedGenerationPlans(input: {
   jobId: string;
   pinCount: number;
   templateIds?: string[];
+  presetStrategy?: AssistedPresetStrategy;
 }) {
   const job = await getOwnedJobOrThrow(input.jobId, input.userId);
 
@@ -318,6 +328,7 @@ export async function createAssistedGenerationPlans(input: {
         assignedImages.map((sourceImage) => ({
           sourceImage,
         })),
+        input.presetStrategy,
       );
 
       return {
@@ -1516,18 +1527,29 @@ async function buildSeedPlanRenderContext(
       surroundingTextSnippet: string | null;
     };
   }>,
+  presetStrategy: AssistedPresetStrategy = "recommended",
 ) {
-  const visualPreset = await recommendSplitVerticalVisualPresetWithImageAwareness({
-    articleTitle: job.articleTitleSnapshot,
-    pinTitle: job.articleTitleSnapshot,
-    domain: job.domainSnapshot,
-    imageSignals: assignments.map((assignment) => assignment.sourceImage),
-  });
+  const visualPreset =
+    presetStrategy === "random_all"
+      ? pickRandomPreset()
+      : presetStrategy === "random_bold"
+        ? pickRandomPreset(splitVerticalBoldPresetIds)
+        : await recommendSplitVerticalVisualPresetWithImageAwareness({
+            articleTitle: job.articleTitleSnapshot,
+            pinTitle: job.articleTitleSnapshot,
+            domain: job.domainSnapshot,
+            imageSignals: assignments.map((assignment) => assignment.sourceImage),
+          });
 
   return {
     itemNumber: job.sourceImages.length,
     visualPreset,
   };
+}
+
+function pickRandomPreset(pool?: readonly TemplateVisualPresetId[]): TemplateVisualPresetId {
+  const source = pool?.length ? pool : templateVisualPresets;
+  return source[Math.floor(Math.random() * source.length)];
 }
 
 async function generateRenderCopyForPlan(
@@ -1823,7 +1845,7 @@ function shapeRenderCopyForTemplate(input: {
       }
     }
 
-    title = integrateItemNumberIntoRenderTitle(title, input.itemNumber);
+    title = integrateItemNumberIntoRenderTitle(title, input.itemNumber, input.numberTreatment);
     subtitle = subtitle ? normalizeSubtitleKicker(subtitle, title, input.articleTitle) : undefined;
 
     return {
@@ -1836,6 +1858,7 @@ function shapeRenderCopyForTemplate(input: {
     title,
     subtitle,
     itemNumber: input.itemNumber,
+    numberTreatment: input.numberTreatment,
   });
 
   return {
@@ -1848,6 +1871,7 @@ function collapseSingleFieldRenderTitle(input: {
   title: string;
   subtitle?: string;
   itemNumber?: number;
+  numberTreatment: TemplateNumberTreatment;
 }) {
   const split = splitRenderTitle(input.title);
   let headline = split?.title ?? input.title;
@@ -1859,10 +1883,14 @@ function collapseSingleFieldRenderTitle(input: {
     .replace(/[,:;.\-–—]+$/g, "")
     .trim();
 
-  headline = integrateItemNumberIntoRenderTitle(headline, input.itemNumber);
+  headline = integrateItemNumberIntoRenderTitle(headline, input.itemNumber, input.numberTreatment);
 
   if (headline.length > 70 && split?.title) {
-    headline = integrateItemNumberIntoRenderTitle(split.title, input.itemNumber);
+    headline = integrateItemNumberIntoRenderTitle(
+      split.title,
+      input.itemNumber,
+      input.numberTreatment,
+    );
   }
 
   if (headline.length > 80 && input.subtitle) {
@@ -1872,10 +1900,18 @@ function collapseSingleFieldRenderTitle(input: {
   return headline;
 }
 
-function integrateItemNumberIntoRenderTitle(title: string, itemNumber?: number) {
+function integrateItemNumberIntoRenderTitle(
+  title: string,
+  itemNumber: number | undefined,
+  numberTreatment: TemplateNumberTreatment,
+) {
   const cleanedTitle = normalizeRenderText(title);
   if (!itemNumber || cleanedTitle === "") {
     return cleanedTitle;
+  }
+
+  if (numberTreatment === "hero") {
+    return cleanedTitle.replace(/^\d+\s+/, "").trim();
   }
 
   if (startsWithNumericCount(cleanedTitle)) {

@@ -1,7 +1,9 @@
 import { TemplateSplitVerticalTitle } from "@/templates/TemplateSplitVerticalTitle";
 import { TemplateSplitVerticalTitleNoSubtitle } from "@/templates/TemplateSplitVerticalTitleNoSubtitle";
+import { TemplateSplitVerticalTitleNumber } from "@/templates/TemplateSplitVerticalTitleNumber";
 import type { JSX } from "react";
 import {
+  sampleTemplateDataNumber,
   sampleTemplateDataNoSubtitle,
   sampleTemplateDataWithSubtitle,
 } from "@/lib/templates/sampleData";
@@ -38,6 +40,21 @@ export const TEMPLATE_CONFIGS: Record<string, TemplateConfig> = {
       footer: true,
     },
   },
+  "split-vertical-title-number": {
+    id: "split-vertical-title-number",
+    name: "Split Vertical Title Hero Number",
+    componentKey: "TemplateSplitVerticalTitleNumber",
+    previewPath: "/preview/split-vertical-title-number",
+    locked: true,
+    canvas: { width: 1080, height: 1920 },
+    imageSlotCount: 2,
+    textFields: ["title", "itemNumber", "domain", "visualPreset"],
+    features: {
+      overlay: false,
+      numberTreatment: "hero",
+      footer: true,
+    },
+  },
 };
 
 const TEMPLATE_COMPONENTS: Record<
@@ -46,6 +63,7 @@ const TEMPLATE_COMPONENTS: Record<
 > = {
   "split-vertical-title": TemplateSplitVerticalTitle,
   "split-vertical-title-no-subtitle": TemplateSplitVerticalTitleNoSubtitle,
+  "split-vertical-title-number": TemplateSplitVerticalTitleNumber,
 };
 
 export function getTemplateConfig(templateId: string) {
@@ -69,6 +87,10 @@ export function getSampleTemplateProps(templateId: string) {
 
   if (templateId === "split-vertical-title-no-subtitle") {
     return sampleTemplateDataNoSubtitle;
+  }
+
+  if (templateId === "split-vertical-title-number") {
+    return sampleTemplateDataNumber;
   }
 
   return sampleTemplateDataWithSubtitle;

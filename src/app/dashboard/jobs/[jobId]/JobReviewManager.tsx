@@ -105,6 +105,9 @@ export function JobReviewManager({
   const [images, setImages] = useState(initialImages);
   const [pinCount, setPinCount] = useState(3);
   const [selectedTemplateIds, setSelectedTemplateIds] = useState(templates.map((item) => item.id));
+  const [assistedPresetStrategy, setAssistedPresetStrategy] = useState<
+    "recommended" | "random_all" | "random_bold"
+  >("recommended");
   const [manualTemplateId, setManualTemplateId] = useState(initialManualTemplate?.id ?? "");
   const [manualAssignedImageIds, setManualAssignedImageIds] = useState<string[]>(
     initialManualTemplate
@@ -294,10 +297,16 @@ export function JobReviewManager({
           mode: "assisted_auto",
           pinCount,
           templateIds: selectedTemplateIds,
+          presetStrategy: assistedPresetStrategy,
         });
         setPlansFeedback({
           tone: "success",
-          message: "Assisted plans created.",
+          message:
+            assistedPresetStrategy === "recommended"
+              ? "Assisted plans created with image-aware preset recommendation."
+              : assistedPresetStrategy === "random_bold"
+                ? "Assisted plans created with random bold presets."
+                : "Assisted plans created with random presets.",
         });
         router.refresh();
       } catch (actionError) {
@@ -692,7 +701,7 @@ export function JobReviewManager({
               </button>
             </div>
 
-            <div className="mt-4 grid gap-4 md:grid-cols-[160px_minmax(0,1fr)]">
+            <div className="mt-4 grid gap-4 md:grid-cols-[160px_240px_minmax(0,1fr)]">
               <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
                 Pins to create
                 <input
@@ -703,6 +712,22 @@ export function JobReviewManager({
                   onChange={(event) => setPinCount(Number(event.target.value))}
                   className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-3 py-2"
                 />
+              </label>
+              <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
+                Preset strategy
+                <select
+                  value={assistedPresetStrategy}
+                  onChange={(event) =>
+                    setAssistedPresetStrategy(
+                      event.target.value as "recommended" | "random_all" | "random_bold",
+                    )
+                  }
+                  className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-3 py-2"
+                >
+                  <option value="recommended">Recommended per pin</option>
+                  <option value="random_all">Random from all presets</option>
+                  <option value="random_bold">Random bold presets only</option>
+                </select>
               </label>
               <div>
                 <p className="text-sm font-semibold text-[var(--dashboard-subtle)]">Eligible templates</p>

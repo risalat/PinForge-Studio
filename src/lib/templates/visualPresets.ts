@@ -224,7 +224,7 @@ export const SPLIT_VERTICAL_VISUAL_PRESETS: Record<
       canvas: "#d7d5d0",
       band: "#23262d",
       footer: "#1a1d23",
-      divider: "#a58042",
+      divider: "#ffce6d",
       title: "#f3e4bc",
       subtitle: "#d8bd87",
       domain: "#f3e4bc",
@@ -622,6 +622,14 @@ export const SPLIT_VERTICAL_VISUAL_PRESETS: Record<
     recommendationTags: ["vibrant", "playful", "berry", "citrus", "maximalist"],
   },
 };
+
+export const splitVerticalBoldPresetIds: TemplateVisualPresetId[] = [
+  "midnight-gold",
+  "terracotta-ink",
+  "cobalt-coral",
+  "emerald-sun",
+  "berry-citrus",
+];
 
 export function getSplitVerticalVisualPreset(
   presetId?: TemplateRenderProps["visualPreset"] | TemplateRenderProps["colorPreset"],

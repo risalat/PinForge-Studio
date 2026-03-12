@@ -443,8 +443,16 @@ export class AIClient {
     const descriptionPayload = payload as GeneratePinDescriptionRequest;
     return [
       "Generate Pinterest descriptions for the provided finalized pin titles.",
+      "Each description must follow a concise 3-sentence structure for Pinterest performance.",
+      "Sentence 1 = context. Sentence 2 = benefit of visiting the linked content. Sentence 3 = call to action encouraging the user to save the pin for later.",
+      "For sentence 1, choose the better approach for the topic: either highlight a real challenge the reader may have, or highlight what is inspiring/appealing about the topic.",
       "Descriptions should be based on the article title, the chosen pin title, and optional keywords.",
-      "Do not invent image-specific explanations unless directly implied by the article title or keywords.",
+      "Use provided global keywords where relevant. If global keywords are limited, naturally introduce close synonyms, search variations, and relevant keyword annotations that fit the title/topic without sounding spammy.",
+      "Do not invent image-specific claims unless directly implied by the article title, pin title, or provided keywords.",
+      "Use 1 to 3 relevant emojis per description. Spread them naturally through the description. If multiple descriptions are returned, vary the emoji choices across pins.",
+      "Keep all sentences short, concise, and human.",
+      "Avoid these words and phrases unless absolutely necessary: discover, explore, dive into, article, page.",
+      "Do not use hashtags.",
       `Article title: ${descriptionPayload.article_title}`,
       `Destination URL: ${descriptionPayload.destination_url}`,
       `Tone hint: ${descriptionPayload.tone_hint ?? "none"}`,
@@ -452,7 +460,9 @@ export class AIClient {
       `Chosen titles (${descriptionPayload.chosen_titles.length}):`,
       JSON.stringify(descriptionPayload.chosen_titles, null, 2),
       'Return JSON with this shape: {"pins":[{"title":"...","description":"...","keywords_used":["..."]}]}',
-      "Keep each title exactly as provided. Description <= 500 chars. No hashtags.",
+      "Keep each title exactly as provided.",
+      "Description rules: <= 500 chars, exactly 3 sentences, no hashtags, strong Pinterest wording, include a save-for-later CTA in the final sentence.",
+      "keywords_used should list the main relevant terms, synonyms, or annotations you intentionally worked into that description.",
     ].join("\n");
   }
 

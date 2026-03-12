@@ -18,6 +18,7 @@ const plansSchema = z.discriminatedUnion("mode", [
     mode: z.literal("assisted_auto"),
     pinCount: z.number().int().positive().max(20),
     templateIds: z.array(z.string().min(1)).optional(),
+    presetStrategy: z.enum(["recommended", "random_all", "random_bold"]).optional(),
   }),
   z.object({
     mode: z.literal("manual"),
@@ -65,6 +66,7 @@ export async function POST(request: Request, { params }: RouteProps) {
         jobId,
         pinCount: payload.pinCount,
         templateIds: payload.templateIds,
+        presetStrategy: payload.presetStrategy,
       });
     } else if (payload.mode === "manual") {
       await createManualGenerationPlan({

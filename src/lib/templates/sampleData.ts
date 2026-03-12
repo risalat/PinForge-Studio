@@ -14,3 +14,11 @@ export const sampleTemplateDataNoSubtitle: TemplateRenderProps = {
   domain: "pinforge.tenreclabs.com",
   visualPreset: "sage-cream",
 };
+
+export const sampleTemplateDataNumber: TemplateRenderProps = {
+  title: "Lake House Exterior Ideas With Timeless Appeal",
+  images: ["/sample-images/5..jpg", "/sample-images/6.jpg"],
+  domain: "mightypaint.com",
+  itemNumber: 15,
+  visualPreset: "midnight-gold",
+};
