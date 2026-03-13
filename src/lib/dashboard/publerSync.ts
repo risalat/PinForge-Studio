@@ -4,18 +4,22 @@ import { createPublerClient, type PublerPost } from "@/lib/publer/publerClient";
 import { getIntegrationSettingsForUserId } from "@/lib/settings/integrationSettings";
 import { resolveDomain } from "@/lib/types";
 
-export async function syncPublerPublicationRecordsForUser(userId: string) {
+export async function syncPublerPublicationRecordsForUser(
+  userId: string,
+  options?: { workspaceId?: string },
+) {
   const settings = await getIntegrationSettingsForUserId(userId);
   if (!settings.publerApiKey.trim()) {
     throw new Error("Save a Publer API key before syncing post activity.");
   }
-  if (!settings.publerWorkspaceId.trim()) {
+  const workspaceId = options?.workspaceId?.trim() || settings.publerWorkspaceId.trim();
+  if (!workspaceId) {
     throw new Error("Select a Publer workspace before syncing post activity.");
   }
 
   const client = createPublerClient({
     apiKey: settings.publerApiKey,
-    workspaceId: settings.publerWorkspaceId,
+    workspaceId,
   });
   const posts = await client.getPosts({
     states: ["scheduled", "published", "published_posted"],
@@ -122,6 +126,7 @@ export async function syncPublerPublicationRecordsForUser(userId: string) {
       update: {
         postId: upsertedPost.id,
         generatedPinId: matchedPin?.generatedPinId ?? null,
+        providerWorkspaceId: workspaceId,
         providerPostLink: post.postLink ?? null,
         providerAccountId: post.accountId ?? null,
         providerBoardId: post.boardId ?? null,
@@ -138,6 +143,7 @@ export async function syncPublerPublicationRecordsForUser(userId: string) {
         postId: upsertedPost.id,
         generatedPinId: matchedPin?.generatedPinId ?? null,
         providerPostId: post.id,
+        providerWorkspaceId: workspaceId,
         providerPostLink: post.postLink ?? null,
         providerAccountId: post.accountId ?? null,
         providerBoardId: post.boardId ?? null,
@@ -158,6 +164,7 @@ export async function syncPublerPublicationRecordsForUser(userId: string) {
   }
 
   return {
+    workspaceId,
     fetched: posts.length,
     created,
     updated,

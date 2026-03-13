@@ -1,18 +1,29 @@
 import Link from "next/link";
 import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
 import { isDatabaseConfigured } from "@/lib/env";
+import { getIntegrationSettingsSummary } from "@/lib/settings/integrationSettings";
 import {
   buildPostPulseSummary,
   listPostPulseRecordsForUser,
   type PostPulseActivityDotState,
   type PostPulseStatus,
 } from "@/lib/dashboard/postPulse";
-import { PostPulseSyncButton } from "@/app/dashboard/post-pulse/PostPulseSyncButton";
+import { PostPulseWorkspaceControls } from "@/app/dashboard/post-pulse/PostPulseWorkspaceControls";
 
-export default async function DashboardPostPulsePage() {
+export default async function DashboardPostPulsePage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ workspaceId?: string }>;
+}) {
   const databaseReady = isDatabaseConfigured();
   const user = databaseReady ? await getOrCreateDashboardUser() : null;
-  const records = user ? await listPostPulseRecordsForUser(user.id) : [];
+  const resolvedSearchParams = (await searchParams) ?? {};
+  const settings = user ? await getIntegrationSettingsSummary() : null;
+  const selectedWorkspaceId =
+    resolvedSearchParams.workspaceId?.trim() || settings?.publerWorkspaceId || "";
+  const records = user
+    ? await listPostPulseRecordsForUser(user.id, { workspaceId: selectedWorkspaceId })
+    : [];
   const summary = buildPostPulseSummary(records);
   const latestSyncAt =
     records.reduce<Date | null>(
@@ -62,12 +73,17 @@ export default async function DashboardPostPulsePage() {
                   ? `Last Publer sync ${formatRelativeTime(latestSyncAt)}`
                   : "No Publer sync yet. Sync to import scheduled and published pins."}
               </p>
+              <p className="mt-2 text-sm text-[var(--dashboard-muted)]">
+                {selectedWorkspaceId
+                  ? "The table is currently scoped to the selected Publer workspace."
+                  : "Choose a Publer workspace to sync and review activity for that workspace."}
+              </p>
             </div>
             <div className="flex flex-col items-end gap-3">
               <div className="rounded-2xl border border-[var(--dashboard-warning-border)] bg-[var(--dashboard-warning-soft)] px-4 py-3 text-sm text-[var(--dashboard-warning-ink)]">
                 {summary.needsFreshPins} post{summary.needsFreshPins === 1 ? "" : "s"} currently need fresh pins.
               </div>
-              <PostPulseSyncButton />
+              <PostPulseWorkspaceControls initialWorkspaceId={selectedWorkspaceId} />
             </div>
           </div>
 

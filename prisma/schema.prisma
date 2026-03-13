@@ -197,6 +197,7 @@ model PublicationRecord {
   postId           String
   generatedPinId   String?
   providerPostId   String
+  providerWorkspaceId String?
   providerPostLink String?
   providerAccountId String?
   providerBoardId  String?
@@ -216,6 +217,7 @@ model PublicationRecord {
   @@unique([userId, providerPostId])
   @@index([postId, state, publishedAt])
   @@index([userId, syncedAt])
+  @@index([userId, providerWorkspaceId, syncedAt])
   @@index([generatedPinId])
 }
 

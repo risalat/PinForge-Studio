@@ -29,7 +29,11 @@ export type PostPulseRecord = {
   recentActivityDots: PostPulseActivityDotState[];
 };
 
-export async function listPostPulseRecordsForUser(userId: string): Promise<PostPulseRecord[]> {
+export async function listPostPulseRecordsForUser(
+  userId: string,
+  options?: { workspaceId?: string },
+): Promise<PostPulseRecord[]> {
+  const workspaceId = options?.workspaceId?.trim() ?? "";
   const posts = await prisma.post.findMany({
     where: {
       OR: [
@@ -40,7 +44,10 @@ export async function listPostPulseRecordsForUser(userId: string): Promise<PostP
         },
         {
           publicationRecords: {
-            some: { userId },
+            some: {
+              userId,
+              ...(workspaceId ? { providerWorkspaceId: workspaceId } : {}),
+            },
           },
         },
       ],
@@ -71,7 +78,10 @@ export async function listPostPulseRecordsForUser(userId: string): Promise<PostP
         },
       },
       publicationRecords: {
-        where: { userId },
+        where: {
+          userId,
+          ...(workspaceId ? { providerWorkspaceId: workspaceId } : {}),
+        },
         orderBy: [
           { publishedAt: "desc" },
           { scheduledAt: "desc" },

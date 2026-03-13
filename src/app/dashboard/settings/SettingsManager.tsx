@@ -2,7 +2,12 @@
 
 import { useEffect, useState } from "react";
 import type { AIProvider } from "@/lib/ai";
-import type { DashboardAiModelsResponse, IntegrationSettingsSummary } from "@/lib/types";
+import type {
+  DashboardAiModelsResponse,
+  DashboardPublerOptionsResponse,
+  IntegrationSettingsSummary,
+} from "@/lib/types";
+import type { PublerWorkspace } from "@/lib/publer/publerClient";
 
 const aiProviderOptions: Array<{ value: AIProvider; label: string }> = [
   { value: "gemini", label: "Google Gemini" },
@@ -17,6 +22,8 @@ export function SettingsManager({
   initialSettings: IntegrationSettingsSummary;
 }) {
   const [publerApiKey, setPublerApiKey] = useState("");
+  const [publerWorkspaceId, setPublerWorkspaceId] = useState(initialSettings.publerWorkspaceId);
+  const [publerWorkspaces, setPublerWorkspaces] = useState<PublerWorkspace[]>([]);
   const [aiProvider, setAiProvider] = useState<AIProvider>(initialSettings.aiProvider);
   const [storedAiProvider, setStoredAiProvider] = useState<AIProvider>(initialSettings.aiProvider);
   const [aiApiKey, setAiApiKey] = useState("");
@@ -36,12 +43,69 @@ export function SettingsManager({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoadingPublerWorkspaces, setIsLoadingPublerWorkspaces] = useState(false);
   const [isLoadingAiModels, setIsLoadingAiModels] = useState(false);
 
   const canLoadAiModels =
     aiProvider === "custom_endpoint"
       ? aiCustomEndpoint.trim() !== ""
       : aiApiKey.trim() !== "" || (canUseStoredAiKey && aiProvider === storedAiProvider);
+
+  const canLoadPublerWorkspaces = publerApiKey.trim() !== "" || canUseStoredPublerKey;
+
+  async function loadPublerWorkspaces(options?: { silent?: boolean }) {
+    if (!canLoadPublerWorkspaces) {
+      return;
+    }
+
+    setIsLoadingPublerWorkspaces(true);
+    if (!options?.silent) {
+      setError(null);
+      setSuccess(null);
+    }
+
+    try {
+      const response = await fetch("/api/dashboard/settings/publer-options", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          apiKey: publerApiKey || undefined,
+          workspaceId: publerWorkspaceId || undefined,
+        }),
+      });
+      const json = (await response.json()) as DashboardPublerOptionsResponse;
+
+      if (!json.ok) {
+        throw new Error(json.error ?? "Unable to load Publer workspaces.");
+      }
+
+      const nextWorkspaces = json.workspaces ?? [];
+      const nextWorkspaceId =
+        json.selectedWorkspaceId ??
+        (publerWorkspaceId && nextWorkspaces.some((workspace) => workspace.id === publerWorkspaceId)
+          ? publerWorkspaceId
+          : nextWorkspaces[0]?.id ?? "");
+
+      setPublerWorkspaces(nextWorkspaces);
+      setPublerWorkspaceId(nextWorkspaceId);
+
+      if (!options?.silent) {
+        setSuccess(
+          nextWorkspaces.length > 0
+            ? `Loaded ${nextWorkspaces.length} Publer workspace${nextWorkspaces.length === 1 ? "" : "s"}.`
+            : "No Publer workspaces are available for the current API key.",
+        );
+      }
+    } catch (loadError) {
+      const message =
+        loadError instanceof Error ? loadError.message : "Unable to load Publer workspaces.";
+      setError(message);
+    } finally {
+      setIsLoadingPublerWorkspaces(false);
+    }
+  }
 
   async function loadAiModels(options?: { silent?: boolean }) {
     if (!canLoadAiModels) {
@@ -110,6 +174,7 @@ export function SettingsManager({
         },
         body: JSON.stringify({
           publerApiKey,
+          publerWorkspaceId,
           aiProvider,
           aiApiKey,
           aiModel,
@@ -130,12 +195,13 @@ export function SettingsManager({
       setHasStoredAiKey(json.settings.hasAiApiKey);
       setCanUseStoredPublerKey(json.settings.canUsePublerApiKey);
       setCanUseStoredAiKey(json.settings.canUseAiApiKey);
+      setPublerWorkspaceId(json.settings.publerWorkspaceId);
       setStoredAiProvider(json.settings.aiProvider);
       setPublerCredentialMessage(json.settings.publerCredentialMessage);
       setAiCredentialMessage(json.settings.aiCredentialMessage);
       setPublerApiKey("");
       setAiApiKey("");
-      setSuccess("Settings saved. Publer board selection can happen later during scheduling.");
+      setSuccess("Settings saved. Post Pulse can now reuse the saved Publer workspace.");
     } catch (saveError) {
       const message = saveError instanceof Error ? saveError.message : "Unable to save settings.";
       setError(message);
@@ -161,6 +227,20 @@ export function SettingsManager({
     };
   }, [aiProvider, aiApiKey, aiCustomEndpoint, canUseStoredAiKey, storedAiProvider]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    if (!canLoadPublerWorkspaces || publerWorkspaces.length > 0) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      void loadPublerWorkspaces({ silent: true });
+    }, 250);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [canLoadPublerWorkspaces, publerWorkspaces.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <div className="space-y-6">
       <section className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-6 shadow-[var(--dashboard-shadow-sm)]">
@@ -172,8 +252,9 @@ export function SettingsManager({
             Publishing access
           </h2>
           <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--dashboard-subtle)]">
-            Store only the Publer API key here. Workspace, Pinterest account, and board selection
-            will happen later in the scheduling flow after pins are generated.
+            Save the Publer API key here, then choose a default workspace. Post Pulse uses that
+            saved workspace for sync, while account and board selection can still happen later in
+            the publishing flow.
           </p>
         </div>
 
@@ -200,6 +281,52 @@ export function SettingsManager({
           {hasStoredPublerKey && !canUseStoredPublerKey ? (
             <p className="mt-3 rounded-2xl border border-[var(--dashboard-warning-border)] bg-[var(--dashboard-warning-soft)] px-4 py-3 text-sm text-[var(--dashboard-warning-ink)]">
               Stored Publer key is not usable in the current environment. {publerCredentialMessage}
+            </p>
+          ) : null}
+        </div>
+
+        <div className="mt-5 rounded-[24px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <label className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
+                Default Publer workspace
+              </label>
+              <p className="mt-2 text-xs text-[var(--dashboard-muted)]">
+                This workspace is used by Post Pulse sync and as the default starting point in the
+                publish flow.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void loadPublerWorkspaces()}
+              disabled={isLoadingPublerWorkspaces || !canLoadPublerWorkspaces}
+              className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] disabled:opacity-60"
+            >
+              {isLoadingPublerWorkspaces ? "Loading..." : "Load workspaces"}
+            </button>
+          </div>
+
+          <select
+            value={publerWorkspaceId}
+            onChange={(event) => setPublerWorkspaceId(event.target.value)}
+            disabled={!canLoadPublerWorkspaces || isLoadingPublerWorkspaces}
+            className="mt-4 w-full rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-4 py-3 outline-none disabled:opacity-60"
+          >
+            <option value="">Select workspace</option>
+            {publerWorkspaces.map((workspace) => (
+              <option key={workspace.id} value={workspace.id}>
+                {workspace.name}
+              </option>
+            ))}
+          </select>
+
+          {!canLoadPublerWorkspaces ? (
+            <p className="mt-3 text-xs text-[var(--dashboard-muted)]">
+              Save or enter a usable Publer API key first, then load workspaces.
+            </p>
+          ) : publerWorkspaces.length === 0 ? (
+            <p className="mt-3 text-xs text-[var(--dashboard-muted)]">
+              Load workspaces to choose the Publer workspace that Post Pulse should sync.
             </p>
           ) : null}
         </div>

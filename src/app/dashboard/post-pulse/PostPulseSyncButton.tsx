@@ -3,19 +3,31 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
-export function PostPulseSyncButton() {
+export function PostPulseSyncButton({ workspaceId }: { workspaceId: string }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [feedback, setFeedback] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   function handleSync() {
+    if (!workspaceId) {
+      setFeedback(null);
+      setError("Select a Publer workspace first.");
+      return;
+    }
+
     startTransition(async () => {
       try {
         setFeedback(null);
         setError(null);
         const response = await fetch("/api/dashboard/post-pulse/sync", {
           method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            workspaceId,
+          }),
         });
         const data = (await response.json()) as {
           ok?: boolean;
@@ -46,7 +58,7 @@ export function PostPulseSyncButton() {
       <button
         type="button"
         onClick={handleSync}
-        disabled={isPending}
+        disabled={isPending || !workspaceId}
         className="rounded-full bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
       >
         {isPending ? "Syncing Publer..." : "Sync Publer now"}
