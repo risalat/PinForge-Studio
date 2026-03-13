@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { buildSchedulePreview } from "@/lib/jobs/schedulePreview";
+import type { PublishScheduleContext, WorkspaceProfileSummary } from "@/lib/types";
 
 type PinItem = {
   id: string;
@@ -42,6 +43,8 @@ type PublerBoard = {
 
 type JobPublishManagerProps = {
   jobId: string;
+  workspaceProfiles: WorkspaceProfileSummary[];
+  initialScheduleContext: PublishScheduleContext;
   pins: PinItem[];
   defaults: {
     workspaceId: string;
@@ -111,6 +114,8 @@ type PublishStatusResponse = {
 
 export function JobPublishManager({
   jobId,
+  workspaceProfiles,
+  initialScheduleContext,
   pins,
   defaults,
   integrationReady,
@@ -128,8 +133,8 @@ export function JobPublishManager({
   );
   const [selectedPinIds, setSelectedPinIds] = useState<string[]>(pins.map((pin) => pin.id));
   const [firstPublishAt, setFirstPublishAt] = useState("");
-  const [intervalDays, setIntervalDays] = useState(1);
-  const [jitterDays, setJitterDays] = useState(0);
+  const [intervalDays, setIntervalDays] = useState(25);
+  const [jitterDays, setJitterDays] = useState(5);
   const [workspaceId, setWorkspaceId] = useState(defaults.workspaceId);
   const [accountId, setAccountId] = useState(defaults.accountId);
   const [selectedBoardIds, setSelectedBoardIds] = useState<string[]>(
@@ -143,6 +148,8 @@ export function JobPublishManager({
   const [workspaces, setWorkspaces] = useState<PublerWorkspace[]>([]);
   const [accounts, setAccounts] = useState<PublerAccount[]>([]);
   const [boards, setBoards] = useState<PublerBoard[]>([]);
+  const [profileCatalog, setProfileCatalog] = useState(workspaceProfiles);
+  const [scheduleContext, setScheduleContext] = useState(initialScheduleContext);
   const [optionsError, setOptionsError] = useState<string | null>(null);
   const [sectionFeedback, setSectionFeedback] = useState<Record<PublishSectionKey, BannerState>>({
     upload: null,
@@ -150,10 +157,14 @@ export function JobPublishManager({
     descriptions: null,
     schedule: null,
   });
+  const [profileDefaultsFeedback, setProfileDefaultsFeedback] = useState<BannerState>(null);
   const [missingAssetPinIds, setMissingAssetPinIds] = useState<string[]>([]);
   const [isLoadingOptions, setIsLoadingOptions] = useState(false);
+  const [isLoadingScheduleContext, setIsLoadingScheduleContext] = useState(false);
+  const [isSavingProfileDefaults, setIsSavingProfileDefaults] = useState(false);
   const [isRefreshingStatus, setIsRefreshingStatus] = useState(false);
   const [activeAction, setActiveAction] = useState<string | null>(null);
+  const [hasEditedFirstPublishAt, setHasEditedFirstPublishAt] = useState(false);
   const [isPending, startTransition] = useTransition();
   const currentPins = livePins;
 
@@ -183,6 +194,14 @@ export function JobPublishManager({
     setCopyState((current) => mergeCopyStateWithPins(current, pins));
   }, [latestScheduleRun, pins]);
 
+  useEffect(() => {
+    setProfileCatalog(workspaceProfiles);
+  }, [workspaceProfiles]);
+
+  useEffect(() => {
+    setScheduleContext(initialScheduleContext);
+  }, [initialScheduleContext]);
+
   const selectedPins = useMemo(
     () => currentPins.filter((pin) => selectedPinIds.includes(pin.id)),
     [currentPins, selectedPinIds],
@@ -195,6 +214,51 @@ export function JobPublishManager({
         .filter((board): board is PublerBoard => Boolean(board)),
     [boards, selectedBoardIds],
   );
+  const currentWorkspaceProfile = useMemo(
+    () => profileCatalog.find((profile) => profile.workspaceId === workspaceId) ?? null,
+    [profileCatalog, workspaceId],
+  );
+  const currentWorkspaceName = useMemo(
+    () =>
+      currentWorkspaceProfile?.workspaceName ||
+      workspaces.find((workspace) => workspace.id === workspaceId)?.name ||
+      "",
+    [currentWorkspaceProfile?.workspaceName, workspaceId, workspaces],
+  );
+  const profileDefaultBoardId = currentWorkspaceProfile?.defaultBoardId ?? "";
+  const profileBoardSelectionId = primaryBoardId || selectedBoardIds[0] || "";
+  const isAccountUsingProfileDefault = Boolean(
+    currentWorkspaceProfile && accountId && accountId === currentWorkspaceProfile.defaultAccountId,
+  );
+  const isBoardUsingProfileDefault = Boolean(
+    currentWorkspaceProfile &&
+      profileDefaultBoardId &&
+      profileBoardSelectionId === profileDefaultBoardId,
+  );
+  const canSaveProfileDefaults = Boolean(currentWorkspaceProfile && workspaceId && accountId);
+  const hasUnsavedProfileDefaults = Boolean(
+    currentWorkspaceProfile &&
+      (accountId !== (currentWorkspaceProfile.defaultAccountId ?? "") ||
+        profileBoardSelectionId !== (currentWorkspaceProfile.defaultBoardId ?? "")),
+  );
+  const activeProfileDefaultBoard = useMemo(
+    () => boards.find((board) => board.id === profileDefaultBoardId) ?? null,
+    [boards, profileDefaultBoardId],
+  );
+  const isScheduleInsideSpacingGap = useMemo(() => {
+    if (!scheduleContext.recommendedFirstPublishAt || !firstPublishAt) {
+      return false;
+    }
+
+    const selectedDate = new Date(firstPublishAt);
+    const recommendedDate = new Date(scheduleContext.recommendedFirstPublishAt);
+
+    if (Number.isNaN(selectedDate.getTime()) || Number.isNaN(recommendedDate.getTime())) {
+      return false;
+    }
+
+    return selectedDate < recommendedDate;
+  }, [firstPublishAt, scheduleContext.recommendedFirstPublishAt]);
   const filteredBoards = useMemo(() => {
     const query = boardSearchQuery.trim().toLowerCase();
     if (!query) {
@@ -384,6 +448,15 @@ export function JobPublishManager({
     };
   }, [activeAction, currentPins, jobId]);
 
+  function getWorkspaceProfileDefaults(nextWorkspaceId: string) {
+    const profile = profileCatalog.find((item) => item.workspaceId === nextWorkspaceId);
+
+    return {
+      accountId: profile?.defaultAccountId ?? "",
+      boardId: profile?.defaultBoardId ?? "",
+    };
+  }
+
   async function loadPublerOptions(input?: {
     preserveCurrentSelection?: boolean;
     nextWorkspaceId?: string;
@@ -410,6 +483,9 @@ export function JobPublishManager({
       const nextWorkspaces = data.workspaces ?? [];
       const nextAccounts = data.accounts ?? [];
       const nextBoards = data.boards ?? [];
+      const profileDefaults = getWorkspaceProfileDefaults(
+        input?.nextWorkspaceId ?? workspaceId,
+      );
       const resolvedWorkspaceId =
         input?.preserveCurrentSelection && workspaceId
           ? workspaceId
@@ -417,7 +493,10 @@ export function JobPublishManager({
       const resolvedAccountId =
         input?.preserveCurrentSelection && accountId
           ? accountId
-          : data.selectedAccountId ?? accountId;
+          : input?.nextAccountId?.trim() ||
+            profileDefaults.accountId ||
+            data.selectedAccountId ||
+            accountId;
 
       setWorkspaces(nextWorkspaces);
       setAccounts(nextAccounts);
@@ -432,8 +511,11 @@ export function JobPublishManager({
           return validBoardIds;
         }
 
-        if (defaults.boardId && nextBoards.some((board) => board.id === defaults.boardId)) {
-          return [defaults.boardId];
+        if (
+          profileDefaults.boardId &&
+          nextBoards.some((board) => board.id === profileDefaults.boardId)
+        ) {
+          return [profileDefaults.boardId];
         }
 
         return [];
@@ -442,10 +524,13 @@ export function JobPublishManager({
         if (current && nextBoards.some((board) => board.id === current)) {
           return current;
         }
-        if (defaults.boardId && nextBoards.some((board) => board.id === defaults.boardId)) {
-          return defaults.boardId;
+        if (
+          profileDefaults.boardId &&
+          nextBoards.some((board) => board.id === profileDefaults.boardId)
+        ) {
+          return profileDefaults.boardId;
         }
-        return nextBoards[0]?.id ?? "";
+      return nextBoards[0]?.id ?? "";
       });
     } catch (error) {
       setOptionsError(error instanceof Error ? error.message : "Unable to load Publer options.");
@@ -453,6 +538,85 @@ export function JobPublishManager({
       setIsLoadingOptions(false);
     }
   }
+
+  useEffect(() => {
+    if (!workspaceId) {
+      setScheduleContext({
+        workspaceId: "",
+        latestScheduledAt: null,
+        latestPublishedAt: null,
+        anchorAt: null,
+        anchorSource: "none",
+        recommendedFirstPublishAt: null,
+        recommendedWindowEndAt: null,
+        hasPendingSchedule: false,
+      });
+      return;
+    }
+
+    let isCancelled = false;
+    setScheduleContext({
+      workspaceId,
+      latestScheduledAt: null,
+      latestPublishedAt: null,
+      anchorAt: null,
+      anchorSource: "none",
+      recommendedFirstPublishAt: null,
+      recommendedWindowEndAt: null,
+      hasPendingSchedule: false,
+    });
+
+    const loadScheduleContext = async () => {
+      try {
+        setIsLoadingScheduleContext(true);
+        const response = await fetch(
+          `/api/dashboard/jobs/${jobId}/publish/schedule-context?workspaceId=${encodeURIComponent(workspaceId)}`,
+          {
+            method: "GET",
+            cache: "no-store",
+          },
+        );
+        const data = (await response.json()) as {
+          ok?: boolean;
+          error?: string;
+          scheduleContext?: PublishScheduleContext;
+        };
+
+        if (!response.ok || !data.ok || !data.scheduleContext) {
+          throw new Error(data.error ?? "Unable to load schedule context.");
+        }
+
+        if (!isCancelled) {
+          setScheduleContext(data.scheduleContext);
+        }
+      } catch {
+        if (!isCancelled) {
+          setScheduleContext((current) => ({
+            ...current,
+            workspaceId,
+          }));
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsLoadingScheduleContext(false);
+        }
+      }
+    };
+
+    void loadScheduleContext();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [jobId, workspaceId]);
+
+  useEffect(() => {
+    if (hasEditedFirstPublishAt || !scheduleContext.recommendedFirstPublishAt) {
+      return;
+    }
+
+    setFirstPublishAt(formatDateTimeLocalValue(scheduleContext.recommendedFirstPublishAt));
+  }, [hasEditedFirstPublishAt, scheduleContext.recommendedFirstPublishAt]);
 
   async function runAction(payload: unknown) {
     const response = await fetch(`/api/dashboard/jobs/${jobId}/publish`, {
@@ -471,6 +635,61 @@ export function JobPublishManager({
     }
 
     return data.result;
+  }
+
+  function saveProfileDefaults() {
+    if (!currentWorkspaceProfile || !workspaceId || !accountId) {
+      return;
+    }
+
+    const nextBoardId = profileBoardSelectionId;
+
+    startTransition(async () => {
+      setIsSavingProfileDefaults(true);
+      setOptionsError(null);
+      setProfileDefaultsFeedback(null);
+
+      try {
+        const response = await fetch("/api/dashboard/settings/workspace-profile-defaults", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            workspaceId,
+            defaultAccountId: accountId,
+            defaultBoardId: nextBoardId,
+          }),
+        });
+        const data = (await response.json()) as {
+          ok?: boolean;
+          error?: string;
+          profile?: WorkspaceProfileSummary | null;
+        };
+
+        if (!response.ok || !data.ok || !data.profile) {
+          throw new Error(data.error ?? "Unable to save profile defaults.");
+        }
+
+        setProfileCatalog((current) =>
+          current.map((profile) =>
+            profile.workspaceId === data.profile?.workspaceId ? data.profile : profile,
+          ),
+        );
+        setOptionsError(null);
+        setProfileDefaultsFeedback({
+          tone: "success",
+          message: "Saved to profile.",
+        });
+        router.refresh();
+      } catch (error) {
+        setProfileDefaultsFeedback({
+          tone: "error",
+          message:
+            error instanceof Error ? error.message : "Unable to save profile defaults.",
+        });
+      } finally {
+        setIsSavingProfileDefaults(false);
+      }
+    });
   }
 
   function handleAction(payload: unknown, fallbackMessage: string, section?: PublishSectionKey) {
@@ -558,6 +777,7 @@ export function JobPublishManager({
   }
 
   function toggleBoard(boardId: string, isChecked: boolean) {
+    setProfileDefaultsFeedback(null);
     setSelectedBoardIds((current) => {
       if (isChecked) {
         if (!primaryBoardId) {
@@ -578,9 +798,18 @@ export function JobPublishManager({
     setSelectedPinIds(currentPins.filter(predicate).map((pin) => pin.id));
   }
 
-  function formatPreviewDate(value: Date) {
-    return value.toLocaleString();
+function formatPreviewDate(value: Date) {
+  return value.toLocaleString();
+}
+
+function formatDateLabel(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
   }
+
+  return date.toLocaleString();
+}
 
   function triggerUploadSelected() {
     handleAction(
@@ -733,22 +962,59 @@ export function JobPublishManager({
                 ? `, ${selectedBoards.length} board${selectedBoards.length === 1 ? "" : "s"} selected`
                 : ", no boards selected"}.
             </p>
+            {(currentWorkspaceProfile || hasUnsavedProfileDefaults) && (
+              <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold uppercase tracking-[0.14em]">
+                {currentWorkspaceName ? (
+                  <span className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-1 text-[var(--dashboard-subtle)]">
+                    {currentWorkspaceName}
+                  </span>
+                ) : null}
+                {isAccountUsingProfileDefault ? (
+                  <span className="rounded-full border border-[var(--dashboard-success-border)] bg-[var(--dashboard-success-soft)] px-3 py-1 text-[var(--dashboard-success-ink)]">
+                    Account default
+                  </span>
+                ) : null}
+                {isBoardUsingProfileDefault ? (
+                  <span className="rounded-full border border-[var(--dashboard-success-border)] bg-[var(--dashboard-success-soft)] px-3 py-1 text-[var(--dashboard-success-ink)]">
+                    Board default
+                  </span>
+                ) : null}
+                {currentWorkspaceProfile && hasUnsavedProfileDefaults ? (
+                  <span className="rounded-full border border-[var(--dashboard-warning-border)] bg-[var(--dashboard-warning-soft)] px-3 py-1 text-[var(--dashboard-warning-ink)]">
+                    Unsaved profile change
+                  </span>
+                ) : null}
+              </div>
+            )}
           </div>
-          <button
-            type="button"
-            onClick={() =>
-              void loadPublerOptions({
-                preserveCurrentSelection: true,
-                nextWorkspaceId: workspaceId,
-                nextAccountId: accountId,
-              })
-            }
-            disabled={isLoadingOptions || !integrationReady.canUsePublerApiKey}
-            className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] disabled:opacity-60"
-          >
-            {isLoadingOptions ? "Refreshing..." : "Refresh destination"}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            {currentWorkspaceProfile ? (
+              <button
+                type="button"
+                onClick={saveProfileDefaults}
+                disabled={!canSaveProfileDefaults || !hasUnsavedProfileDefaults || isSavingProfileDefaults}
+                className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] disabled:opacity-60"
+              >
+                {isSavingProfileDefaults ? "Saving..." : "Save to profile"}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() =>
+                void loadPublerOptions({
+                  preserveCurrentSelection: true,
+                  nextWorkspaceId: workspaceId,
+                  nextAccountId: accountId,
+                })
+              }
+              disabled={isLoadingOptions || !integrationReady.canUsePublerApiKey}
+              className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] disabled:opacity-60"
+            >
+              {isLoadingOptions ? "Refreshing..." : "Refresh destination"}
+            </button>
+          </div>
         </div>
+        {profileDefaultsFeedback ? <SectionFeedback feedback={profileDefaultsFeedback} className="mt-4" /> : null}
 
         <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(240px,0.7fr)]">
           <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
@@ -757,13 +1023,17 @@ export function JobPublishManager({
               value={workspaceId}
               onChange={(event) => {
                 const nextValue = event.target.value;
+                setProfileDefaultsFeedback(null);
+                setHasEditedFirstPublishAt(false);
+                setFirstPublishAt("");
                 setWorkspaceId(nextValue);
                 setSelectedBoardIds([]);
                 setPrimaryBoardId("");
                 setBoardSearchQuery("");
+                setAccountId(getWorkspaceProfileDefaults(nextValue).accountId);
                 void loadPublerOptions({
                   nextWorkspaceId: nextValue,
-                  nextAccountId: accountId,
+                  nextAccountId: getWorkspaceProfileDefaults(nextValue).accountId,
                 });
               }}
               className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-2"
@@ -777,11 +1047,19 @@ export function JobPublishManager({
             </select>
           </label>
           <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
-            Pinterest account
+            <span className="flex items-center justify-between gap-3">
+              <span>Pinterest account</span>
+              {currentWorkspaceProfile?.defaultAccountId ? (
+                <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-muted)]">
+                  {isAccountUsingProfileDefault ? "Default from profile" : "Profile default available"}
+                </span>
+              ) : null}
+            </span>
             <select
               value={accountId}
               onChange={(event) => {
                 const nextValue = event.target.value;
+                setProfileDefaultsFeedback(null);
                 setAccountId(nextValue);
                 setSelectedBoardIds([]);
                 setPrimaryBoardId("");
@@ -821,13 +1099,21 @@ export function JobPublishManager({
           <div className="flex flex-col gap-4 xl:flex-row xl:items-start">
             <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-sm font-semibold text-[var(--dashboard-text)]">Boards</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-sm font-semibold text-[var(--dashboard-text)]">Boards</p>
+                {activeProfileDefaultBoard ? (
+                  <span className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-muted)]">
+                    {isBoardUsingProfileDefault ? "Default from profile" : `Profile board: ${activeProfileDefaultBoard.name}`}
+                  </span>
+                ) : null}
+              </div>
               <div className="flex items-center gap-2 text-xs text-[var(--dashboard-muted)]">
                 <span>{selectedBoards.length} selected</span>
                 {selectedBoards.length > 0 ? (
                   <button
                     type="button"
                     onClick={() => {
+                      setProfileDefaultsFeedback(null);
                       setSelectedBoardIds([]);
                       setPrimaryBoardId("");
                     }}
@@ -922,7 +1208,10 @@ export function JobPublishManager({
                   Primary board
                   <select
                     value={primaryBoardId}
-                    onChange={(event) => setPrimaryBoardId(event.target.value)}
+                    onChange={(event) => {
+                      setProfileDefaultsFeedback(null);
+                      setPrimaryBoardId(event.target.value);
+                    }}
                     className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-alt)] px-3 py-2"
                   >
                     <option value="">Select primary board</option>
@@ -1157,11 +1446,21 @@ export function JobPublishManager({
 
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
-                First publish datetime
+                <span className="flex items-center justify-between gap-3">
+                  <span>First publish datetime</span>
+                  {scheduleContext.recommendedFirstPublishAt ? (
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-muted)]">
+                      Recommended
+                    </span>
+                  ) : null}
+                </span>
                 <input
                   type="datetime-local"
                   value={firstPublishAt}
-                  onChange={(event) => setFirstPublishAt(event.target.value)}
+                  onChange={(event) => {
+                    setHasEditedFirstPublishAt(true);
+                    setFirstPublishAt(event.target.value);
+                  }}
                   className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-2"
                 />
               </label>
@@ -1204,6 +1503,33 @@ export function JobPublishManager({
                   <p className="mt-1">
                     Primary board target: {primaryBoardPercent}% on{" "}
                     {selectedBoards.find((board) => board.id === primaryBoardId)?.name ?? "selected board"}.
+                  </p>
+                ) : null}
+                <div className="mt-3 space-y-1 border-t border-[var(--dashboard-line)] pt-3">
+                  <p>
+                    <strong>Latest scheduled:</strong>{" "}
+                    {isLoadingScheduleContext
+                      ? "Loading..."
+                      : scheduleContext.latestScheduledAt
+                        ? formatDateLabel(scheduleContext.latestScheduledAt)
+                        : "No pending schedule"}
+                  </p>
+                  <p>
+                    <strong>Latest published:</strong>{" "}
+                    {scheduleContext.latestPublishedAt
+                      ? formatDateLabel(scheduleContext.latestPublishedAt)
+                      : "No published pin yet"}
+                  </p>
+                  <p>
+                    <strong>Recommended next slot:</strong>{" "}
+                    {scheduleContext.recommendedFirstPublishAt
+                      ? formatDateLabel(scheduleContext.recommendedFirstPublishAt)
+                      : "Ready for a first schedule"}
+                  </p>
+                </div>
+                {isScheduleInsideSpacingGap ? (
+                  <p className="mt-3 text-[var(--dashboard-warning-ink)]">
+                    Selected time is inside the recommended spacing gap.
                   </p>
                 ) : null}
               </div>
@@ -1746,6 +2072,16 @@ function formatLabel(value: string) {
     .split("_")
     .map((part) => part.charAt(0) + part.slice(1).toLowerCase())
     .join(" ");
+}
+
+function formatDateTimeLocalValue(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  const offsetMs = date.getTimezoneOffset() * 60 * 1000;
+  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
 }
 
 function resolvePublerRuntimeState(input: {

@@ -65,6 +65,17 @@ export interface WorkspaceProfileSummary {
   isDefault: boolean;
 }
 
+export interface PublishScheduleContext {
+  workspaceId: string;
+  latestScheduledAt: string | null;
+  latestPublishedAt: string | null;
+  anchorAt: string | null;
+  anchorSource: "scheduled" | "published" | "none";
+  recommendedFirstPublishAt: string | null;
+  recommendedWindowEndAt: string | null;
+  hasPendingSchedule: boolean;
+}
+
 export interface DashboardPublerOptionsResponse {
   ok: boolean;
   error?: string;

@@ -5,6 +5,7 @@ import { requireAuthenticatedDashboardUser } from "@/lib/auth/dashboardSession";
 import { getDashboardWorkspaceScope } from "@/lib/dashboard/workspaceScope";
 import { isDatabaseConfigured } from "@/lib/env";
 import { getJobForUser } from "@/lib/jobs/generatePins";
+import { getPublishScheduleContextForPost } from "@/lib/jobs/publishScheduleContext";
 import {
   getIntegrationSettingsSummary,
   getWorkspaceProfileForUserId,
@@ -58,6 +59,11 @@ export default async function DashboardJobPublishPage({ params }: PageProps) {
 
   const activeWorkspaceId = await getDashboardWorkspaceScope(settings.publerWorkspaceId);
   const activeWorkspaceProfile = await getWorkspaceProfileForUserId(user.id, activeWorkspaceId);
+  const initialScheduleContext = await getPublishScheduleContextForPost({
+    userId: user.id,
+    postId: job.postId,
+    workspaceId: activeWorkspaceId,
+  });
 
   return (
     <div className="space-y-8 text-[var(--dashboard-text)]">
@@ -86,6 +92,8 @@ export default async function DashboardJobPublishPage({ params }: PageProps) {
 
         <JobPublishManager
           jobId={job.id}
+          workspaceProfiles={settings.workspaceProfiles}
+          initialScheduleContext={initialScheduleContext}
           pins={job.generatedPins.map((pin) => ({
             id: pin.id,
             templateId: pin.templateId,

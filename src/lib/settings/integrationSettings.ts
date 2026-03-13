@@ -269,6 +269,41 @@ export async function getWorkspaceProfileForUserId(
   return pickDefaultWorkspaceProfile(profiles) ?? null;
 }
 
+export async function saveWorkspaceProfileDefaults(input: {
+  workspaceId: string;
+  defaultAccountId?: string;
+  defaultBoardId?: string;
+}) {
+  const workspaceId = input.workspaceId.trim();
+  if (!workspaceId) {
+    throw new Error("Select a workspace profile first.");
+  }
+
+  const user = await getOrCreateDashboardUser();
+  const profiles = await listWorkspaceProfilesForUserId(user.id);
+  const targetProfile = profiles.find((profile) => profile.workspaceId === workspaceId);
+
+  if (!targetProfile) {
+    throw new Error("Workspace profile not found.");
+  }
+
+  const nextProfiles = profiles.map((profile) =>
+    profile.workspaceId === workspaceId
+      ? {
+          ...profile,
+          defaultAccountId: input.defaultAccountId?.trim() ?? "",
+          defaultBoardId: input.defaultBoardId?.trim() ?? "",
+        }
+      : profile,
+  );
+
+  await saveIntegrationSettings({
+    workspaceProfiles: nextProfiles,
+  });
+
+  return getWorkspaceProfileForUserId(user.id, workspaceId);
+}
+
 export async function getEffectivePublerAllowedDomainsForUserId(userId: string) {
   const settings = await prisma.userIntegrationSettings.findUnique({
     where: {
