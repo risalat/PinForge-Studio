@@ -6,7 +6,7 @@ import { isDatabaseConfigured } from "@/lib/env";
 import { syncPublerPublicationRecordsForUser } from "@/lib/dashboard/publerSync";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 const schema = z.object({
   workspaceId: z.string().trim().optional(),

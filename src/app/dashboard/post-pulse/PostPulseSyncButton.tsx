@@ -29,7 +29,8 @@ export function PostPulseSyncButton({ workspaceId }: { workspaceId: string }) {
             workspaceId,
           }),
         });
-        const data = (await response.json()) as {
+        const rawText = await response.text();
+        type SyncResponse = {
           ok?: boolean;
           error?: string;
           result?: {
@@ -38,9 +39,20 @@ export function PostPulseSyncButton({ workspaceId }: { workspaceId: string }) {
             updated: number;
           };
         };
+        let data: SyncResponse | null = null;
 
-        if (!response.ok || !data.ok || !data.result) {
-          throw new Error(data.error ?? "Unable to sync Publer activity.");
+        try {
+          data = rawText ? (JSON.parse(rawText) as SyncResponse) : null;
+        } catch {
+          data = null;
+        }
+
+        if (!response.ok || !data?.ok || !data.result) {
+          throw new Error(
+            data?.error ??
+              rawText?.trim() ??
+              "Unable to sync Publer activity.",
+          );
         }
 
         setFeedback(
