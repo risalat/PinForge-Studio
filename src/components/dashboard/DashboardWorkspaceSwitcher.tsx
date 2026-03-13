@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import type { WorkspaceProfileSummary } from "@/lib/types";
+import type { DashboardPublerOptionsResponse, WorkspaceProfileSummary } from "@/lib/types";
 
 export function DashboardWorkspaceSwitcher({
   initialWorkspaceId,
@@ -14,11 +14,46 @@ export function DashboardWorkspaceSwitcher({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [workspaceId, setWorkspaceId] = useState(initialWorkspaceId);
-  const options = workspaceProfiles;
+  const [resolvedNames, setResolvedNames] = useState<Record<string, string>>({});
+  const options = workspaceProfiles.map((profile) => ({
+    ...profile,
+    workspaceName: resolvedNames[profile.workspaceId] ?? profile.workspaceName,
+  }));
 
   useEffect(() => {
     setWorkspaceId(initialWorkspaceId);
   }, [initialWorkspaceId]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadWorkspaceNames() {
+      const response = await fetch("/api/dashboard/settings/publer-options", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({}),
+      });
+      const data = (await response.json()) as DashboardPublerOptionsResponse;
+
+      if (!response.ok || !data.ok || !isMounted) {
+        return;
+      }
+
+      setResolvedNames(
+        Object.fromEntries((data.workspaces ?? []).map((workspace) => [workspace.id, workspace.name])),
+      );
+    }
+
+    if (workspaceProfiles.length > 0) {
+      void loadWorkspaceNames();
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, [workspaceProfiles]);
 
   function handleWorkspaceChange(nextWorkspaceId: string) {
     setWorkspaceId(nextWorkspaceId);

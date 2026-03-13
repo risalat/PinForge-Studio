@@ -39,12 +39,7 @@ export function SettingsManager({
   const [workspaceProfiles, setWorkspaceProfiles] = useState<WorkspaceProfileDraft[]>(
     initialSettings.workspaceProfiles.map(toWorkspaceProfileDraft),
   );
-  const [publerWorkspaces, setPublerWorkspaces] = useState<PublerWorkspace[]>(
-    initialSettings.workspaceProfiles.map((profile) => ({
-      id: profile.workspaceId,
-      name: profile.workspaceName,
-    })),
-  );
+  const [publerWorkspaces, setPublerWorkspaces] = useState<PublerWorkspace[]>([]);
   const [publerAccountsByWorkspace, setPublerAccountsByWorkspace] = useState<
     Record<string, PublerAccount[]>
   >({});
@@ -426,7 +421,7 @@ export function SettingsManager({
   }, [aiProvider, aiApiKey, aiCustomEndpoint, canUseStoredAiKey, storedAiProvider]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (!canLoadPublerWorkspaces || publerWorkspaces.length > 0) {
+    if (!canLoadPublerWorkspaces) {
       return;
     }
 
@@ -437,7 +432,7 @@ export function SettingsManager({
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [canLoadPublerWorkspaces, publerWorkspaces.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [canLoadPublerWorkspaces]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     workspaceProfiles.forEach((profile, index) => {
