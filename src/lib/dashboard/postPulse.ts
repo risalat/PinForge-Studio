@@ -1,5 +1,6 @@
 import { PublicationRecordState, ScheduleRunItemStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { normalizeDomain } from "@/lib/types";
 
 export type PostPulseStatus =
   | "fresh"
@@ -34,9 +35,10 @@ export type PostPulseRecord = {
 
 export async function listPostPulseRecordsForUser(
   userId: string,
-  options?: { workspaceId?: string },
+  options?: { workspaceId?: string; allowedDomains?: string[] },
 ): Promise<PostPulseRecord[]> {
   const workspaceId = options?.workspaceId?.trim() ?? "";
+  const allowedDomains = normalizeAllowedDomains(options?.allowedDomains ?? []);
   const posts = await prisma.post.findMany({
     where: {
       OR: [
@@ -183,7 +185,12 @@ export async function listPostPulseRecordsForUser(
       };
     });
 
-  return sortPostPulseRecords(records, "priority");
+  const filteredRecords =
+    allowedDomains.length > 0
+      ? records.filter((record) => allowedDomains.includes(normalizeDomain(record.domain)))
+      : records;
+
+  return sortPostPulseRecords(filteredRecords, "priority");
 }
 
 export function buildPostPulseSummary(records: PostPulseRecord[]) {
@@ -327,4 +334,8 @@ function compareAscending(left: number, right: number) {
 
 function compareDescending(left: number, right: number) {
   return right - left;
+}
+
+function normalizeAllowedDomains(input: string[]) {
+  return Array.from(new Set(input.map((value) => normalizeDomain(value)).filter(Boolean)));
 }

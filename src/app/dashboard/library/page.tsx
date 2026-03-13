@@ -92,7 +92,7 @@ export default function DashboardLibraryPage() {
                 <div className="flex flex-wrap gap-3">
                   <Link
                     href={template.previewPath ?? `/preview/${template.id}`}
-                    className="rounded-full bg-[var(--dashboard-accent)] px-5 py-3 text-sm font-semibold text-white"
+                    className="rounded-full dashboard-accent-action dashboard-accent-action bg-[var(--dashboard-accent)] px-5 py-3 text-sm font-semibold text-white"
                   >
                     Open preview
                   </Link>
@@ -179,3 +179,4 @@ function getTemplateUsage(templateId: string) {
       return "Best for locked template-driven render tests and job planning.";
   }
 }
+

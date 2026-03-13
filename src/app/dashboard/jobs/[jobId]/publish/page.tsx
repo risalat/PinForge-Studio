@@ -30,6 +30,7 @@ export default async function DashboardJobPublishPage({ params }: PageProps) {
     getJobForUser(jobId, user.id).catch(() => null),
     getIntegrationSettingsSummary().catch(() => ({
       publerWorkspaceId: "",
+      publerAllowedDomains: [],
       publerAccountId: "",
       publerBoardId: "",
       aiProvider: "gemini" as const,

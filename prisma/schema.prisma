@@ -354,6 +354,7 @@ model UserIntegrationSettings {
   userId            String   @unique
   publerApiKeyEnc   String?
   publerWorkspaceId String?
+  publerAllowedDomains String[] @default([])
   publerAccountId   String?
   publerBoardId     String?
   aiProvider        String?

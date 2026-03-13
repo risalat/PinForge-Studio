@@ -1002,7 +1002,7 @@ export function JobPublishManager({
                   !integrationReady.canUsePublerApiKey ||
                   !workspaceId
                 }
-                className="rounded-full bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
+                className="rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
               >
                 Upload selected pins
               </button>
@@ -1049,7 +1049,7 @@ export function JobPublishManager({
               </div>
               <div className="mt-3 h-3 overflow-hidden rounded-full bg-[var(--dashboard-panel)]">
                 <div
-                  className="h-full rounded-full bg-[var(--dashboard-accent)] transition-all"
+                  className="h-full rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] transition-all"
                   style={{ width: `${selectedUploadProgress.percent}%` }}
                 />
               </div>
@@ -1243,7 +1243,7 @@ export function JobPublishManager({
                   (boardDistributionMode === "primary_weighted" &&
                     (!primaryBoardId || !selectedBoardIds.includes(primaryBoardId)))
                 }
-                className="rounded-full bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
+                className="rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
               >
                 Schedule selected pins
               </button>
@@ -1533,7 +1533,7 @@ function ToolbarButton({
       disabled={disabled}
       className={
         tone === "primary"
-          ? "rounded-full bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
+          ? "rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
           : "rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] disabled:opacity-60"
       }
     >
@@ -1569,7 +1569,7 @@ function StepCard(input: {
           type="button"
           onClick={input.onClick}
           disabled={input.disabled}
-          className="rounded-full bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
+          className="rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
         >
           {input.actionLabel}
         </button>

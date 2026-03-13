@@ -64,7 +64,7 @@ export function DashboardShell({
                           href={item.href}
                           className={`flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-semibold transition ${
                             isActive
-                              ? "bg-[var(--dashboard-accent)] text-white shadow-[var(--dashboard-shadow-accent)]"
+                              ? "dashboard-accent-action dashboard-accent-action bg-[var(--dashboard-accent)] text-white shadow-[var(--dashboard-shadow-accent)]"
                               : "text-[var(--dashboard-subtle)] hover:bg-[var(--dashboard-panel)] hover:text-[var(--dashboard-text)]"
                           }`}
                         >
@@ -132,7 +132,7 @@ export function DashboardShell({
                   ) : null}
                   <Link
                     href={header.primaryActionHref}
-                    className="rounded-full bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)]"
+                    className="rounded-full dashboard-accent-action dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)]"
                   >
                     {header.primaryActionLabel}
                   </Link>
@@ -253,3 +253,4 @@ function NavIcon({
 }
 
 type DashboardNavItem = (typeof dashboardNavigation)[number]["items"][number];
+

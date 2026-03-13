@@ -7,6 +7,7 @@ export default async function DashboardIntegrationsPage() {
   let databaseReady = isDatabaseConfigured();
   let settings: IntegrationSettingsSummary = {
     publerWorkspaceId: "",
+    publerAllowedDomains: [],
     publerAccountId: "",
     publerBoardId: "",
     aiProvider: "gemini" as const,
@@ -56,8 +57,8 @@ export default async function DashboardIntegrationsPage() {
           tone={settings.aiCredentialState === "missing" ? "warning" : settings.aiCredentialState === "ready" ? "good" : "warning"}
         />
         <IntegrationStat
-          label="Workspace defaults"
-          value={settings.publerWorkspaceId ? "Configured" : "Set in publish flow"}
+          label="Workspace domains"
+          value={settings.publerAllowedDomains.length > 0 ? settings.publerAllowedDomains.join(", ") : "Not set"}
           tone="neutral"
         />
       </section>

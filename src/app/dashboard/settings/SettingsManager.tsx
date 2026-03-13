@@ -23,6 +23,9 @@ export function SettingsManager({
 }) {
   const [publerApiKey, setPublerApiKey] = useState("");
   const [publerWorkspaceId, setPublerWorkspaceId] = useState(initialSettings.publerWorkspaceId);
+  const [publerAllowedDomainsInput, setPublerAllowedDomainsInput] = useState(
+    initialSettings.publerAllowedDomains.join(", "),
+  );
   const [publerWorkspaces, setPublerWorkspaces] = useState<PublerWorkspace[]>([]);
   const [aiProvider, setAiProvider] = useState<AIProvider>(initialSettings.aiProvider);
   const [storedAiProvider, setStoredAiProvider] = useState<AIProvider>(initialSettings.aiProvider);
@@ -175,6 +178,7 @@ export function SettingsManager({
         body: JSON.stringify({
           publerApiKey,
           publerWorkspaceId,
+          publerAllowedDomains: parseAllowedDomains(publerAllowedDomainsInput),
           aiProvider,
           aiApiKey,
           aiModel,
@@ -196,6 +200,7 @@ export function SettingsManager({
       setCanUseStoredPublerKey(json.settings.canUsePublerApiKey);
       setCanUseStoredAiKey(json.settings.canUseAiApiKey);
       setPublerWorkspaceId(json.settings.publerWorkspaceId);
+      setPublerAllowedDomainsInput(json.settings.publerAllowedDomains.join(", "));
       setStoredAiProvider(json.settings.aiProvider);
       setPublerCredentialMessage(json.settings.publerCredentialMessage);
       setAiCredentialMessage(json.settings.aiCredentialMessage);
@@ -329,6 +334,22 @@ export function SettingsManager({
               Load workspaces to choose the Publer workspace that Post Pulse should sync.
             </p>
           ) : null}
+
+          <div className="mt-4">
+            <label className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
+              Allowed domains
+            </label>
+            <input
+              value={publerAllowedDomainsInput}
+              onChange={(event) => setPublerAllowedDomainsInput(event.target.value)}
+              placeholder="mightypaint.com, anotherdomain.com"
+              className="mt-3 w-full rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-4 py-3 outline-none"
+            />
+            <p className="mt-2 text-xs text-[var(--dashboard-muted)]">
+              `Post Pulse` will focus on these first-party domains for the selected Publer workspace.
+              Leave this blank only if you want Studio to infer domains from your existing Studio jobs.
+            </p>
+          </div>
         </div>
       </section>
 
@@ -463,7 +484,7 @@ export function SettingsManager({
           type="button"
           onClick={() => void handleSave()}
           disabled={isSaving}
-          className="rounded-full bg-[var(--dashboard-accent)] px-6 py-3 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
+          className="rounded-full dashboard-accent-action dashboard-accent-action bg-[var(--dashboard-accent)] px-6 py-3 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
         >
           {isSaving ? "Saving..." : "Save settings"}
         </button>
@@ -479,6 +500,13 @@ export function SettingsManager({
   );
 }
 
+function parseAllowedDomains(input: string) {
+  return input
+    .split(",")
+    .map((value) => value.trim())
+    .filter((value) => value !== "");
+}
+
 function getAiProviderLabel(provider: AIProvider) {
   switch (provider) {
     case "openai":
@@ -492,3 +520,4 @@ function getAiProviderLabel(provider: AIProvider) {
       return "custom endpoint";
   }
 }
+

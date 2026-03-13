@@ -102,7 +102,7 @@ export function PostPulseSyncButton({ workspaceId }: { workspaceId: string }) {
         type="button"
         onClick={handleSync}
         disabled={isPending || !workspaceId}
-        className="rounded-full bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
+        className="rounded-full dashboard-accent-action dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
       >
         {isPending ? "Syncing Publer..." : "Sync Publer now"}
       </button>
@@ -113,3 +113,4 @@ export function PostPulseSyncButton({ workspaceId }: { workspaceId: string }) {
     </div>
   );
 }
+

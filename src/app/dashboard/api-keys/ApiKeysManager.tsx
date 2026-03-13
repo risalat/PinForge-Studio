@@ -101,7 +101,7 @@ export function ApiKeysManager({
             type="button"
             onClick={handleCreate}
             disabled={isPending || newKeyName.trim() === ""}
-            className="rounded-full bg-[var(--dashboard-accent)] px-5 py-3 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
+            className="rounded-full dashboard-accent-action dashboard-accent-action bg-[var(--dashboard-accent)] px-5 py-3 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
           >
             Create API key
           </button>
@@ -195,3 +195,4 @@ export function ApiKeysManager({
     </div>
   );
 }
+

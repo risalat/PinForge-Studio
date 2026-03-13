@@ -524,7 +524,7 @@ export function JobReviewManager({
             type="button"
             onClick={() => handleSaveReview("review")}
             disabled={isPending}
-            className="rounded-full bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
+            className="rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
           >
             Save review
           </button>
@@ -605,7 +605,7 @@ export function JobReviewManager({
             type="button"
             onClick={() => handleSaveReview("images")}
             disabled={isPending}
-            className="rounded-full bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
+            className="rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
           >
             Save review
           </button>
@@ -702,7 +702,7 @@ export function JobReviewManager({
                 type="button"
                 onClick={handleAssistedPlans}
                 disabled={isPending || selectedTemplateIds.length === 0 || selectedImages.length === 0}
-                className="rounded-full bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
+                className="rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
               >
                 Create assisted plans
               </button>
@@ -773,7 +773,7 @@ export function JobReviewManager({
                 type="button"
                 onClick={handleManualPlan}
                 disabled={isPending || !manualTemplate}
-                className="rounded-full bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
+                className="rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
               >
                 Add manual plan
               </button>
@@ -865,7 +865,7 @@ export function JobReviewManager({
               type="button"
               onClick={() => handleGeneratePins()}
               disabled={isPending || selectedRenderablePlans.length === 0}
-              className="rounded-full bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
+              className="rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
             >
               Generate selected plans
             </button>
@@ -1045,7 +1045,7 @@ export function JobReviewManager({
                         type="button"
                         onClick={() => handleGeneratePins([selectedPlan.id])}
                         disabled={isPending || !["READY", "DRAFT", "FAILED"].includes(selectedPlan.status)}
-                        className="rounded-full bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                        className="rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
                       >
                         Generate this plan
                       </button>
@@ -1309,7 +1309,7 @@ export function JobReviewManager({
                 <button
                   type="button"
                   onClick={() => setPreviewSource(null)}
-                  className="rounded-full bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white"
+                  className="rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white"
                 >
                   Close
                 </button>
@@ -1370,7 +1370,7 @@ export function JobReviewManager({
                 <button
                   type="button"
                   onClick={() => setPreviewPinIndex(null)}
-                  className="rounded-full bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white"
+                  className="rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white"
                 >
                   Close
                 </button>

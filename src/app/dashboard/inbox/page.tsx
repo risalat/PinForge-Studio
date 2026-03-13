@@ -73,7 +73,7 @@ export default async function DashboardInboxPage() {
                   <div className="mt-4 flex flex-wrap gap-3">
                     <Link
                       href={`/dashboard/jobs/${job.id}`}
-                      className="rounded-full bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white"
+                      className="rounded-full dashboard-accent-action dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white"
                     >
                       Review job
                     </Link>
@@ -167,3 +167,4 @@ function toneForStatus(status: string) {
   }
   return "neutral" as const;
 }
+

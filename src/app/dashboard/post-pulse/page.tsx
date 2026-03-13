@@ -1,7 +1,10 @@
 import Link from "next/link";
 import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
 import { isDatabaseConfigured } from "@/lib/env";
-import { getIntegrationSettingsSummary } from "@/lib/settings/integrationSettings";
+import {
+  getEffectivePublerAllowedDomainsForUserId,
+  getIntegrationSettingsSummary,
+} from "@/lib/settings/integrationSettings";
 import {
   buildPostPulseSummary,
   filterPostPulseRecords,
@@ -27,10 +30,14 @@ export default async function DashboardPostPulsePage({
   const settings = user ? await getIntegrationSettingsSummary() : null;
   const selectedWorkspaceId =
     resolvedSearchParams.workspaceId?.trim() || settings?.publerWorkspaceId || "";
+  const allowedDomains = user ? await getEffectivePublerAllowedDomainsForUserId(user.id) : [];
   const selectedFilter = normalizePostPulseFilter(resolvedSearchParams.filter);
   const selectedSort = normalizePostPulseSort(resolvedSearchParams.sort);
   const baseRecords = user
-    ? await listPostPulseRecordsForUser(user.id, { workspaceId: selectedWorkspaceId })
+    ? await listPostPulseRecordsForUser(user.id, {
+        workspaceId: selectedWorkspaceId,
+        allowedDomains,
+      })
     : [];
   const summary = buildPostPulseSummary(baseRecords);
   const records = sortPostPulseRecords(
@@ -90,6 +97,11 @@ export default async function DashboardPostPulsePage({
                   ? "The table is currently scoped to the selected Publer workspace."
                   : "Choose a Publer workspace to sync and review activity for that workspace."}
               </p>
+              {allowedDomains.length > 0 ? (
+                <p className="mt-2 text-sm text-[var(--dashboard-muted)]">
+                  Showing first-party domains only: {allowedDomains.join(", ")}.
+                </p>
+              ) : null}
             </div>
             <div className="flex flex-col items-end gap-3">
               <div className="rounded-2xl border border-[var(--dashboard-warning-border)] bg-[var(--dashboard-warning-soft)] px-4 py-3 text-sm text-[var(--dashboard-warning-ink)]">
@@ -187,7 +199,7 @@ export default async function DashboardPostPulsePage({
                             <>
                               <Link
                                 href={`/dashboard/jobs/${record.latestJobId}`}
-                                className="rounded-full bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white"
+                                className="rounded-full dashboard-accent-action dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white"
                               >
                                 Open latest job
                               </Link>
@@ -263,7 +275,7 @@ function ActivityDot({ state }: { state: PostPulseActivityDotState }) {
     state === "published"
       ? "bg-[var(--dashboard-success)]"
       : state === "scheduled"
-        ? "bg-[var(--dashboard-accent)]"
+        ? "dashboard-accent-action dashboard-accent-action bg-[var(--dashboard-accent)]"
         : "bg-[var(--dashboard-line-strong,#cfd5e3)]";
 
   return <span className={`h-2.5 w-2.5 rounded-full ${className}`} />;
@@ -303,3 +315,4 @@ function formatRelativeTime(value: Date) {
   }
   return `${days} days ago`;
 }
+

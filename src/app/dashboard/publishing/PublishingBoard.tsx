@@ -132,7 +132,7 @@ function FilterChip({
       onClick={onClick}
       className={`rounded-full border px-4 py-2 text-sm font-semibold ${
         active
-          ? "border-[var(--dashboard-accent)] bg-[var(--dashboard-accent)] text-white"
+          ? "border-[var(--dashboard-accent)] dashboard-accent-action dashboard-accent-action bg-[var(--dashboard-accent)] text-white"
           : "border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] text-[var(--dashboard-subtle)]"
       }`}
     >
@@ -184,7 +184,7 @@ function PublishingLane({
               </div>
               <Link
                 href={item.href}
-                className="mt-4 inline-flex rounded-full bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white"
+                className="mt-4 inline-flex rounded-full dashboard-accent-action dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white"
               >
                 Open
               </Link>
@@ -216,3 +216,4 @@ function formatLabel(value: string) {
     .map((part) => part.charAt(0) + part.slice(1).toLowerCase())
     .join(" ");
 }
+

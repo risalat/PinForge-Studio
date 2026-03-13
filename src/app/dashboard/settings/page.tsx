@@ -10,6 +10,7 @@ export default async function DashboardSettingsPage() {
   let databaseReady = isDatabaseConfigured();
   let settings: IntegrationSettingsSummary = {
     publerWorkspaceId: "",
+    publerAllowedDomains: [],
     publerAccountId: "",
     publerBoardId: "",
     aiProvider: "gemini" as const,

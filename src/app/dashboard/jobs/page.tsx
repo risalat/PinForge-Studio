@@ -85,7 +85,7 @@ export default async function DashboardJobsPage() {
                     <div className="mt-5 flex flex-wrap gap-3">
                       <Link
                         href={`/dashboard/jobs/${job.id}`}
-                        className="rounded-full bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)]"
+                        className="rounded-full dashboard-accent-action dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)]"
                       >
                         Open job
                       </Link>
@@ -162,3 +162,4 @@ function formatLabel(value: string) {
     .map((part) => part.charAt(0) + part.slice(1).toLowerCase())
     .join(" ");
 }
+

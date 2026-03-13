@@ -61,3 +61,20 @@ a {
   color: inherit;
   text-decoration: none;
 }
+
+.dashboard-accent-action {
+  color: #ffffff !important;
+}
+
+.dashboard-accent-action:visited,
+.dashboard-accent-action:hover,
+.dashboard-accent-action:focus,
+.dashboard-accent-action:active {
+  color: #ffffff !important;
+}
+
+.dashboard-accent-action > *,
+.dashboard-accent-action span,
+.dashboard-accent-action svg {
+  color: inherit !important;
+}

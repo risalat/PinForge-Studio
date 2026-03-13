@@ -10,6 +10,7 @@ import {
 const settingsSchema = z.object({
   publerApiKey: z.string().optional(),
   publerWorkspaceId: z.string().optional(),
+  publerAllowedDomains: z.array(z.string()).optional(),
   publerAccountId: z.string().optional(),
   publerBoardId: z.string().optional(),
   aiProvider: z.enum(["gemini", "openai", "openrouter", "custom_endpoint"]).optional(),

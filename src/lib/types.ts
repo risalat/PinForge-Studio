@@ -39,6 +39,7 @@ export interface ApiKeyListItem {
 
 export interface IntegrationSettingsSummary {
   publerWorkspaceId: string;
+  publerAllowedDomains: string[];
   publerAccountId: string;
   publerBoardId: string;
   aiProvider: AIProvider;
@@ -80,4 +81,8 @@ export function resolveDomain(input: { postUrl: string; domain?: string }) {
   } catch {
     return "pinforge.tenreclabs.com";
   }
+}
+
+export function normalizeDomain(input: string) {
+  return input.trim().toLowerCase().replace(/^www\./, "");
 }

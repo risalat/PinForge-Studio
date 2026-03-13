@@ -2,10 +2,12 @@ import type { AIProvider } from "@/lib/ai";
 import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
 import { prisma } from "@/lib/prisma";
 import { decryptSecret, encryptSecret } from "@/lib/settings/encryption";
+import { normalizeDomain } from "@/lib/types";
 
 export type IntegrationSettings = {
   publerApiKey: string;
   publerWorkspaceId: string;
+  publerAllowedDomains: string[];
   publerAccountId: string;
   publerBoardId: string;
   aiProvider: AIProvider;
@@ -16,6 +18,7 @@ export type IntegrationSettings = {
 
 export type IntegrationSettingsSummary = {
   publerWorkspaceId: string;
+  publerAllowedDomains: string[];
   publerAccountId: string;
   publerBoardId: string;
   aiProvider: AIProvider;
@@ -34,6 +37,7 @@ export type IntegrationSettingsSummary = {
 const DEFAULT_SETTINGS: IntegrationSettings = {
   publerApiKey: "",
   publerWorkspaceId: "",
+  publerAllowedDomains: [],
   publerAccountId: "",
   publerBoardId: "",
   aiProvider: "gemini",
@@ -61,6 +65,7 @@ export async function getIntegrationSettingsForUserId(userId: string) {
   return {
     publerApiKey: decryptSecret(settings.publerApiKeyEnc),
     publerWorkspaceId: settings.publerWorkspaceId ?? "",
+    publerAllowedDomains: settings.publerAllowedDomains ?? [],
     publerAccountId: settings.publerAccountId ?? "",
     publerBoardId: settings.publerBoardId ?? "",
     aiProvider: toAiProvider(settings.aiProvider),
@@ -83,6 +88,7 @@ export async function getIntegrationSettingsSummary(): Promise<IntegrationSettin
 
   return {
     publerWorkspaceId: settings?.publerWorkspaceId ?? "",
+    publerAllowedDomains: settings?.publerAllowedDomains ?? [],
     publerAccountId: settings?.publerAccountId ?? "",
     publerBoardId: settings?.publerBoardId ?? "",
     aiProvider: toAiProvider(settings?.aiProvider),
@@ -119,6 +125,10 @@ export async function saveIntegrationSettings(input: Partial<IntegrationSettings
             : encryptSecret(input.publerApiKey.trim())
           : undefined,
       publerWorkspaceId: input.publerWorkspaceId?.trim(),
+      publerAllowedDomains:
+        input.publerAllowedDomains !== undefined
+          ? normalizeAllowedDomains(input.publerAllowedDomains)
+          : undefined,
       publerAccountId: input.publerAccountId?.trim(),
       publerBoardId: input.publerBoardId?.trim(),
       aiProvider: input.aiProvider,
@@ -137,6 +147,7 @@ export async function saveIntegrationSettings(input: Partial<IntegrationSettings
         ? encryptSecret(input.publerApiKey.trim())
         : null,
       publerWorkspaceId: input.publerWorkspaceId?.trim() ?? "",
+      publerAllowedDomains: normalizeAllowedDomains(input.publerAllowedDomains ?? []),
       publerAccountId: input.publerAccountId?.trim() ?? "",
       publerBoardId: input.publerBoardId?.trim() ?? "",
       aiProvider: input.aiProvider ?? DEFAULT_SETTINGS.aiProvider,
@@ -145,6 +156,41 @@ export async function saveIntegrationSettings(input: Partial<IntegrationSettings
       aiCustomEndpoint: input.aiCustomEndpoint?.trim() ?? "",
     },
   });
+}
+
+export async function getEffectivePublerAllowedDomainsForUserId(userId: string) {
+  const settings = await prisma.userIntegrationSettings.findUnique({
+    where: {
+      userId,
+    },
+    select: {
+      publerAllowedDomains: true,
+    },
+  });
+
+  const storedDomains = normalizeAllowedDomains(settings?.publerAllowedDomains ?? []);
+  if (storedDomains.length > 0) {
+    return storedDomains;
+  }
+
+  const inferredPosts = await prisma.post.findMany({
+    where: {
+      jobs: {
+        some: {
+          userId,
+        },
+      },
+    },
+    select: {
+      domain: true,
+    },
+    distinct: ["domain"],
+    orderBy: {
+      domain: "asc",
+    },
+  });
+
+  return normalizeAllowedDomains(inferredPosts.map((post) => post.domain));
 }
 
 function toAiProvider(value: string | null | undefined): AIProvider {
@@ -184,4 +230,14 @@ function summarizeStoredSecret(payload: string | null | undefined) {
           : "Stored secret is not usable in the current environment.",
     };
   }
+}
+
+function normalizeAllowedDomains(input: string[]) {
+  return Array.from(
+    new Set(
+      input
+        .map((value) => normalizeDomain(value))
+        .filter((value) => value !== ""),
+    ),
+  );
 }
