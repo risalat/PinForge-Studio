@@ -42,6 +42,10 @@ function resolvePrismaDatasourceUrl() {
     );
   }
 
+  if (parsed.port === "6543" && parsed.searchParams.get("pgbouncer") !== "true") {
+    parsed.searchParams.set("pgbouncer", "true");
+  }
+
   if (isServerlessRuntime() && parsed.port === "6543" && !parsed.searchParams.has("connection_limit")) {
     parsed.searchParams.set("connection_limit", "1");
   }

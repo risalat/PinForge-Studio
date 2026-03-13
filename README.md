@@ -37,7 +37,7 @@ Copy-Item .env.example .env
 3. Set `DATABASE_URL` to your runtime database connection string.
 
    - For local development, a normal Postgres URL is fine.
-   - For Supabase on Vercel or other serverless deployments, use the Supavisor transaction pooler on port `6543` and include `connection_limit=1`.
+   - For Supabase on Vercel or other serverless deployments, use the Supavisor transaction pooler on port `6543` and include `pgbouncer=true&connection_limit=1`.
    - Set `DIRECT_URL` to a direct Postgres URL or Supavisor session-mode URL for Prisma CLI tasks such as migrations and introspection.
 
 4. Set `APP_ENCRYPTION_KEY` to a long random secret. Studio uses this to encrypt stored Publer
@@ -103,7 +103,7 @@ npm run dev
 
 - Publer and AI credentials are configured in the dashboard, not in `.env`.
 - Dashboard access is protected by Supabase Auth. Set the same auth env vars in Vercel before using the production deployment.
-- On Supabase serverless deployments, avoid the session pooler on port `5432` for runtime app traffic. Use transaction mode on port `6543` instead.
+- On Supabase serverless deployments, avoid the session pooler on port `5432` for runtime app traffic. Use transaction mode on port `6543` with `pgbouncer=true` instead.
 - Local file storage defaults to `./storage` when R2 is not configured.
 - The upload endpoint stores temporary source assets at `temp/uploads/{tempId}/source.ext`.
 - `POST /api/generate` now creates an intake job only; it does not render, generate copy, or schedule automatically.
