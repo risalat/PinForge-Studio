@@ -54,6 +54,17 @@ export interface PublerScheduleRequest {
   };
 }
 
+export interface PublerPost {
+  id: string;
+  state: string;
+  url: string;
+  postLink?: string;
+  scheduledAt?: string;
+  accountId?: string;
+  boardId?: string;
+  raw: Record<string, unknown>;
+}
+
 export interface ScheduleOutcome {
   postId?: string;
   status?: string;
@@ -128,6 +139,27 @@ export class PublerClient {
 
   async getJobStatus(jobId: string): Promise<Record<string, unknown>> {
     return this.request<Record<string, unknown>>(`/job_status/${encodeURIComponent(jobId)}`);
+  }
+
+  async getPosts(input?: {
+    states?: string[];
+    limit?: number;
+  }): Promise<PublerPost[]> {
+    const params = new URLSearchParams();
+    for (const state of input?.states ?? []) {
+      if (state.trim() !== "") {
+        params.append("state[]", state.trim());
+      }
+    }
+    if (input?.limit) {
+      params.set("limit", String(input.limit));
+    }
+
+    const query = params.toString();
+    const payload = await this.request<unknown>(`/posts${query ? `?${query}` : ""}`);
+    return extractArray(payload)
+      .map((item) => toPublerPost(item))
+      .filter((post): post is PublerPost => Boolean(post));
   }
 
   async uploadMediaFromUrl(
@@ -375,6 +407,34 @@ function pickStringOrNumber(
     }
   }
   return undefined;
+}
+
+function toPublerPost(value: Record<string, unknown>): PublerPost | null {
+  const id = findFirstStringOrNumber(value, ["id", "post_id", "postId"]);
+  const state = findFirstString(value, ["state", "status", "post_state"]) ?? "";
+  const url = findFirstString(value, ["url", "link"]) ?? "";
+
+  if (!id || !url) {
+    return null;
+  }
+
+  return {
+    id: String(id),
+    state,
+    url,
+    postLink: findFirstString(value, ["post_link", "postLink"]) ?? undefined,
+    scheduledAt:
+      findFirstString(value, ["scheduled_at", "scheduledAt", "date"]) ?? undefined,
+    accountId:
+      findFirstStringOrNumber(value, ["account_id", "accountId"]) !== undefined
+        ? String(findFirstStringOrNumber(value, ["account_id", "accountId"]))
+        : undefined,
+    boardId:
+      findFirstStringOrNumber(value, ["album_id", "board_id", "boardId"]) !== undefined
+        ? String(findFirstStringOrNumber(value, ["album_id", "board_id", "boardId"]))
+        : undefined,
+    raw: value,
+  };
 }
 
 function toJobStatusSnapshot(raw: Record<string, unknown>): PublerJobStatusSnapshot {
