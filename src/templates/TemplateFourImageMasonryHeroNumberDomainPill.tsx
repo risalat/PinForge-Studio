@@ -6,7 +6,7 @@ import { getSplitVerticalVisualPreset } from "@/lib/templates/visualPresets";
 import type { TemplateRenderProps } from "@/lib/templates/types";
 import type { CSSProperties } from "react";
 
-const MASONRY_TEMPLATE_TYPOGRAPHY = {
+const TEMPLATE_TYPOGRAPHY = {
   title: {
     fontFamily: "var(--font-league-spartan), sans-serif",
     fontWeight: 650,
@@ -40,26 +40,37 @@ export function TemplateFourImageMasonryHeroNumberDomainPill({
   const cleanedDomain = domain.replace(/^https?:\/\//, "").replace(/^www\./, "");
   const displayNumber = typeof itemNumber === "number" && itemNumber > 0 ? itemNumber : 15;
   const imageSet = normalizeImages(images);
-  const frameBackground = "#f7f1e8";
+  const frameBackground = mixHex(preset.palette.canvas, "#ffffff", 0.42);
   const frameInset = 10;
   const dividerThickness = 8;
   const collageTop = 10;
   const titleCardWidth = 864;
   const titleCardHeight = 270;
   const titleCardTop = 760;
-  const titleCardBackground = "#f7bb08";
-  const titleColor = "#6f3a11";
+  const titleCardBackground = preset.palette.divider;
+  const titleColor = pickBestContrastColor(titleCardBackground, [
+    preset.palette.title,
+    preset.palette.footer,
+    preset.palette.band,
+    "#3d2414",
+  ]);
   const circleSize = 288;
   const circleTop = 514;
-  const circleBackground = "#f7f1e6";
-  const circleTextColor = "#6d3810";
+  const circleBackground = mixHex(preset.palette.band, "#ffffff", 0.82);
+  const circleTextColor = pickBestContrastColor(circleBackground, [
+    preset.palette.number,
+    preset.palette.title,
+    preset.palette.footer,
+    "#6d3810",
+  ]);
   const domainPillWidth = 258;
   const domainPillHeight = 36;
   const domainPillTop = titleCardTop + titleCardHeight - 8;
-  const domainPillBackground = "#f9f6ef";
+  const domainPillBackground = mixHex(preset.palette.canvas, "#ffffff", 0.78);
   const domainTextColor = pickBestContrastColor(domainPillBackground, [
-    titleColor,
+    preset.palette.domain,
     preset.palette.footer,
+    titleColor,
     "#8b613e",
   ]);
   const collageHeight = 1920 - frameInset * 2;
@@ -83,7 +94,7 @@ export function TemplateFourImageMasonryHeroNumberDomainPill({
           top: collageTop,
           width: 1080 - frameInset * 2,
           height: collageHeight,
-          backgroundColor: "#e18315",
+          backgroundColor: preset.palette.divider,
         }}
       >
         <ImagePanel
@@ -141,11 +152,11 @@ export function TemplateFourImageMasonryHeroNumberDomainPill({
             className="relative block w-full text-center leading-none"
             style={{
               color: circleTextColor,
-              fontFamily: MASONRY_TEMPLATE_TYPOGRAPHY.number.fontFamily,
-              fontWeight: MASONRY_TEMPLATE_TYPOGRAPHY.number.fontWeight,
+              fontFamily: TEMPLATE_TYPOGRAPHY.number.fontFamily,
+              fontWeight: TEMPLATE_TYPOGRAPHY.number.fontWeight,
               fontSize: displayNumber >= 100 ? "122px" : "142px",
-              letterSpacing: MASONRY_TEMPLATE_TYPOGRAPHY.number.letterSpacing,
-              lineHeight: MASONRY_TEMPLATE_TYPOGRAPHY.number.lineHeight,
+              letterSpacing: TEMPLATE_TYPOGRAPHY.number.letterSpacing,
+              lineHeight: TEMPLATE_TYPOGRAPHY.number.lineHeight,
               fontVariantNumeric: "lining-nums proportional-nums",
               transform: "translateX(1px) translateY(-2px)",
             }}
@@ -170,13 +181,13 @@ export function TemplateFourImageMasonryHeroNumberDomainPill({
               minFontSize={48}
               maxFontSize={74}
               maxLines={2}
-              lineHeight={MASONRY_TEMPLATE_TYPOGRAPHY.title.lineHeight}
+              lineHeight={TEMPLATE_TYPOGRAPHY.title.lineHeight}
               className="mx-auto w-full uppercase"
               textColor={titleColor}
-              fontFamily={MASONRY_TEMPLATE_TYPOGRAPHY.title.fontFamily}
-              fontWeight={MASONRY_TEMPLATE_TYPOGRAPHY.title.fontWeight}
-              letterSpacing={MASONRY_TEMPLATE_TYPOGRAPHY.title.letterSpacing}
-              textTransform={MASONRY_TEMPLATE_TYPOGRAPHY.title.textTransform}
+              fontFamily={TEMPLATE_TYPOGRAPHY.title.fontFamily}
+              fontWeight={TEMPLATE_TYPOGRAPHY.title.fontWeight}
+              letterSpacing={TEMPLATE_TYPOGRAPHY.title.letterSpacing}
+              textTransform={TEMPLATE_TYPOGRAPHY.title.textTransform}
             />
           </div>
         </div>
@@ -197,12 +208,12 @@ export function TemplateFourImageMasonryHeroNumberDomainPill({
             minFontSize={13}
             maxFontSize={16}
             maxLines={1}
-            lineHeight={MASONRY_TEMPLATE_TYPOGRAPHY.domain.lineHeight}
+            lineHeight={TEMPLATE_TYPOGRAPHY.domain.lineHeight}
             className="w-full text-center"
             textColor={domainTextColor}
-            fontFamily={MASONRY_TEMPLATE_TYPOGRAPHY.domain.fontFamily}
-            fontWeight={MASONRY_TEMPLATE_TYPOGRAPHY.domain.fontWeight}
-            letterSpacing={MASONRY_TEMPLATE_TYPOGRAPHY.domain.letterSpacing}
+            fontFamily={TEMPLATE_TYPOGRAPHY.domain.fontFamily}
+            fontWeight={TEMPLATE_TYPOGRAPHY.domain.fontWeight}
+            letterSpacing={TEMPLATE_TYPOGRAPHY.domain.letterSpacing}
           />
         </div>
       </div>
@@ -241,6 +252,34 @@ function normalizeImages(images: string[]) {
     safeImages[1] ?? safeImages[0] ?? fallback,
     safeImages[2] ?? safeImages[1] ?? safeImages[0] ?? fallback,
     safeImages[3] ?? safeImages[2] ?? safeImages[1] ?? safeImages[0] ?? fallback,
+  ];
+}
+
+function mixHex(fromHex: string, toHex: string, amount: number) {
+  const from = parseHex(fromHex);
+  const to = parseHex(toHex);
+  if (!from || !to) {
+    return fromHex;
+  }
+
+  const mix = (left: number, right: number) =>
+    Math.round(left + (right - left) * Math.max(0, Math.min(1, amount)));
+
+  return `#${[mix(from[0], to[0]), mix(from[1], to[1]), mix(from[2], to[2])]
+    .map((value) => value.toString(16).padStart(2, "0"))
+    .join("")}`;
+}
+
+function parseHex(value: string) {
+  const normalized = value.replace("#", "");
+  if (!/^[0-9a-fA-F]{6}$/.test(normalized)) {
+    return null;
+  }
+
+  return [0, 2, 4].map((index) => parseInt(normalized.slice(index, index + 2), 16)) as [
+    number,
+    number,
+    number,
   ];
 }
 
