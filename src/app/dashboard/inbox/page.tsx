@@ -1,14 +1,22 @@
 import Link from "next/link";
 import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
+import { filterByAllowedDomains } from "@/lib/dashboard/domainScope";
 import { isDatabaseConfigured } from "@/lib/env";
 import { listJobsForUser } from "@/lib/jobs/generatePins";
+import { getEffectivePublerAllowedDomainsForUserId } from "@/lib/settings/integrationSettings";
 
 const inboxStatuses = new Set(["RECEIVED", "REVIEWING", "READY_FOR_GENERATION", "FAILED"]);
 
 export default async function DashboardInboxPage() {
   const databaseReady = isDatabaseConfigured();
   const user = databaseReady ? await getOrCreateDashboardUser() : null;
-  const jobs = user ? await listJobsForUser(user.id) : [];
+  const [allJobs, allowedDomains] = user
+    ? await Promise.all([
+        listJobsForUser(user.id),
+        getEffectivePublerAllowedDomainsForUserId(user.id),
+      ])
+    : [[], []];
+  const jobs = filterByAllowedDomains(allJobs, (job) => job.domainSnapshot, allowedDomains);
   const inboxJobs = jobs.filter((job) => inboxStatuses.has(job.status));
 
   return (

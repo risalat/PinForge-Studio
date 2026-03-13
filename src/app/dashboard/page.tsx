@@ -2,10 +2,15 @@ import { GenerationJobStatus } from "@prisma/client";
 import Link from "next/link";
 import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
 import { requireAuthenticatedDashboardUser } from "@/lib/auth/dashboardSession";
+import { filterByAllowedDomains } from "@/lib/dashboard/domainScope";
 import { buildPostPulseSummary, listPostPulseRecordsForUser } from "@/lib/dashboard/postPulse";
+import { getDashboardWorkspaceScope } from "@/lib/dashboard/workspaceScope";
 import { isDatabaseConfigured } from "@/lib/env";
 import { listJobsForUser } from "@/lib/jobs/generatePins";
-import { prisma } from "@/lib/prisma";
+import {
+  getEffectivePublerAllowedDomainsForUserId,
+  getIntegrationSettingsSummary,
+} from "@/lib/settings/integrationSettings";
 
 async function getDashboardData() {
   if (!isDatabaseConfigured()) {
@@ -21,24 +26,23 @@ async function getDashboardData() {
 
   try {
     const user = await getOrCreateDashboardUser();
-    const [postsProcessed, pinsGenerated, readyToSchedule, recentJobs, postPulseRecords] = await Promise.all([
-      prisma.post.count(),
-      prisma.generatedPin.count({
-        where: {
-          job: {
-            userId: user.id,
-          },
-        },
-      }),
-      prisma.generationJob.count({
-        where: {
-          userId: user.id,
-          status: GenerationJobStatus.READY_TO_SCHEDULE,
-        },
-      }),
-      listJobsForUser(user.id).then((jobs) => jobs.slice(0, 8)),
-      listPostPulseRecordsForUser(user.id),
+    const [settings, allowedDomains, allJobs] = await Promise.all([
+      getIntegrationSettingsSummary(),
+      getEffectivePublerAllowedDomainsForUserId(user.id),
+      listJobsForUser(user.id),
     ]);
+    const activeWorkspaceId = await getDashboardWorkspaceScope(settings.publerWorkspaceId);
+    const filteredJobs = filterByAllowedDomains(allJobs, (job) => job.domainSnapshot, allowedDomains);
+    const postPulseRecords = await listPostPulseRecordsForUser(user.id, {
+      workspaceId: activeWorkspaceId,
+      allowedDomains,
+    });
+    const postsProcessed = new Set(filteredJobs.map((job) => job.postUrlSnapshot)).size;
+    const pinsGenerated = filteredJobs.reduce((total, job) => total + job.generatedPins.length, 0);
+    const readyToSchedule = filteredJobs.filter(
+      (job) => job.status === GenerationJobStatus.READY_TO_SCHEDULE,
+    ).length;
+    const recentJobs = filteredJobs.slice(0, 8);
 
     return {
       postsProcessed,

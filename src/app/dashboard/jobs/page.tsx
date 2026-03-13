@@ -1,13 +1,22 @@
 import Link from "next/link";
 import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
 import { requireAuthenticatedDashboardUser } from "@/lib/auth/dashboardSession";
+import { filterByAllowedDomains } from "@/lib/dashboard/domainScope";
 import { isDatabaseConfigured } from "@/lib/env";
 import { listJobsForUser } from "@/lib/jobs/generatePins";
+import { getEffectivePublerAllowedDomainsForUserId } from "@/lib/settings/integrationSettings";
 
 export default async function DashboardJobsPage() {
   await requireAuthenticatedDashboardUser();
   const databaseReady = isDatabaseConfigured();
-  const jobs = databaseReady ? await listJobsForUser((await getOrCreateDashboardUser()).id) : [];
+  const user = databaseReady ? await getOrCreateDashboardUser() : null;
+  const [allJobs, allowedDomains] = user
+    ? await Promise.all([
+        listJobsForUser(user.id),
+        getEffectivePublerAllowedDomainsForUserId(user.id),
+      ])
+    : [[], []];
+  const jobs = filterByAllowedDomains(allJobs, (job) => job.domainSnapshot, allowedDomains);
 
   const totals = {
     total: jobs.length,

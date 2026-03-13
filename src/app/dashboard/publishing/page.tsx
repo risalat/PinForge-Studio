@@ -1,12 +1,20 @@
 import { PublishingBoard } from "@/app/dashboard/publishing/PublishingBoard";
 import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
+import { filterByAllowedDomains } from "@/lib/dashboard/domainScope";
 import { isDatabaseConfigured } from "@/lib/env";
 import { listJobsForUser } from "@/lib/jobs/generatePins";
+import { getEffectivePublerAllowedDomainsForUserId } from "@/lib/settings/integrationSettings";
 
 export default async function DashboardPublishingPage() {
   const databaseReady = isDatabaseConfigured();
   const user = databaseReady ? await getOrCreateDashboardUser() : null;
-  const jobs = user ? await listJobsForUser(user.id) : [];
+  const [allJobs, allowedDomains] = user
+    ? await Promise.all([
+        listJobsForUser(user.id),
+        getEffectivePublerAllowedDomainsForUserId(user.id),
+      ])
+    : [[], []];
+  const jobs = filterByAllowedDomains(allJobs, (job) => job.domainSnapshot, allowedDomains);
 
   const readyToPublish = jobs.filter((job) =>
     ["PINS_GENERATED", "MEDIA_UPLOADED", "TITLES_GENERATED", "DESCRIPTIONS_GENERATED", "READY_TO_SCHEDULE"].includes(job.status),

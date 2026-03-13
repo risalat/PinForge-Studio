@@ -206,7 +206,7 @@ export function SettingsManager({
       setAiCredentialMessage(json.settings.aiCredentialMessage);
       setPublerApiKey("");
       setAiApiKey("");
-      setSuccess("Settings saved. Post Pulse can now reuse the saved Publer workspace.");
+      setSuccess("Settings saved.");
     } catch (saveError) {
       const message = saveError instanceof Error ? saveError.message : "Unable to save settings.";
       setError(message);
@@ -256,11 +256,6 @@ export function SettingsManager({
           <h2 className="mt-2 text-2xl font-black tracking-[-0.04em]">
             Publishing access
           </h2>
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--dashboard-subtle)]">
-            Save the Publer API key here, then choose a default workspace. Post Pulse uses that
-            saved workspace for sync, while account and board selection can still happen later in
-            the publishing flow.
-          </p>
         </div>
 
         <div className="mt-5">
@@ -278,11 +273,6 @@ export function SettingsManager({
             }
             className="mt-3 w-full rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 outline-none"
           />
-          <p className="mt-2 text-xs text-[var(--dashboard-muted)]">
-            {hasStoredPublerKey
-              ? "A Publer key is already stored securely. Leaving this blank keeps the saved key."
-              : "This key will be reused later when you open the publishing flow for generated pins."}
-          </p>
           {hasStoredPublerKey && !canUseStoredPublerKey ? (
             <p className="mt-3 rounded-2xl border border-[var(--dashboard-warning-border)] bg-[var(--dashboard-warning-soft)] px-4 py-3 text-sm text-[var(--dashboard-warning-ink)]">
               Stored Publer key is not usable in the current environment. {publerCredentialMessage}
@@ -292,15 +282,9 @@ export function SettingsManager({
 
         <div className="mt-5 rounded-[24px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <label className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
-                Default Publer workspace
-              </label>
-              <p className="mt-2 text-xs text-[var(--dashboard-muted)]">
-                This workspace is used by Post Pulse sync and as the default starting point in the
-                publish flow.
-              </p>
-            </div>
+            <label className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
+              Default Publer workspace
+            </label>
             <button
               type="button"
               onClick={() => void loadPublerWorkspaces()}
@@ -325,16 +309,6 @@ export function SettingsManager({
             ))}
           </select>
 
-          {!canLoadPublerWorkspaces ? (
-            <p className="mt-3 text-xs text-[var(--dashboard-muted)]">
-              Save or enter a usable Publer API key first, then load workspaces.
-            </p>
-          ) : publerWorkspaces.length === 0 ? (
-            <p className="mt-3 text-xs text-[var(--dashboard-muted)]">
-              Load workspaces to choose the Publer workspace that Post Pulse should sync.
-            </p>
-          ) : null}
-
           <div className="mt-4">
             <label className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
               Allowed domains
@@ -345,10 +319,6 @@ export function SettingsManager({
               placeholder="mightypaint.com, anotherdomain.com"
               className="mt-3 w-full rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-4 py-3 outline-none"
             />
-            <p className="mt-2 text-xs text-[var(--dashboard-muted)]">
-              `Post Pulse` will focus on these first-party domains for the selected Publer workspace.
-              Leave this blank only if you want Studio to infer domains from your existing Studio jobs.
-            </p>
           </div>
         </div>
       </section>
@@ -362,10 +332,6 @@ export function SettingsManager({
             <h2 className="mt-2 text-2xl font-black tracking-[-0.04em]">
               Copy generation settings
             </h2>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--dashboard-subtle)]">
-              Choose a provider, paste the API key, and Studio will load the available model list
-              automatically so you can lock the model once.
-            </p>
           </div>
           <button
             type="button"
@@ -416,11 +382,6 @@ export function SettingsManager({
               }
               className="mt-3 w-full rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 outline-none"
             />
-            <p className="mt-2 text-xs text-[var(--dashboard-muted)]">
-              {hasStoredAiKey && aiProvider === storedAiProvider
-                ? `A ${getAiProviderLabel(storedAiProvider)} key is already stored securely.`
-                : "After you leave this field, Studio will try to load the model catalog."}
-            </p>
             {hasStoredAiKey && !canUseStoredAiKey ? (
               <p className="mt-3 rounded-2xl border border-[var(--dashboard-warning-border)] bg-[var(--dashboard-warning-soft)] px-4 py-3 text-sm text-[var(--dashboard-warning-ink)]">
                 Stored AI key is not usable in the current environment. {aiCredentialMessage}
@@ -438,10 +399,6 @@ export function SettingsManager({
                 onChange={(event) => setAiCustomEndpoint(event.target.value)}
                 className="mt-3 w-full rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 outline-none"
               />
-              <p className="mt-2 text-xs text-[var(--dashboard-muted)]">
-                Custom endpoints use a manual model ID. Studio will keep the provider architecture
-                but will not auto-discover models here.
-              </p>
             </div>
           ) : null}
 

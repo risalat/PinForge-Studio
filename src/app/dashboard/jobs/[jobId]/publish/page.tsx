@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { JobPublishManager } from "@/app/dashboard/jobs/[jobId]/publish/JobPublishManager";
 import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
 import { requireAuthenticatedDashboardUser } from "@/lib/auth/dashboardSession";
+import { getDashboardWorkspaceScope } from "@/lib/dashboard/workspaceScope";
 import { isDatabaseConfigured } from "@/lib/env";
 import { getJobForUser } from "@/lib/jobs/generatePins";
 import { getIntegrationSettingsSummary } from "@/lib/settings/integrationSettings";
@@ -51,6 +52,8 @@ export default async function DashboardJobPublishPage({ params }: PageProps) {
     notFound();
   }
 
+  const activeWorkspaceId = await getDashboardWorkspaceScope(settings.publerWorkspaceId);
+
   return (
     <div className="space-y-8 text-[var(--dashboard-text)]">
       <section className="rounded-[24px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-5 py-4 shadow-[var(--dashboard-shadow-sm)]">
@@ -97,7 +100,7 @@ export default async function DashboardJobPublishPage({ params }: PageProps) {
             scheduleError: pin.scheduleRunItems[0]?.errorMessage ?? null,
           }))}
           defaults={{
-            workspaceId: settings.publerWorkspaceId,
+            workspaceId: activeWorkspaceId,
             accountId: settings.publerAccountId,
             boardId: settings.publerBoardId,
           }}

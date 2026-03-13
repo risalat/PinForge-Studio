@@ -5,6 +5,7 @@ import {
   getEffectivePublerAllowedDomainsForUserId,
   getIntegrationSettingsSummary,
 } from "@/lib/settings/integrationSettings";
+import { getDashboardWorkspaceScope } from "@/lib/dashboard/workspaceScope";
 import {
   buildPostPulseSummary,
   filterPostPulseRecords,
@@ -22,14 +23,13 @@ import { PostPulseWorkspaceControls } from "@/app/dashboard/post-pulse/PostPulse
 export default async function DashboardPostPulsePage({
   searchParams,
 }: {
-  searchParams?: Promise<{ workspaceId?: string; filter?: string; sort?: string }>;
+  searchParams?: Promise<{ filter?: string; sort?: string }>;
 }) {
   const databaseReady = isDatabaseConfigured();
   const user = databaseReady ? await getOrCreateDashboardUser() : null;
   const resolvedSearchParams = (await searchParams) ?? {};
   const settings = user ? await getIntegrationSettingsSummary() : null;
-  const selectedWorkspaceId =
-    resolvedSearchParams.workspaceId?.trim() || settings?.publerWorkspaceId || "";
+  const selectedWorkspaceId = await getDashboardWorkspaceScope(settings?.publerWorkspaceId || "");
   const allowedDomains = user ? await getEffectivePublerAllowedDomainsForUserId(user.id) : [];
   const selectedFilter = normalizePostPulseFilter(resolvedSearchParams.filter);
   const selectedSort = normalizePostPulseSort(resolvedSearchParams.sort);
@@ -84,31 +84,18 @@ export default async function DashboardPostPulsePage({
               <h2 className="mt-2 text-2xl font-black tracking-[-0.04em]">
                 Publishing freshness by article
               </h2>
-              <p className="mt-2 max-w-3xl text-sm text-[var(--dashboard-subtle)]">
-                Publer is the source of truth here. Posts stay in progress while any scheduled pins remain in queue. Once the queue is clear, the latest published pin decides whether the post is still fresh or needs new pins.
-              </p>
               <p className="mt-2 text-sm text-[var(--dashboard-muted)]">
                 {latestSyncAt
                   ? `Last Publer sync ${formatRelativeTime(latestSyncAt)}`
                   : "No Publer sync yet. Sync to import scheduled and published pins."}
               </p>
-              <p className="mt-2 text-sm text-[var(--dashboard-muted)]">
-                {selectedWorkspaceId
-                  ? "The table is currently scoped to the selected Publer workspace."
-                  : "Choose a Publer workspace to sync and review activity for that workspace."}
-              </p>
-              {allowedDomains.length > 0 ? (
-                <p className="mt-2 text-sm text-[var(--dashboard-muted)]">
-                  Showing first-party domains only: {allowedDomains.join(", ")}.
-                </p>
-              ) : null}
             </div>
             <div className="flex flex-col items-end gap-3">
               <div className="rounded-2xl border border-[var(--dashboard-warning-border)] bg-[var(--dashboard-warning-soft)] px-4 py-3 text-sm text-[var(--dashboard-warning-ink)]">
                 {summary.needsFreshPins} post{summary.needsFreshPins === 1 ? "" : "s"} currently need fresh pins.
               </div>
               <PostPulseWorkspaceControls
-                initialWorkspaceId={selectedWorkspaceId}
+                workspaceId={selectedWorkspaceId}
                 initialFilter={selectedFilter}
                 initialSort={selectedSort}
               />

@@ -4,13 +4,14 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { SignOutButton } from "@/app/dashboard/SignOutButton";
+import { DashboardWorkspaceSwitcher } from "@/components/dashboard/DashboardWorkspaceSwitcher";
 import { dashboardNavigation, getDashboardPageTitle } from "@/lib/dashboard/navigation";
 
 export function DashboardShell({
-  userEmail,
+  activeWorkspaceId,
   children,
 }: {
-  userEmail: string;
+  activeWorkspaceId: string;
   children: ReactNode;
 }) {
   const pathname = usePathname();
@@ -36,14 +37,7 @@ export function DashboardShell({
               </div>
             </Link>
 
-            <div className="mt-5 rounded-[24px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-4 shadow-[var(--dashboard-shadow-sm)]">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--dashboard-muted)]">
-                Workspace
-              </p>
-              <p className="mt-2 truncate text-sm font-semibold text-[var(--dashboard-text)]">
-                {userEmail}
-              </p>
-            </div>
+            <DashboardWorkspaceSwitcher initialWorkspaceId={activeWorkspaceId} />
 
             <nav className="mt-6 space-y-6">
               {dashboardNavigation.map((group) => (
