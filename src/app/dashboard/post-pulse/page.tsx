@@ -44,7 +44,7 @@ export default async function DashboardPostPulsePage({
           tone="warning"
         />
         <MetricCard
-          label="Scheduled in flight"
+          label="In progress"
           value={String(summary.scheduledInFlight)}
           tone="info"
         />
@@ -66,7 +66,7 @@ export default async function DashboardPostPulsePage({
                 Publishing freshness by article
               </h2>
               <p className="mt-2 max-w-3xl text-sm text-[var(--dashboard-subtle)]">
-                Publer is the source of truth here. Freshness starts from the latest published-like pin. If that date is older than 30 days, the post needs fresh pins.
+                Publer is the source of truth here. Posts stay in progress while any scheduled pins remain in queue. Once the queue is clear, the latest published pin decides whether the post is still fresh or needs new pins.
               </p>
               <p className="mt-2 text-sm text-[var(--dashboard-muted)]">
                 {latestSyncAt
@@ -93,22 +93,32 @@ export default async function DashboardPostPulsePage({
             </div>
           ) : (
             <div className="mt-6 overflow-hidden rounded-[24px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)]">
-              <table className="min-w-full divide-y divide-[var(--dashboard-line)] text-sm">
+              <table className="min-w-full table-fixed divide-y divide-[var(--dashboard-line)] text-sm">
                 <thead className="bg-[var(--dashboard-panel-alt)] text-left uppercase tracking-[0.16em] text-[var(--dashboard-muted)]">
                   <tr>
-                    <th className="px-5 py-4">Post</th>
-                    <th className="px-5 py-4">Generated</th>
-                    <th className="px-5 py-4">Publer activity</th>
-                    <th className="px-5 py-4">Last live pin</th>
-                    <th className="px-5 py-4">Freshness</th>
-                    <th className="px-5 py-4">Actions</th>
+                    <th className="w-[34%] px-5 py-4">Post</th>
+                    <th className="w-[9%] px-5 py-4">Generated</th>
+                    <th className="w-[16%] px-5 py-4">Publer activity</th>
+                    <th className="w-[20%] px-5 py-4">Latest activity</th>
+                    <th className="w-[12%] px-5 py-4">Freshness</th>
+                    <th className="w-[9%] px-5 py-4">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--dashboard-line)]">
                   {records.map((record) => (
                     <tr key={record.postId}>
                       <td className="px-5 py-4 align-top">
-                        <p className="font-semibold text-[var(--dashboard-text)]">{record.title}</p>
+                        <p
+                          className="font-semibold text-[var(--dashboard-text)]"
+                          style={{
+                            display: "-webkit-box",
+                            WebkitBoxOrient: "vertical",
+                            WebkitLineClamp: 2,
+                            overflow: "hidden",
+                          }}
+                        >
+                          {record.title}
+                        </p>
                         <p className="mt-1 break-all text-[var(--dashboard-subtle)]">{record.url}</p>
                         <p className="mt-2 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--dashboard-muted)]">
                           {record.domain} · {record.totalJobs} job{record.totalJobs === 1 ? "" : "s"}
@@ -133,18 +143,23 @@ export default async function DashboardPostPulsePage({
                       </td>
                       <td className="px-5 py-4 align-top">
                         <p className="font-semibold text-[var(--dashboard-text)]">
-                          {record.lastPublishedAt ? formatDate(record.lastPublishedAt) : "No live pin yet"}
+                          {record.lastPublishedAt
+                            ? `Published ${formatDate(record.lastPublishedAt)}`
+                            : "No published pin yet"}
                         </p>
                         <p className="mt-1 text-[var(--dashboard-subtle)]">
                           {record.lastPublishedAt
                             ? record.freshnessAgeDays === null
                               ? "Latest live pin date unavailable"
                               : `${record.freshnessAgeDays} day${record.freshnessAgeDays === 1 ? "" : "s"} ago`
+                            : "No live publish yet"}
+                        </p>
+                        <p className="mt-2 text-[var(--dashboard-subtle)]">
+                          {record.lastScheduledAt
+                            ? `Scheduled ${formatDate(record.lastScheduledAt)}`
                             : record.scheduledCount > 0
-                              ? "Pins are scheduled but not live yet"
-                              : record.totalGeneratedPins > 0
-                                ? "Generated, but not yet in Publer history"
-                                : "No generated pins yet"}
+                              ? "Scheduled date unavailable"
+                              : "No pending schedule"}
                         </p>
                       </td>
                       <td className="px-5 py-4 align-top">
@@ -243,7 +258,7 @@ function formatStatus(value: PostPulseStatus) {
     case "needs_fresh_pins":
       return "Needs fresh pins";
     case "scheduled_in_flight":
-      return "Scheduled in flight";
+      return "In progress";
     case "never_published":
       return "Never published";
     case "no_pins_yet":

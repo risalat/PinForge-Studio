@@ -22,6 +22,7 @@ export type PostPulseRecord = {
   scheduledCount: number;
   lastGeneratedAt: Date | null;
   lastPublishedAt: Date | null;
+  lastScheduledAt: Date | null;
   lastSyncedAt: Date | null;
   freshnessStatus: PostPulseStatus;
   freshnessAgeDays: number | null;
@@ -126,13 +127,21 @@ export async function listPostPulseRecordsForUser(
           }
           return !latest || candidate > latest ? candidate : latest;
         }, null) ?? null;
-      const lastLocalScheduledAt =
+      const lastScheduledAt =
+        scheduledRecords.reduce<Date | null>((latest, record) => {
+          const candidate = record.scheduledAt;
+          if (!candidate) {
+            return latest;
+          }
+          return !latest || candidate > latest ? candidate : latest;
+        }, null) ??
         localScheduledItems.reduce<Date | null>((latest, item) => {
           if (!item.scheduledFor) {
             return latest;
           }
           return !latest || item.scheduledFor > latest ? item.scheduledFor : latest;
-        }, null) ?? null;
+        }, null) ??
+        null;
       const freshnessAnchor = lastPublishedAt ?? null;
       const freshnessAgeDays = freshnessAnchor
         ? Math.floor((Date.now() - freshnessAnchor.getTime()) / (1000 * 60 * 60 * 24))
@@ -158,7 +167,8 @@ export async function listPostPulseRecordsForUser(
         publishedCount,
         scheduledCount,
         lastGeneratedAt,
-        lastPublishedAt: lastPublishedAt ?? lastLocalScheduledAt,
+        lastPublishedAt,
+        lastScheduledAt,
         lastSyncedAt,
         freshnessStatus: resolveFreshnessStatus({
           totalGeneratedPins: generatedPins.length,
@@ -177,8 +187,16 @@ export async function listPostPulseRecordsForUser(
         return statusDelta;
       }
 
-      const leftTimestamp = left.lastPublishedAt?.getTime() ?? left.lastGeneratedAt?.getTime() ?? 0;
-      const rightTimestamp = right.lastPublishedAt?.getTime() ?? right.lastGeneratedAt?.getTime() ?? 0;
+      const leftTimestamp =
+        left.lastScheduledAt?.getTime() ??
+        left.lastPublishedAt?.getTime() ??
+        left.lastGeneratedAt?.getTime() ??
+        0;
+      const rightTimestamp =
+        right.lastScheduledAt?.getTime() ??
+        right.lastPublishedAt?.getTime() ??
+        right.lastGeneratedAt?.getTime() ??
+        0;
       return rightTimestamp - leftTimestamp;
     });
 }
@@ -201,13 +219,13 @@ function resolveFreshnessStatus(input: {
   scheduledCount: number;
   lastPublishedAt: Date | null;
 }): PostPulseStatus {
+  if (input.scheduledCount > 0) {
+    return "scheduled_in_flight";
+  }
+
   if (input.publishedCount > 0 && input.lastPublishedAt) {
     const ageDays = Math.floor((Date.now() - input.lastPublishedAt.getTime()) / (1000 * 60 * 60 * 24));
     return ageDays >= 30 ? "needs_fresh_pins" : "fresh";
-  }
-
-  if (input.scheduledCount > 0) {
-    return "scheduled_in_flight";
   }
 
   if (input.totalGeneratedPins === 0) {
