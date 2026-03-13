@@ -9,6 +9,8 @@ export type PostPulseStatus =
   | "no_pins_yet";
 
 export type PostPulseActivityDotState = "published" | "scheduled" | "other";
+export type PostPulseFilter = "all" | PostPulseStatus;
+export type PostPulseSort = "priority" | "oldest_published" | "newest_published";
 
 export type PostPulseRecord = {
   postId: string;
@@ -99,8 +101,7 @@ export async function listPostPulseRecordsForUser(
     },
   });
 
-  return posts
-    .map((post) => {
+  const records = posts.map((post) => {
       const jobs = post.jobs;
       const generatedPins = jobs.flatMap((job) => job.generatedPins);
       const localScheduledItems = generatedPins.flatMap((pin) => pin.scheduleRunItems);
@@ -180,25 +181,9 @@ export async function listPostPulseRecordsForUser(
         latestJobId: jobs[0]?.id ?? null,
         recentActivityDots,
       };
-    })
-    .sort((left, right) => {
-      const statusDelta = statusWeight(left.freshnessStatus) - statusWeight(right.freshnessStatus);
-      if (statusDelta !== 0) {
-        return statusDelta;
-      }
-
-      const leftTimestamp =
-        left.lastScheduledAt?.getTime() ??
-        left.lastPublishedAt?.getTime() ??
-        left.lastGeneratedAt?.getTime() ??
-        0;
-      const rightTimestamp =
-        right.lastScheduledAt?.getTime() ??
-        right.lastPublishedAt?.getTime() ??
-        right.lastGeneratedAt?.getTime() ??
-        0;
-      return rightTimestamp - leftTimestamp;
     });
+
+  return sortPostPulseRecords(records, "priority");
 }
 
 export function buildPostPulseSummary(records: PostPulseRecord[]) {
@@ -211,6 +196,74 @@ export function buildPostPulseSummary(records: PostPulseRecord[]) {
     fresh: records.filter((record) => record.freshnessStatus === "fresh").length,
     noPinsYet: records.filter((record) => record.freshnessStatus === "no_pins_yet").length,
   };
+}
+
+export function filterPostPulseRecords(records: PostPulseRecord[], filter: PostPulseFilter) {
+  if (filter === "all") {
+    return records;
+  }
+
+  return records.filter((record) => record.freshnessStatus === filter);
+}
+
+export function sortPostPulseRecords(records: PostPulseRecord[], sort: PostPulseSort) {
+  return [...records].sort((left, right) => {
+    if (sort === "oldest_published") {
+      return compareAscending(
+        left.lastPublishedAt?.getTime() ?? Number.POSITIVE_INFINITY,
+        right.lastPublishedAt?.getTime() ?? Number.POSITIVE_INFINITY,
+      );
+    }
+
+    if (sort === "newest_published") {
+      return compareDescending(
+        left.lastPublishedAt?.getTime() ?? 0,
+        right.lastPublishedAt?.getTime() ?? 0,
+      );
+    }
+
+    const statusDelta = statusWeight(left.freshnessStatus) - statusWeight(right.freshnessStatus);
+    if (statusDelta !== 0) {
+      return statusDelta;
+    }
+
+    const leftTimestamp =
+      left.lastScheduledAt?.getTime() ??
+      left.lastPublishedAt?.getTime() ??
+      left.lastGeneratedAt?.getTime() ??
+      0;
+    const rightTimestamp =
+      right.lastScheduledAt?.getTime() ??
+      right.lastPublishedAt?.getTime() ??
+      right.lastGeneratedAt?.getTime() ??
+      0;
+    return compareDescending(leftTimestamp, rightTimestamp);
+  });
+}
+
+export function normalizePostPulseFilter(value: string | undefined): PostPulseFilter {
+  switch (value) {
+    case "needs_fresh_pins":
+    case "scheduled_in_flight":
+    case "fresh":
+    case "never_published":
+    case "no_pins_yet":
+      return value;
+    case "all":
+    default:
+      return "all";
+  }
+}
+
+export function normalizePostPulseSort(value: string | undefined): PostPulseSort {
+  switch (value) {
+    case "oldest_published":
+    case "newest_published":
+      return value;
+    case "priority":
+    default:
+      return "priority";
+  }
 }
 
 function resolveFreshnessStatus(input: {
@@ -266,4 +319,12 @@ function statusWeight(status: PostPulseStatus) {
     default:
       return 4;
   }
+}
+
+function compareAscending(left: number, right: number) {
+  return left - right;
+}
+
+function compareDescending(left: number, right: number) {
+  return right - left;
 }

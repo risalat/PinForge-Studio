@@ -4,8 +4,14 @@ import { isDatabaseConfigured } from "@/lib/env";
 import { getIntegrationSettingsSummary } from "@/lib/settings/integrationSettings";
 import {
   buildPostPulseSummary,
+  filterPostPulseRecords,
   listPostPulseRecordsForUser,
+  normalizePostPulseFilter,
+  normalizePostPulseSort,
+  sortPostPulseRecords,
   type PostPulseActivityDotState,
+  type PostPulseFilter,
+  type PostPulseSort,
   type PostPulseStatus,
 } from "@/lib/dashboard/postPulse";
 import { PostPulseWorkspaceControls } from "@/app/dashboard/post-pulse/PostPulseWorkspaceControls";
@@ -13,7 +19,7 @@ import { PostPulseWorkspaceControls } from "@/app/dashboard/post-pulse/PostPulse
 export default async function DashboardPostPulsePage({
   searchParams,
 }: {
-  searchParams?: Promise<{ workspaceId?: string }>;
+  searchParams?: Promise<{ workspaceId?: string; filter?: string; sort?: string }>;
 }) {
   const databaseReady = isDatabaseConfigured();
   const user = databaseReady ? await getOrCreateDashboardUser() : null;
@@ -21,12 +27,18 @@ export default async function DashboardPostPulsePage({
   const settings = user ? await getIntegrationSettingsSummary() : null;
   const selectedWorkspaceId =
     resolvedSearchParams.workspaceId?.trim() || settings?.publerWorkspaceId || "";
-  const records = user
+  const selectedFilter = normalizePostPulseFilter(resolvedSearchParams.filter);
+  const selectedSort = normalizePostPulseSort(resolvedSearchParams.sort);
+  const baseRecords = user
     ? await listPostPulseRecordsForUser(user.id, { workspaceId: selectedWorkspaceId })
     : [];
-  const summary = buildPostPulseSummary(records);
+  const summary = buildPostPulseSummary(baseRecords);
+  const records = sortPostPulseRecords(
+    filterPostPulseRecords(baseRecords, selectedFilter),
+    selectedSort,
+  );
   const latestSyncAt =
-    records.reduce<Date | null>(
+    baseRecords.reduce<Date | null>(
       (latest, record) =>
         !record.lastSyncedAt || (latest && latest > record.lastSyncedAt)
           ? latest
@@ -83,7 +95,11 @@ export default async function DashboardPostPulsePage({
               <div className="rounded-2xl border border-[var(--dashboard-warning-border)] bg-[var(--dashboard-warning-soft)] px-4 py-3 text-sm text-[var(--dashboard-warning-ink)]">
                 {summary.needsFreshPins} post{summary.needsFreshPins === 1 ? "" : "s"} currently need fresh pins.
               </div>
-              <PostPulseWorkspaceControls initialWorkspaceId={selectedWorkspaceId} />
+              <PostPulseWorkspaceControls
+                initialWorkspaceId={selectedWorkspaceId}
+                initialFilter={selectedFilter}
+                initialSort={selectedSort}
+              />
             </div>
           </div>
 
