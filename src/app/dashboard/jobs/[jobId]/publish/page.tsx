@@ -1,13 +1,16 @@
 import { notFound } from "next/navigation";
 import { JobPublishManager } from "@/app/dashboard/jobs/[jobId]/publish/JobPublishManager";
+import { WorkspaceScopeMismatchCard } from "@/components/dashboard/WorkspaceScopeMismatchCard";
 import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
 import { requireAuthenticatedDashboardUser } from "@/lib/auth/dashboardSession";
+import { matchesAllowedDomain } from "@/lib/dashboard/domainScope";
 import { getDashboardWorkspaceScope } from "@/lib/dashboard/workspaceScope";
 import { isDatabaseConfigured } from "@/lib/env";
 import { getJobForUser } from "@/lib/jobs/generatePins";
 import { getPublishScheduleContextForPost } from "@/lib/jobs/publishScheduleContext";
 import {
   getIntegrationSettingsSummary,
+  getWorkspaceAllowedDomainsForUserId,
   getWorkspaceProfileForUserId,
 } from "@/lib/settings/integrationSettings";
 import { resolveStoredAssetUrl } from "@/lib/storage/assetUrl";
@@ -58,7 +61,20 @@ export default async function DashboardJobPublishPage({ params }: PageProps) {
   }
 
   const activeWorkspaceId = await getDashboardWorkspaceScope(settings.publerWorkspaceId);
-  const activeWorkspaceProfile = await getWorkspaceProfileForUserId(user.id, activeWorkspaceId);
+  const [activeWorkspaceProfile, allowedDomains] = await Promise.all([
+    getWorkspaceProfileForUserId(user.id, activeWorkspaceId),
+    getWorkspaceAllowedDomainsForUserId(user.id, activeWorkspaceId),
+  ]);
+  const isInActiveScope = matchesAllowedDomain(job.domainSnapshot, allowedDomains);
+
+  if (!isInActiveScope) {
+    return (
+      <WorkspaceScopeMismatchCard
+        domain={job.domainSnapshot}
+        workspaceName={activeWorkspaceProfile?.workspaceName ?? "the selected workspace"}
+      />
+    );
+  }
   const initialScheduleContext = await getPublishScheduleContextForPost({
     userId: user.id,
     postId: job.postId,

@@ -6,8 +6,10 @@ import { resolveDomain } from "@/lib/types";
 
 const POSTS_PER_PAGE = 100;
 const BACKFILL_PAGES_PER_RUN = 3;
-const INCREMENTAL_PAGES_PER_RUN = 1;
+const INCREMENTAL_PAGES_PER_RUN = 2;
 const FULL_SYNC_STATES = ["scheduled", "published", "published_posted"];
+const INCREMENTAL_LOOKBACK_DAYS = 45;
+const INCREMENTAL_FUTURE_WINDOW_DAYS = 120;
 
 export type PublerSyncResult = {
   workspaceId: string;
@@ -18,6 +20,8 @@ export type PublerSyncResult = {
   hasMore: boolean;
   mode: "backfill" | "incremental";
   nextPage: number | null;
+  windowFrom: string | null;
+  windowTo: string | null;
 };
 
 export async function syncPublerPublicationRecordsForUser(
@@ -54,8 +58,11 @@ export async function syncPublerPublicationRecordsForUser(
   });
 
   const isBackfill = syncState.mode === PublicationSyncMode.BACKFILL;
-  const startPage = isBackfill ? syncState.nextPage : 0;
+  const startPage = syncState.nextPage;
   const pageBudget = isBackfill ? BACKFILL_PAGES_PER_RUN : INCREMENTAL_PAGES_PER_RUN;
+  const incrementalWindow = isBackfill
+    ? null
+    : buildIncrementalWindow(syncState.lastCompletedAt);
 
   let fetched = 0;
   let created = 0;
@@ -71,6 +78,8 @@ export async function syncPublerPublicationRecordsForUser(
         states: FULL_SYNC_STATES,
         page: pageNumber,
         limit: POSTS_PER_PAGE,
+        from: incrementalWindow?.from ?? undefined,
+        to: incrementalWindow?.to ?? undefined,
       });
 
       pagesProcessed += 1;
@@ -103,7 +112,7 @@ export async function syncPublerPublicationRecordsForUser(
         break;
       }
 
-      if (!isBackfill) {
+      if (!isBackfill && reachedLastPage) {
         await markIncrementalCompleted(userId, workspaceId);
         hasMore = false;
         nextPage = null;
@@ -145,6 +154,8 @@ export async function syncPublerPublicationRecordsForUser(
       hasMore,
       mode: isBackfill ? "backfill" : "incremental",
       nextPage,
+      windowFrom: incrementalWindow?.from.toISOString() ?? null,
+      windowTo: incrementalWindow?.to.toISOString() ?? null,
     };
   } catch (error) {
     await prisma.publicationSyncState.update({
@@ -344,10 +355,35 @@ async function markIncrementalCompleted(userId: string, workspaceId: string) {
     },
     data: {
       nextPage: 0,
+      lastCompletedAt: new Date(),
       lastRunAt: new Date(),
       lastError: null,
     },
   });
+}
+
+function buildIncrementalWindow(lastCompletedAt: Date | null) {
+  const now = new Date();
+  const anchor = lastCompletedAt ?? now;
+  const from = startOfDay(addDays(anchor, -INCREMENTAL_LOOKBACK_DAYS));
+  const to = endOfDay(addDays(now, INCREMENTAL_FUTURE_WINDOW_DAYS));
+
+  return {
+    from,
+    to,
+  };
+}
+
+function addDays(value: Date, days: number) {
+  return new Date(value.getTime() + days * 24 * 60 * 60 * 1000);
+}
+
+function startOfDay(value: Date) {
+  return new Date(value.getFullYear(), value.getMonth(), value.getDate(), 0, 0, 0, 0);
+}
+
+function endOfDay(value: Date) {
+  return new Date(value.getFullYear(), value.getMonth(), value.getDate(), 23, 59, 59, 999);
 }
 
 function didReachLastPage(

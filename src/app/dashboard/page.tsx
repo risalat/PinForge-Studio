@@ -76,8 +76,7 @@ export default async function DashboardPage() {
     <div className="space-y-8 text-[var(--dashboard-text)]">
       {!data.databaseReady ? (
         <div className="rounded-[30px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-6 text-[var(--dashboard-subtle)] shadow-[var(--dashboard-shadow-sm)]">
-          `DATABASE_URL` is not configured yet. The dashboard workflow will populate after the
-          database is connected and migrated.
+          `DATABASE_URL` is not configured yet.
         </div>
       ) : null}
 
@@ -87,7 +86,7 @@ export default async function DashboardPage() {
             Focus today
           </p>
           <h2 className="mt-3 text-3xl font-black tracking-[-0.04em] text-[var(--dashboard-text)]">
-            Operate intake, generation, and publishing from one full-width workspace.
+            Intake, generation, and publishing in one workspace.
           </h2>
           <div className="mt-6 grid gap-4 md:grid-cols-3">
             <FocusCard
@@ -119,8 +118,7 @@ export default async function DashboardPage() {
             <>
               <h2 className="mt-3 text-2xl font-black tracking-[-0.04em]">{latestJob.articleTitleSnapshot}</h2>
               <p className="mt-3 text-sm leading-7 text-white/82">
-                Status: {formatLabel(latestJob.status)}. Open the job to continue review and pin
-                generation, or jump straight into publishing if the outputs are ready.
+                {formatLabel(latestJob.status)}
               </p>
               <div className="mt-5 flex flex-wrap gap-3">
                 <Link
@@ -139,7 +137,7 @@ export default async function DashboardPage() {
             </>
           ) : (
             <p className="mt-3 text-sm leading-7 text-white/82">
-              New extension submissions will show up here once intake jobs start arriving.
+              No recent job yet.
             </p>
           )}
         </div>
@@ -190,7 +188,7 @@ export default async function DashboardPage() {
               {data.recentJobs.length === 0 ? (
                 <tr>
                   <td className="px-5 py-6 text-sm text-[var(--dashboard-subtle)]" colSpan={5}>
-                    No intake jobs yet. The extension will create review jobs via `POST /api/generate`.
+                    No jobs yet.
                   </td>
                 </tr>
               ) : (
@@ -237,7 +235,7 @@ function FocusCard({
     >
       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">{label}</p>
       <h3 className="mt-3 text-lg font-bold text-[var(--dashboard-text)]">{title}</h3>
-      <p className="mt-2 text-sm leading-6 text-[var(--dashboard-subtle)]">{detail}</p>
+      <p className="mt-2 text-sm text-[var(--dashboard-subtle)]">{detail}</p>
     </Link>
   );
 }

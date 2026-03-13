@@ -50,7 +50,7 @@ export default async function DashboardInboxPage() {
 
       {!databaseReady ? (
         <div className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-6 text-[var(--dashboard-subtle)] shadow-[var(--dashboard-shadow-sm)]">
-          `DATABASE_URL` is not configured yet. Inbox jobs will appear after the database is connected.
+          `DATABASE_URL` is not configured yet.
         </div>
       ) : (
         <section className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_360px]">
@@ -102,22 +102,19 @@ export default async function DashboardInboxPage() {
           <aside className="space-y-4">
             <div className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-5 shadow-[var(--dashboard-shadow-sm)]">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
-                Review sequence
+                Queue
               </p>
-              <h2 className="mt-2 text-xl font-bold">Move jobs cleanly into generation</h2>
-              <ol className="mt-4 space-y-3 text-sm leading-6 text-[var(--dashboard-subtle)]">
-                <li>1. Open new intake jobs and confirm the best source images.</li>
-                <li>2. Save keywords, tone hints, and preferred visuals before planning.</li>
-                <li>3. Create assisted or manual plans, then generate pins when they are ready.</li>
-                <li>4. Hand off generated pins to the publishing queue for upload and scheduling.</li>
-              </ol>
+              <h2 className="mt-2 text-xl font-bold">Jobs waiting on review</h2>
+              <div className="mt-4 grid gap-3 text-sm">
+                <QueueRow label="New intake" value={String(inboxJobs.filter((job) => job.status === "RECEIVED").length)} />
+                <QueueRow label="Reviewing" value={String(inboxJobs.filter((job) => job.status === "REVIEWING").length)} />
+                <QueueRow label="Ready to generate" value={String(inboxJobs.filter((job) => job.status === "READY_FOR_GENERATION").length)} />
+                <QueueRow label="Failed" value={String(inboxJobs.filter((job) => job.status === "FAILED").length)} />
+              </div>
             </div>
             <div className="rounded-[28px] bg-[linear-gradient(145deg,#0d5fff_0%,#2c7fff_100%)] p-5 text-white shadow-[var(--dashboard-shadow-accent)]">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/70">Jobs board</p>
-              <h2 className="mt-2 text-xl font-bold">Need broader workflow context?</h2>
-              <p className="mt-2 text-sm leading-6 text-white/80">
-                Switch to the full jobs workspace to compare review work with generated and published jobs.
-              </p>
+              <h2 className="mt-2 text-xl font-bold">See the full workflow</h2>
               <Link
                 href="/dashboard/jobs"
                 className="mt-4 inline-flex rounded-full bg-white px-4 py-2 text-sm font-semibold text-[var(--dashboard-accent)]"
@@ -182,5 +179,14 @@ function toneForStatus(status: string) {
     return "warning" as const;
   }
   return "neutral" as const;
+}
+
+function QueueRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-alt)] px-3 py-3">
+      <span className="font-semibold text-[var(--dashboard-text)]">{label}</span>
+      <span className="text-[var(--dashboard-subtle)]">{value}</span>
+    </div>
+  );
 }
 

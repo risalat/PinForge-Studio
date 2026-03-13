@@ -19,6 +19,7 @@ import {
   type PostPulseStatus,
 } from "@/lib/dashboard/postPulse";
 import { PostPulseWorkspaceControls } from "@/app/dashboard/post-pulse/PostPulseWorkspaceControls";
+import { PostPulseFreshPinsButton } from "@/app/dashboard/post-pulse/PostPulseFreshPinsButton";
 
 export default async function DashboardPostPulsePage({
   searchParams,
@@ -74,7 +75,7 @@ export default async function DashboardPostPulsePage({
 
       {!databaseReady ? (
         <div className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-6 text-[var(--dashboard-subtle)] shadow-[var(--dashboard-shadow-sm)]">
-          `DATABASE_URL` is not configured yet. Post Pulse will appear once the database is connected.
+          `DATABASE_URL` is not configured yet.
         </div>
       ) : (
         <section className="rounded-[32px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-6 shadow-[var(--dashboard-shadow-md)]">
@@ -89,7 +90,7 @@ export default async function DashboardPostPulsePage({
               <p className="mt-2 text-sm text-[var(--dashboard-muted)]">
                 {latestSyncAt
                   ? `Last Publer sync ${formatRelativeTime(latestSyncAt)}`
-                  : "No Publer sync yet. Sync to import scheduled and published pins."}
+                  : "No Publer sync yet."}
               </p>
             </div>
             <div className="flex flex-col items-end gap-3">
@@ -106,7 +107,7 @@ export default async function DashboardPostPulsePage({
 
           {records.length === 0 ? (
             <div className="mt-6 rounded-[24px] border border-dashed border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-6 text-sm text-[var(--dashboard-subtle)]">
-              No tracked posts yet. Sync Publer activity or generate pins in Studio to start building post-level history.
+              No tracked posts yet.
             </div>
           ) : (
             <div className="mt-6 overflow-hidden rounded-[24px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)]">
@@ -184,7 +185,17 @@ export default async function DashboardPostPulsePage({
                       </td>
                       <td className="px-5 py-4 align-top">
                         <div className="flex flex-wrap gap-2">
-                          {record.latestJobId ? (
+                          {record.freshnessStatus === "needs_fresh_pins" && record.latestJobId ? (
+                            <>
+                              <PostPulseFreshPinsButton postId={record.postId} />
+                              <Link
+                                href={`/dashboard/jobs/${record.latestJobId}`}
+                                className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)]"
+                              >
+                                Open latest job
+                              </Link>
+                            </>
+                          ) : record.latestJobId ? (
                             <>
                               <Link
                                 href={`/dashboard/jobs/${record.latestJobId}`}

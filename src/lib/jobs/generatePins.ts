@@ -223,6 +223,76 @@ export async function createIntakeJob(input: {
   };
 }
 
+export async function createFreshPinsJobFromPost(input: {
+  userId: string;
+  postId: string;
+}) {
+  const latestJob = await prisma.generationJob.findFirst({
+    where: {
+      userId: input.userId,
+      postId: input.postId,
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+    include: {
+      post: true,
+      sourceImages: {
+        orderBy: {
+          sortOrder: "asc",
+        },
+      },
+    },
+  });
+
+  if (!latestJob) {
+    throw new Error("No Studio job exists for this post yet.");
+  }
+
+  if (latestJob.sourceImages.length === 0) {
+    throw new Error("The latest Studio job has no reusable source images.");
+  }
+
+  const job = await prisma.generationJob.create({
+    data: {
+      userId: input.userId,
+      postId: latestJob.postId,
+      postUrlSnapshot: latestJob.postUrlSnapshot,
+      articleTitleSnapshot: latestJob.articleTitleSnapshot,
+      domainSnapshot: latestJob.domainSnapshot,
+      status: GenerationJobStatus.REVIEWING,
+      globalKeywords: latestJob.globalKeywords,
+      titleStyle: latestJob.titleStyle,
+      toneHint: latestJob.toneHint,
+      listCountHint: latestJob.listCountHint,
+      titleVariationCount: latestJob.titleVariationCount,
+      sourceImages: {
+        create: latestJob.sourceImages.map((image) => ({
+          url: image.url,
+          alt: image.alt,
+          caption: image.caption,
+          nearestHeading: image.nearestHeading,
+          sectionHeadingPath: image.sectionHeadingPath,
+          surroundingTextSnippet: image.surroundingTextSnippet,
+          sortOrder: image.sortOrder,
+          isSelected: image.isSelected,
+          isPreferred: image.isPreferred,
+        })),
+      },
+    },
+  });
+
+  await recordJobMilestone(job.id, GenerationJobStatus.RECEIVED, "Fresh-pin intake created from Post Pulse.");
+  await recordJobMilestone(job.id, GenerationJobStatus.REVIEWING, "Ready for review from Post Pulse.");
+
+  return {
+    jobId: job.id,
+    postId: latestJob.postId,
+    status: job.status,
+    dashboardUrl: new URL(`/dashboard/jobs/${job.id}`, env.appUrl).toString(),
+  };
+}
+
 export async function saveJobImageSelections(input: {
   userId: string;
   jobId: string;

@@ -66,7 +66,7 @@ export default async function DashboardIntegrationsPage() {
 
       {!databaseReady ? (
         <div className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-6 text-[var(--dashboard-subtle)] shadow-[var(--dashboard-shadow-sm)]">
-          `DATABASE_URL` is not configured yet. Integration settings will work after the database is connected.
+          `DATABASE_URL` is not configured yet.
         </div>
       ) : (
         <SettingsManager initialSettings={settings} />
@@ -89,16 +89,14 @@ function IntegrationStat({
       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">{label}</p>
       <p className="mt-3 text-2xl font-bold">{value}</p>
       <div
-        className={`mt-4 inline-flex rounded-full px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] ${
+        className={`mt-4 h-1.5 rounded-full ${
           tone === "good"
-            ? "bg-[var(--dashboard-success-soft)] text-[var(--dashboard-success-ink)]"
+            ? "bg-[var(--dashboard-success-border)]"
             : tone === "warning"
-              ? "bg-[var(--dashboard-warning-soft)] text-[var(--dashboard-warning-ink)]"
-              : "bg-[var(--dashboard-panel-alt)] text-[var(--dashboard-subtle)]"
+              ? "bg-[var(--dashboard-warning-border)]"
+              : "bg-[var(--dashboard-line)]"
         }`}
-      >
-        {tone === "good" ? "Ready" : tone === "warning" ? "Needs setup" : "Info"}
-      </div>
+      />
     </div>
   );
 }

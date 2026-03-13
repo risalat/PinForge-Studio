@@ -2,10 +2,18 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import { JobReviewManager } from "@/app/dashboard/jobs/[jobId]/JobReviewManager";
+import { WorkspaceScopeMismatchCard } from "@/components/dashboard/WorkspaceScopeMismatchCard";
 import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
 import { requireAuthenticatedDashboardUser } from "@/lib/auth/dashboardSession";
+import { matchesAllowedDomain } from "@/lib/dashboard/domainScope";
+import { getDashboardWorkspaceScope } from "@/lib/dashboard/workspaceScope";
 import { isDatabaseConfigured } from "@/lib/env";
 import { getJobForUser } from "@/lib/jobs/generatePins";
+import {
+  getIntegrationSettingsSummary,
+  getWorkspaceAllowedDomainsForUserId,
+  getWorkspaceProfileForUserId,
+} from "@/lib/settings/integrationSettings";
 import { resolveStoredAssetUrl } from "@/lib/storage/assetUrl";
 import { getTemplateLibraryEntries } from "@/lib/templates/library";
 import { parsePlanRenderContext } from "@/lib/templates/planRenderContext";
@@ -30,9 +38,28 @@ export default async function DashboardJobDetailsPage({ params }: PageProps) {
   }
 
   const user = await getOrCreateDashboardUser();
-  const job = await getJobForUser(jobId, user.id).catch(() => null);
+  const [job, settings] = await Promise.all([
+    getJobForUser(jobId, user.id).catch(() => null),
+    getIntegrationSettingsSummary().catch(() => null),
+  ]);
   if (!job) {
     notFound();
+  }
+
+  const activeWorkspaceId = await getDashboardWorkspaceScope(settings?.publerWorkspaceId || "");
+  const [allowedDomains, activeWorkspaceProfile] = await Promise.all([
+    getWorkspaceAllowedDomainsForUserId(user.id, activeWorkspaceId),
+    getWorkspaceProfileForUserId(user.id, activeWorkspaceId),
+  ]);
+  const isInActiveScope = matchesAllowedDomain(job.domainSnapshot, allowedDomains);
+
+  if (!isInActiveScope) {
+    return (
+      <WorkspaceScopeMismatchCard
+        domain={job.domainSnapshot}
+        workspaceName={activeWorkspaceProfile?.workspaceName ?? "the selected workspace"}
+      />
+    );
   }
 
   const templates = getTemplateLibraryEntries().map((template) => ({

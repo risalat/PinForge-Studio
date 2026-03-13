@@ -10,6 +10,8 @@
     "postinstall": "prisma generate",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
+    "storage:audit": "node scripts/storage-audit.mjs",
+    "storage:cleanup-temp": "node scripts/storage-cleanup-temp.mjs",
     "playwright:install": "playwright install chromium",
     "template:qa": "node scripts/template-visual-qa.mjs"
   },

@@ -12,6 +12,9 @@ This document defines the remaining dashboard and operations improvements after:
 
 It is the execution order for the next rounds of work.
 
+Status:
+- completed
+
 ## Current baseline
 
 Already implemented:
@@ -25,12 +28,7 @@ Already implemented:
 - profile-backed default account/board data model
 
 Still missing:
-- clearer publishing UX around profile defaults
-- true incremental Publer sync
-- direct `Post Pulse` actions
-- stronger profile-aware segregation rules in a few areas
-- storage hygiene / housekeeping tooling
-- final dashboard copy cleanup
+- no open items in this roadmap version
 
 ## Product principles
 
@@ -403,24 +401,31 @@ Last. This is polish after the behavior is settled.
 
 ### Phase A
 - Profile-level publishing UX
+- completed
 
 ### Phase B
 - Smart schedule spacing
+- completed
 
 ### Phase C
 - Publer sync optimization
+- completed
 
 ### Phase D
 - Post Pulse actions
+- completed
 
 ### Phase E
 - Stronger workspace segregation policy completion
+- completed
 
 ### Phase F
 - Data hygiene and housekeeping
+- completed
 
 ### Phase G
 - UI cleanup pass
+- completed
 
 ## Rollout notes
 
@@ -431,11 +436,4 @@ Last. This is polish after the behavior is settled.
 
 ## Immediate next execution target
 
-Next implementation should be:
-- `Profile-level publishing UX`
-
-Reason:
-- the profile model now exists
-- publishing is the first place where profile defaults need to feel explicit and trustworthy
-- it closes the loop on the workspace-profile work already shipped
-- smart schedule spacing should follow immediately after, on top of that improved publish flow
+This roadmap is fully implemented.

@@ -153,6 +153,8 @@ export class PublerClient {
     states?: string[];
     page?: number;
     limit?: number;
+    from?: string | Date;
+    to?: string | Date;
   }): Promise<PublerPostPage> {
     const params = new URLSearchParams();
     for (const state of input?.states ?? []) {
@@ -165,6 +167,12 @@ export class PublerClient {
     }
     if (input?.limit) {
       params.set("limit", String(input.limit));
+    }
+    if (input?.from) {
+      params.set("from", formatDateFilter(input.from));
+    }
+    if (input?.to) {
+      params.set("to", formatDateFilter(input.to));
     }
 
     const query = params.toString();
@@ -449,6 +457,15 @@ function toOptionalNumber(value: unknown) {
   }
 
   return null;
+}
+
+function formatDateFilter(value: string | Date) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    throw new Error("Provide a valid Publer posts date filter.");
+  }
+
+  return date.toISOString().slice(0, 10);
 }
 
 function toPublerPost(value: Record<string, unknown>): PublerPost | null {

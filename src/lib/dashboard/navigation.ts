@@ -1,7 +1,16 @@
 export type DashboardNavItem = {
   label: string;
   href: string;
-  icon: "overview" | "inbox" | "jobs" | "publishing" | "pulse" | "library" | "keys" | "integrations";
+  icon:
+    | "overview"
+    | "inbox"
+    | "jobs"
+    | "publishing"
+    | "pulse"
+    | "library"
+    | "keys"
+    | "integrations"
+    | "housekeeping";
 };
 
 export const dashboardNavigation = [
@@ -26,6 +35,7 @@ export const dashboardNavigation = [
     heading: "System",
     items: [
       { label: "Integrations", href: "/dashboard/integrations", icon: "integrations" },
+      { label: "Housekeeping", href: "/dashboard/housekeeping", icon: "housekeeping" },
     ],
   },
 ] satisfies Array<{
@@ -151,6 +161,18 @@ export function getDashboardPageTitle(pathname: string) {
       primaryActionHref: "/dashboard",
       secondaryActionLabel: "Publishing queue",
       secondaryActionHref: "/dashboard/publishing",
+    };
+  }
+
+  if (pathname === "/dashboard/housekeeping") {
+    return {
+      eyebrow: "Housekeeping",
+      title: "Storage and retention controls",
+      description: "Run storage audits and clean stale temp assets from one place.",
+      primaryActionLabel: "Integrations",
+      primaryActionHref: "/dashboard/integrations",
+      secondaryActionLabel: "Overview",
+      secondaryActionHref: "/dashboard",
     };
   }
 
