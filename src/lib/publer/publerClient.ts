@@ -385,7 +385,7 @@ function extractArray(value: unknown): Record<string, unknown>[] {
     return [];
   }
 
-  const keys = ["data", "results", "items"];
+  const keys = ["posts", "data", "results", "items"];
   for (const key of keys) {
     const candidate = value[key];
     if (Array.isArray(candidate)) {
