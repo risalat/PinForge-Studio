@@ -6,6 +6,7 @@ import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
 import { requireAuthenticatedDashboardUser } from "@/lib/auth/dashboardSession";
 import { isDatabaseConfigured } from "@/lib/env";
 import { getJobForUser } from "@/lib/jobs/generatePins";
+import { resolveStoredAssetUrl } from "@/lib/storage/assetUrl";
 import { getTemplateLibraryEntries } from "@/lib/templates/library";
 import { parsePlanRenderContext } from "@/lib/templates/planRenderContext";
 import { templateVisualPresets } from "@/lib/templates/types";
@@ -128,7 +129,10 @@ export default async function DashboardJobDetailsPage({ params }: PageProps) {
             id: pin.id,
             planId: pin.planId,
             templateId: pin.templateId,
-            exportPath: pin.exportPath,
+            exportPath: resolveStoredAssetUrl({
+              storageKey: pin.storageKey,
+              exportPath: pin.exportPath,
+            }),
             mediaStatus: pin.publerMedia?.status ?? "PENDING",
             title: pin.pinCopy?.title ?? null,
             description: pin.pinCopy?.description ?? null,

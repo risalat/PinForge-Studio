@@ -12,6 +12,7 @@ import {
   scheduleJobPins,
   uploadJobPinsToPubler,
 } from "@/lib/jobs/generatePins";
+import { resolveStoredAssetUrl } from "@/lib/storage/assetUrl";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -173,7 +174,10 @@ function serializePin(pin: Awaited<ReturnType<typeof getJobForUser>>["generatedP
   return {
     id: pin.id,
     templateId: pin.templateId,
-    exportPath: pin.exportPath,
+    exportPath: resolveStoredAssetUrl({
+      storageKey: pin.storageKey,
+      exportPath: pin.exportPath,
+    }),
     mediaStatus: pin.publerMedia?.status ?? "PENDING",
     mediaId: pin.publerMedia?.mediaId ?? null,
     mediaError: pin.publerMedia?.errorMessage ?? null,

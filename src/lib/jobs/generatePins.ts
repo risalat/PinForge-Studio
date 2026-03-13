@@ -38,7 +38,7 @@ import { buildSchedulePreview } from "@/lib/jobs/schedulePreview";
 import { renderPin } from "@/lib/renderer/renderPin";
 import { getIntegrationSettingsForUserId } from "@/lib/settings/integrationSettings";
 import { getStorageProvider } from "@/lib/storage";
-import { buildStorageAssetUrl } from "@/lib/storage/assetUrl";
+import { buildStorageAssetUrl, resolveStoredAssetUrl } from "@/lib/storage/assetUrl";
 import {
   parsePlanRenderContext,
   serializePlanRenderContext,
@@ -861,6 +861,8 @@ export async function uploadJobPinsToPubler(input: {
   const result = createStepResultAccumulator();
 
   for (const pin of selectedPins) {
+    const pinAssetUrl = getPinAssetUrl(pin);
+
     if (pin.publerMedia?.status === MediaUploadStatus.UPLOADED && pin.publerMedia.mediaId) {
       result.skipped += 1;
       continue;
@@ -875,7 +877,7 @@ export async function uploadJobPinsToPubler(input: {
           where: { generatedPinId: pin.id },
           update: {
             status: MediaUploadStatus.UPLOADED,
-            sourceUrl: pin.exportPath,
+            sourceUrl: pinAssetUrl,
             uploadJobId: reusableMedia.uploadJobId,
             mediaId: reusableMedia.mediaId,
             rawResponse: reusableMedia.rawResponse as Prisma.InputJsonValue,
@@ -884,7 +886,7 @@ export async function uploadJobPinsToPubler(input: {
           create: {
             generatedPinId: pin.id,
             status: MediaUploadStatus.UPLOADED,
-            sourceUrl: pin.exportPath,
+            sourceUrl: pinAssetUrl,
             uploadJobId: reusableMedia.uploadJobId,
             mediaId: reusableMedia.mediaId,
             rawResponse: reusableMedia.rawResponse as Prisma.InputJsonValue,
@@ -899,19 +901,19 @@ export async function uploadJobPinsToPubler(input: {
         where: { generatedPinId: pin.id },
         update: {
           status: MediaUploadStatus.UPLOADING,
-          sourceUrl: pin.exportPath,
+          sourceUrl: pinAssetUrl,
           errorMessage: null,
         },
         create: {
           generatedPinId: pin.id,
           status: MediaUploadStatus.UPLOADING,
-          sourceUrl: pin.exportPath,
+          sourceUrl: pinAssetUrl,
         },
       });
 
       const mediaJob = await uploadMediaWithQueueHandling({
         client: publerClient,
-        imageUrl: pin.exportPath,
+        imageUrl: pinAssetUrl,
         options: {
           inLibrary: true,
           directUpload: true,
@@ -949,13 +951,13 @@ export async function uploadJobPinsToPubler(input: {
         where: { generatedPinId: pin.id },
         update: {
           status: MediaUploadStatus.FAILED,
-          sourceUrl: pin.exportPath,
+          sourceUrl: pinAssetUrl,
           errorMessage: reason,
         },
         create: {
           generatedPinId: pin.id,
           status: MediaUploadStatus.FAILED,
-          sourceUrl: pin.exportPath,
+          sourceUrl: pinAssetUrl,
           errorMessage: reason,
         },
       });
@@ -2259,6 +2261,13 @@ async function findReusableUploadedMedia(
 
 function getPinAssetKey(pin: Pick<WorkflowJob["generatedPins"][number], "storageKey" | "exportPath">) {
   return pin.storageKey?.trim() || pin.exportPath.trim();
+}
+
+function getPinAssetUrl(pin: Pick<WorkflowJob["generatedPins"][number], "storageKey" | "exportPath">) {
+  return resolveStoredAssetUrl({
+    storageKey: pin.storageKey,
+    exportPath: pin.exportPath,
+  });
 }
 
 async function deleteStoredAssetsForPins(

@@ -5,6 +5,7 @@ import { requireAuthenticatedDashboardUser } from "@/lib/auth/dashboardSession";
 import { isDatabaseConfigured } from "@/lib/env";
 import { getJobForUser } from "@/lib/jobs/generatePins";
 import { getIntegrationSettingsSummary } from "@/lib/settings/integrationSettings";
+import { resolveStoredAssetUrl } from "@/lib/storage/assetUrl";
 
 type PageProps = {
   params: Promise<{
@@ -79,7 +80,10 @@ export default async function DashboardJobPublishPage({ params }: PageProps) {
           pins={job.generatedPins.map((pin) => ({
             id: pin.id,
             templateId: pin.templateId,
-            exportPath: pin.exportPath,
+            exportPath: resolveStoredAssetUrl({
+              storageKey: pin.storageKey,
+              exportPath: pin.exportPath,
+            }),
             mediaStatus: pin.publerMedia?.status ?? "PENDING",
             mediaId: pin.publerMedia?.mediaId ?? null,
             mediaError: pin.publerMedia?.errorMessage ?? null,
