@@ -20,43 +20,74 @@ export function PostPulseSyncButton({ workspaceId }: { workspaceId: string }) {
       try {
         setFeedback(null);
         setError(null);
-        const response = await fetch("/api/dashboard/post-pulse/sync", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            workspaceId,
-          }),
-        });
-        const rawText = await response.text();
         type SyncResponse = {
           ok?: boolean;
           error?: string;
-          result?: {
+          result?: SyncResult;
+        };
+        type SyncResult = {
             fetched: number;
             created: number;
             updated: number;
-          };
+            pagesProcessed: number;
+            hasMore: boolean;
+            mode: "backfill" | "incremental";
+            nextPage: number | null;
         };
-        let data: SyncResponse | null = null;
+        let totalFetched = 0;
+        let totalCreated = 0;
+        let totalUpdated = 0;
+        let passCount = 0;
+        let hasMore = false;
+        let mode: SyncResult["mode"] = "incremental";
 
-        try {
-          data = rawText ? (JSON.parse(rawText) as SyncResponse) : null;
-        } catch {
-          data = null;
-        }
-
-        if (!response.ok || !data?.ok || !data.result) {
-          throw new Error(
-            data?.error ??
-              rawText?.trim() ??
-              "Unable to sync Publer activity.",
+        do {
+          passCount += 1;
+          setFeedback(
+            passCount === 1
+              ? "Syncing Publer activity..."
+              : `Continuing Publer history sync (pass ${passCount})...`,
           );
-        }
+
+          const response = await fetch("/api/dashboard/post-pulse/sync", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              workspaceId,
+            }),
+          });
+          const rawText = await response.text();
+          let data: SyncResponse | null = null;
+
+          try {
+            data = rawText ? (JSON.parse(rawText) as SyncResponse) : null;
+          } catch {
+            data = null;
+          }
+
+          if (!response.ok || !data?.ok || !data.result) {
+            throw new Error(
+              data?.error ??
+                rawText?.trim() ??
+                "Unable to sync Publer activity.",
+            );
+          }
+
+          totalFetched += data.result.fetched;
+          totalCreated += data.result.created;
+          totalUpdated += data.result.updated;
+          hasMore = data.result.hasMore;
+          mode = data.result.mode;
+        } while (hasMore && passCount < 12);
 
         setFeedback(
-          `Synced ${data.result.fetched} Publer post${data.result.fetched === 1 ? "" : "s"} (${data.result.created} new, ${data.result.updated} updated).`,
+          hasMore
+            ? `Partially synced ${totalFetched} Publer posts (${totalCreated} new, ${totalUpdated} updated). More history remains; click again to continue.`
+            : mode === "backfill" && passCount > 1
+              ? `Backfill complete. Synced ${totalFetched} Publer posts across ${passCount} passes (${totalCreated} new, ${totalUpdated} updated).`
+              : `Synced ${totalFetched} Publer post${totalFetched === 1 ? "" : "s"} (${totalCreated} new, ${totalUpdated} updated).`,
         );
         router.refresh();
       } catch (syncError) {

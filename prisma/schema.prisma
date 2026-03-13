@@ -69,6 +69,11 @@ enum PublicationRecordState {
   OTHER
 }
 
+enum PublicationSyncMode {
+  BACKFILL
+  INCREMENTAL
+}
+
 model User {
   id                  String   @id @default(cuid())
   authUserId          String?  @unique
@@ -78,6 +83,7 @@ model User {
   generationJobs      GenerationJob[]
   integrationSettings UserIntegrationSettings?
   publicationRecords  PublicationRecord[]
+  publicationSyncStates PublicationSyncState[]
 }
 
 model Post {
@@ -219,6 +225,23 @@ model PublicationRecord {
   @@index([userId, syncedAt])
   @@index([userId, providerWorkspaceId, syncedAt])
   @@index([generatedPinId])
+}
+
+model PublicationSyncState {
+  id                String              @id @default(cuid())
+  userId            String
+  workspaceId       String
+  mode              PublicationSyncMode @default(BACKFILL)
+  nextPage          Int                 @default(0)
+  lastCompletedAt   DateTime?
+  lastRunAt         DateTime?
+  lastError         String?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  user              User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, workspaceId])
+  @@index([userId, mode, updatedAt])
 }
 
 model Template {
