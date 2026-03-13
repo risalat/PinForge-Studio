@@ -1,7 +1,7 @@
 export type DashboardNavItem = {
   label: string;
   href: string;
-  icon: "overview" | "inbox" | "jobs" | "publishing" | "pulse" | "library" | "keys" | "integrations" | "settings";
+  icon: "overview" | "inbox" | "jobs" | "publishing" | "pulse" | "library" | "keys" | "integrations";
 };
 
 export const dashboardNavigation = [
@@ -26,7 +26,6 @@ export const dashboardNavigation = [
     heading: "System",
     items: [
       { label: "Integrations", href: "/dashboard/integrations", icon: "integrations" },
-      { label: "Settings", href: "/dashboard/settings", icon: "settings" },
     ],
   },
 ] satisfies Array<{
@@ -148,8 +147,8 @@ export function getDashboardPageTitle(pathname: string) {
       eyebrow: "Integrations",
       title: "Provider connections",
       description: "Manage Publer, AI, and other service connections.",
-      primaryActionLabel: "Open settings",
-      primaryActionHref: "/dashboard/settings",
+      primaryActionLabel: "Overview",
+      primaryActionHref: "/dashboard",
       secondaryActionLabel: "Publishing queue",
       secondaryActionHref: "/dashboard/publishing",
     };
@@ -157,11 +156,11 @@ export function getDashboardPageTitle(pathname: string) {
 
   if (pathname === "/dashboard/settings") {
     return {
-      eyebrow: "Settings",
-      title: "Studio configuration",
-      description: "Configure workspace defaults and system behavior.",
-      primaryActionLabel: "Open integrations",
-      primaryActionHref: "/dashboard/integrations",
+      eyebrow: "Integrations",
+      title: "Provider connections",
+      description: "Manage Publer, AI, and other service connections.",
+      primaryActionLabel: "Overview",
+      primaryActionHref: "/dashboard",
       secondaryActionLabel: "Overview",
       secondaryActionHref: "/dashboard",
     };

@@ -2,8 +2,8 @@ import Link from "next/link";
 import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
 import { isDatabaseConfigured } from "@/lib/env";
 import {
-  getEffectivePublerAllowedDomainsForUserId,
   getIntegrationSettingsSummary,
+  getWorkspaceAllowedDomainsForUserId,
 } from "@/lib/settings/integrationSettings";
 import { getDashboardWorkspaceScope } from "@/lib/dashboard/workspaceScope";
 import {
@@ -30,7 +30,9 @@ export default async function DashboardPostPulsePage({
   const resolvedSearchParams = (await searchParams) ?? {};
   const settings = user ? await getIntegrationSettingsSummary() : null;
   const selectedWorkspaceId = await getDashboardWorkspaceScope(settings?.publerWorkspaceId || "");
-  const allowedDomains = user ? await getEffectivePublerAllowedDomainsForUserId(user.id) : [];
+  const allowedDomains = user
+    ? await getWorkspaceAllowedDomainsForUserId(user.id, selectedWorkspaceId)
+    : [];
   const selectedFilter = normalizePostPulseFilter(resolvedSearchParams.filter);
   const selectedSort = normalizePostPulseSort(resolvedSearchParams.sort);
   const baseRecords = user

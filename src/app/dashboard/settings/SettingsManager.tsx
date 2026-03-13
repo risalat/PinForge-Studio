@@ -6,8 +6,13 @@ import type {
   DashboardAiModelsResponse,
   DashboardPublerOptionsResponse,
   IntegrationSettingsSummary,
+  WorkspaceProfileSummary,
 } from "@/lib/types";
-import type { PublerWorkspace } from "@/lib/publer/publerClient";
+import type {
+  PinterestBoard,
+  PublerAccount,
+  PublerWorkspace,
+} from "@/lib/publer/publerClient";
 
 const aiProviderOptions: Array<{ value: AIProvider; label: string }> = [
   { value: "gemini", label: "Google Gemini" },
@@ -16,17 +21,36 @@ const aiProviderOptions: Array<{ value: AIProvider; label: string }> = [
   { value: "custom_endpoint", label: "Custom endpoint" },
 ];
 
+type WorkspaceProfileDraft = {
+  workspaceId: string;
+  workspaceName: string;
+  allowedDomainsInput: string;
+  isDefault: boolean;
+  defaultAccountId: string;
+  defaultBoardId: string;
+};
+
 export function SettingsManager({
   initialSettings,
 }: {
   initialSettings: IntegrationSettingsSummary;
 }) {
   const [publerApiKey, setPublerApiKey] = useState("");
-  const [publerWorkspaceId, setPublerWorkspaceId] = useState(initialSettings.publerWorkspaceId);
-  const [publerAllowedDomainsInput, setPublerAllowedDomainsInput] = useState(
-    initialSettings.publerAllowedDomains.join(", "),
+  const [workspaceProfiles, setWorkspaceProfiles] = useState<WorkspaceProfileDraft[]>(
+    initialSettings.workspaceProfiles.map(toWorkspaceProfileDraft),
   );
-  const [publerWorkspaces, setPublerWorkspaces] = useState<PublerWorkspace[]>([]);
+  const [publerWorkspaces, setPublerWorkspaces] = useState<PublerWorkspace[]>(
+    initialSettings.workspaceProfiles.map((profile) => ({
+      id: profile.workspaceId,
+      name: profile.workspaceName,
+    })),
+  );
+  const [publerAccountsByWorkspace, setPublerAccountsByWorkspace] = useState<
+    Record<string, PublerAccount[]>
+  >({});
+  const [publerBoardsByWorkspaceAccount, setPublerBoardsByWorkspaceAccount] = useState<
+    Record<string, PinterestBoard[]>
+  >({});
   const [aiProvider, setAiProvider] = useState<AIProvider>(initialSettings.aiProvider);
   const [storedAiProvider, setStoredAiProvider] = useState<AIProvider>(initialSettings.aiProvider);
   const [aiApiKey, setAiApiKey] = useState("");
@@ -56,6 +80,176 @@ export function SettingsManager({
 
   const canLoadPublerWorkspaces = publerApiKey.trim() !== "" || canUseStoredPublerKey;
 
+  function addWorkspaceProfile() {
+    setWorkspaceProfiles((current) => {
+      const firstAvailableWorkspace = publerWorkspaces.find(
+        (workspace) => !current.some((profile) => profile.workspaceId === workspace.id),
+      );
+
+      return [
+        ...current,
+        {
+          workspaceId: firstAvailableWorkspace?.id ?? "",
+          workspaceName: firstAvailableWorkspace?.name ?? "",
+          allowedDomainsInput: "",
+          isDefault: current.length === 0,
+          defaultAccountId: "",
+          defaultBoardId: "",
+        },
+      ];
+    });
+  }
+
+  function updateWorkspaceProfile<K extends keyof WorkspaceProfileDraft>(
+    index: number,
+    key: K,
+    value: WorkspaceProfileDraft[K],
+  ) {
+    setWorkspaceProfiles((current) =>
+      current.map((profile, currentIndex) => {
+        if (currentIndex !== index) {
+          return profile;
+        }
+
+        if (key === "workspaceId") {
+          const workspaceId = String(value);
+          const workspaceName = resolveWorkspaceName(workspaceId, publerWorkspaces, profile.workspaceName);
+          return {
+            ...profile,
+            workspaceId,
+            workspaceName,
+          };
+        }
+
+        return {
+          ...profile,
+          [key]: value,
+        };
+      }),
+    );
+  }
+
+  async function loadWorkspaceProfileOptions(
+    index: number,
+    workspaceId: string,
+    accountId?: string,
+  ) {
+    if (!workspaceId || !canLoadPublerWorkspaces) {
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/dashboard/settings/publer-options", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          apiKey: publerApiKey || undefined,
+          workspaceId,
+          accountId: accountId || undefined,
+        }),
+      });
+      const json = (await response.json()) as DashboardPublerOptionsResponse;
+
+      if (!json.ok) {
+        throw new Error(json.error ?? "Unable to load workspace defaults.");
+      }
+
+      const nextAccounts = json.accounts ?? [];
+      const nextBoards = json.boards ?? [];
+      const resolvedAccountId = json.selectedAccountId ?? accountId ?? "";
+
+      setPublerAccountsByWorkspace((current) => ({
+        ...current,
+        [workspaceId]: nextAccounts,
+      }));
+      setPublerBoardsByWorkspaceAccount((current) => ({
+        ...current,
+        [getWorkspaceBoardCacheKey(workspaceId, resolvedAccountId)]: nextBoards,
+      }));
+      setWorkspaceProfiles((current) =>
+        current.map((profile, currentIndex) => {
+          if (currentIndex !== index) {
+            return profile;
+          }
+
+          return {
+            ...profile,
+            workspaceId,
+            workspaceName: resolveWorkspaceName(workspaceId, publerWorkspaces, profile.workspaceName),
+            defaultAccountId: resolvedAccountId,
+            defaultBoardId:
+              profile.defaultBoardId && nextBoards.some((board) => board.id === profile.defaultBoardId)
+                ? profile.defaultBoardId
+                : nextBoards[0]?.id ?? "",
+          };
+        }),
+      );
+    } catch (loadError) {
+      setError(
+        loadError instanceof Error ? loadError.message : "Unable to load workspace defaults.",
+      );
+    }
+  }
+
+  function handleWorkspaceSelection(index: number, workspaceId: string) {
+    setWorkspaceProfiles((current) =>
+      current.map((profile, currentIndex) =>
+        currentIndex === index
+          ? {
+              ...profile,
+              workspaceId,
+              workspaceName: resolveWorkspaceName(workspaceId, publerWorkspaces, profile.workspaceName),
+              defaultAccountId: "",
+              defaultBoardId: "",
+            }
+          : profile,
+      ),
+    );
+
+    void loadWorkspaceProfileOptions(index, workspaceId);
+  }
+
+  function handleWorkspaceAccountSelection(index: number, accountId: string) {
+    const workspaceId = workspaceProfiles[index]?.workspaceId ?? "";
+    setWorkspaceProfiles((current) =>
+      current.map((profile, currentIndex) =>
+        currentIndex === index
+          ? {
+              ...profile,
+              defaultAccountId: accountId,
+              defaultBoardId: "",
+            }
+          : profile,
+      ),
+    );
+
+    void loadWorkspaceProfileOptions(index, workspaceId, accountId);
+  }
+
+  function setDefaultWorkspaceProfile(index: number) {
+    setWorkspaceProfiles((current) =>
+      current.map((profile, currentIndex) => ({
+        ...profile,
+        isDefault: currentIndex === index,
+      })),
+    );
+  }
+
+  function removeWorkspaceProfile(index: number) {
+    setWorkspaceProfiles((current) => {
+      const nextProfiles = current.filter((_, currentIndex) => currentIndex !== index);
+      if (nextProfiles.length > 0 && !nextProfiles.some((profile) => profile.isDefault)) {
+        nextProfiles[0] = {
+          ...nextProfiles[0],
+          isDefault: true,
+        };
+      }
+      return nextProfiles;
+    });
+  }
+
   async function loadPublerWorkspaces(options?: { silent?: boolean }) {
     if (!canLoadPublerWorkspaces) {
       return;
@@ -75,7 +269,7 @@ export function SettingsManager({
         },
         body: JSON.stringify({
           apiKey: publerApiKey || undefined,
-          workspaceId: publerWorkspaceId || undefined,
+          workspaceId: workspaceProfiles.find((profile) => profile.isDefault)?.workspaceId || undefined,
         }),
       });
       const json = (await response.json()) as DashboardPublerOptionsResponse;
@@ -85,14 +279,8 @@ export function SettingsManager({
       }
 
       const nextWorkspaces = json.workspaces ?? [];
-      const nextWorkspaceId =
-        json.selectedWorkspaceId ??
-        (publerWorkspaceId && nextWorkspaces.some((workspace) => workspace.id === publerWorkspaceId)
-          ? publerWorkspaceId
-          : nextWorkspaces[0]?.id ?? "");
-
       setPublerWorkspaces(nextWorkspaces);
-      setPublerWorkspaceId(nextWorkspaceId);
+      setWorkspaceProfiles((current) => syncProfileNames(current, nextWorkspaces));
 
       if (!options?.silent) {
         setSuccess(
@@ -177,8 +365,14 @@ export function SettingsManager({
         },
         body: JSON.stringify({
           publerApiKey,
-          publerWorkspaceId,
-          publerAllowedDomains: parseAllowedDomains(publerAllowedDomainsInput),
+          workspaceProfiles: workspaceProfiles.map((profile) => ({
+            workspaceId: profile.workspaceId,
+            workspaceName: resolveWorkspaceName(profile.workspaceId, publerWorkspaces, profile.workspaceName),
+            allowedDomains: parseAllowedDomains(profile.allowedDomainsInput),
+            defaultAccountId: profile.defaultAccountId,
+            defaultBoardId: profile.defaultBoardId,
+            isDefault: profile.isDefault,
+          })),
           aiProvider,
           aiApiKey,
           aiModel,
@@ -199,8 +393,7 @@ export function SettingsManager({
       setHasStoredAiKey(json.settings.hasAiApiKey);
       setCanUseStoredPublerKey(json.settings.canUsePublerApiKey);
       setCanUseStoredAiKey(json.settings.canUseAiApiKey);
-      setPublerWorkspaceId(json.settings.publerWorkspaceId);
-      setPublerAllowedDomainsInput(json.settings.publerAllowedDomains.join(", "));
+      setWorkspaceProfiles(json.settings.workspaceProfiles.map(toWorkspaceProfileDraft));
       setStoredAiProvider(json.settings.aiProvider);
       setPublerCredentialMessage(json.settings.publerCredentialMessage);
       setAiCredentialMessage(json.settings.aiCredentialMessage);
@@ -246,6 +439,25 @@ export function SettingsManager({
     };
   }, [canLoadPublerWorkspaces, publerWorkspaces.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    workspaceProfiles.forEach((profile, index) => {
+      if (!profile.workspaceId) {
+        return;
+      }
+
+      const accountsLoaded = Boolean(publerAccountsByWorkspace[profile.workspaceId]);
+      const boardsLoaded = Boolean(
+        publerBoardsByWorkspaceAccount[
+          getWorkspaceBoardCacheKey(profile.workspaceId, profile.defaultAccountId)
+        ],
+      );
+
+      if (!accountsLoaded || (profile.defaultAccountId && !boardsLoaded)) {
+        void loadWorkspaceProfileOptions(index, profile.workspaceId, profile.defaultAccountId);
+      }
+    });
+  }, [workspaceProfiles, publerAccountsByWorkspace, publerBoardsByWorkspaceAccount]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <div className="space-y-6">
       <section className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-6 shadow-[var(--dashboard-shadow-sm)]">
@@ -283,42 +495,116 @@ export function SettingsManager({
         <div className="mt-5 rounded-[24px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <label className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
-              Default Publer workspace
+              Workspace profiles
             </label>
-            <button
-              type="button"
-              onClick={() => void loadPublerWorkspaces()}
-              disabled={isLoadingPublerWorkspaces || !canLoadPublerWorkspaces}
-              className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] disabled:opacity-60"
-            >
-              {isLoadingPublerWorkspaces ? "Loading..." : "Load workspaces"}
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => void loadPublerWorkspaces()}
+                disabled={isLoadingPublerWorkspaces || !canLoadPublerWorkspaces}
+                className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] disabled:opacity-60"
+              >
+                {isLoadingPublerWorkspaces ? "Loading..." : "Load workspaces"}
+              </button>
+              <button
+                type="button"
+                onClick={addWorkspaceProfile}
+                disabled={publerWorkspaces.length === 0}
+                className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] disabled:opacity-60"
+              >
+                Add profile
+              </button>
+            </div>
           </div>
 
-          <select
-            value={publerWorkspaceId}
-            onChange={(event) => setPublerWorkspaceId(event.target.value)}
-            disabled={!canLoadPublerWorkspaces || isLoadingPublerWorkspaces}
-            className="mt-4 w-full rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-4 py-3 outline-none disabled:opacity-60"
-          >
-            <option value="">Select workspace</option>
-            {publerWorkspaces.map((workspace) => (
-              <option key={workspace.id} value={workspace.id}>
-                {workspace.name}
-              </option>
-            ))}
-          </select>
+          <div className="mt-4 space-y-3">
+            {workspaceProfiles.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-4 py-4 text-sm text-[var(--dashboard-muted)]">
+                No workspace profiles yet.
+              </div>
+            ) : (
+              workspaceProfiles.map((profile, index) => {
+                const accounts = publerAccountsByWorkspace[profile.workspaceId] ?? [];
+                const boards =
+                  publerBoardsByWorkspaceAccount[
+                    getWorkspaceBoardCacheKey(profile.workspaceId, profile.defaultAccountId)
+                  ] ?? [];
 
-          <div className="mt-4">
-            <label className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
-              Allowed domains
-            </label>
-            <input
-              value={publerAllowedDomainsInput}
-              onChange={(event) => setPublerAllowedDomainsInput(event.target.value)}
-              placeholder="mightypaint.com, anotherdomain.com"
-              className="mt-3 w-full rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-4 py-3 outline-none"
-            />
+                return (
+                  <div
+                    key={`${profile.workspaceId || "new"}-${index}`}
+                    className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-4"
+                  >
+                  <div className="grid gap-3 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_auto_auto]">
+                    <select
+                      value={profile.workspaceId}
+                      onChange={(event) => handleWorkspaceSelection(index, event.target.value)}
+                      className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 outline-none"
+                    >
+                      <option value="">Select workspace</option>
+                      {publerWorkspaces.map((workspace) => (
+                        <option key={workspace.id} value={workspace.id}>
+                          {workspace.name}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      value={profile.allowedDomainsInput}
+                      onChange={(event) =>
+                        updateWorkspaceProfile(index, "allowedDomainsInput", event.target.value)
+                      }
+                      placeholder="mightypaint.com, anotherdomain.com"
+                      className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setDefaultWorkspaceProfile(index)}
+                      className={`rounded-full border px-4 py-2 text-sm font-semibold ${
+                        profile.isDefault
+                          ? "border-[var(--dashboard-accent-border)] bg-[var(--dashboard-accent-soft-strong)] text-[var(--dashboard-accent-strong)]"
+                          : "border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] text-[var(--dashboard-subtle)]"
+                      }`}
+                    >
+                      Default
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeWorkspaceProfile(index)}
+                      className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)]"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                    <div className="mt-3 grid gap-3 md:grid-cols-2">
+                      <select
+                        value={profile.defaultAccountId}
+                        onChange={(event) => handleWorkspaceAccountSelection(index, event.target.value)}
+                        className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 outline-none"
+                      >
+                        <option value="">Default account</option>
+                        {accounts.map((account) => (
+                          <option key={String(account.id)} value={String(account.id)}>
+                            {account.name ?? `${account.provider} ${account.id}`}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        value={profile.defaultBoardId}
+                        onChange={(event) => updateWorkspaceProfile(index, "defaultBoardId", event.target.value)}
+                        className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 outline-none"
+                      >
+                        <option value="">Default board</option>
+                        {boards.map((board) => (
+                          <option key={board.id} value={board.id}>
+                            {board.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
       </section>
@@ -462,6 +748,39 @@ function parseAllowedDomains(input: string) {
     .split(",")
     .map((value) => value.trim())
     .filter((value) => value !== "");
+}
+
+function toWorkspaceProfileDraft(profile: WorkspaceProfileSummary): WorkspaceProfileDraft {
+  return {
+    workspaceId: profile.workspaceId,
+    workspaceName: profile.workspaceName,
+    allowedDomainsInput: profile.allowedDomains.join(", "),
+    isDefault: profile.isDefault,
+    defaultAccountId: profile.defaultAccountId,
+    defaultBoardId: profile.defaultBoardId,
+  };
+}
+
+function syncProfileNames(
+  profiles: WorkspaceProfileDraft[],
+  workspaces: PublerWorkspace[],
+): WorkspaceProfileDraft[] {
+  return profiles.map((profile) => ({
+    ...profile,
+    workspaceName: resolveWorkspaceName(profile.workspaceId, workspaces, profile.workspaceName),
+  }));
+}
+
+function resolveWorkspaceName(
+  workspaceId: string,
+  workspaces: PublerWorkspace[],
+  fallbackName: string,
+) {
+  return workspaces.find((workspace) => workspace.id === workspaceId)?.name ?? fallbackName ?? "";
+}
+
+function getWorkspaceBoardCacheKey(workspaceId: string, accountId: string) {
+  return `${workspaceId}:${accountId || ""}`;
 }
 
 function getAiProviderLabel(provider: AIProvider) {

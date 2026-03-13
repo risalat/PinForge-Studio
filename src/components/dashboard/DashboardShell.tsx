@@ -6,12 +6,15 @@ import type { ReactNode } from "react";
 import { SignOutButton } from "@/app/dashboard/SignOutButton";
 import { DashboardWorkspaceSwitcher } from "@/components/dashboard/DashboardWorkspaceSwitcher";
 import { dashboardNavigation, getDashboardPageTitle } from "@/lib/dashboard/navigation";
+import type { WorkspaceProfileSummary } from "@/lib/types";
 
 export function DashboardShell({
   activeWorkspaceId,
+  workspaceProfiles,
   children,
 }: {
   activeWorkspaceId: string;
+  workspaceProfiles: WorkspaceProfileSummary[];
   children: ReactNode;
 }) {
   const pathname = usePathname();
@@ -37,7 +40,10 @@ export function DashboardShell({
               </div>
             </Link>
 
-            <DashboardWorkspaceSwitcher initialWorkspaceId={activeWorkspaceId} />
+            <DashboardWorkspaceSwitcher
+              initialWorkspaceId={activeWorkspaceId}
+              workspaceProfiles={workspaceProfiles}
+            />
 
             <nav className="mt-6 space-y-6">
               {dashboardNavigation.map((group) => (
@@ -235,7 +241,6 @@ function NavIcon({
           <path d="M8 4v4M16 16v4M4 8h4M16 8h4M7 7l10 10" />
         </svg>
       );
-    case "settings":
     default:
       return (
         <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.8">

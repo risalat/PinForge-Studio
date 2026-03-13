@@ -1,19 +1,27 @@
 import { PublishingBoard } from "@/app/dashboard/publishing/PublishingBoard";
 import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
 import { filterByAllowedDomains } from "@/lib/dashboard/domainScope";
+import { getDashboardWorkspaceScope } from "@/lib/dashboard/workspaceScope";
 import { isDatabaseConfigured } from "@/lib/env";
 import { listJobsForUser } from "@/lib/jobs/generatePins";
-import { getEffectivePublerAllowedDomainsForUserId } from "@/lib/settings/integrationSettings";
+import {
+  getIntegrationSettingsSummary,
+  getWorkspaceAllowedDomainsForUserId,
+} from "@/lib/settings/integrationSettings";
 
 export default async function DashboardPublishingPage() {
   const databaseReady = isDatabaseConfigured();
   const user = databaseReady ? await getOrCreateDashboardUser() : null;
-  const [allJobs, allowedDomains] = user
+  const [allJobs, settings] = user
     ? await Promise.all([
         listJobsForUser(user.id),
-        getEffectivePublerAllowedDomainsForUserId(user.id),
+        getIntegrationSettingsSummary(),
       ])
-    : [[], []];
+    : [[], null];
+  const activeWorkspaceId = await getDashboardWorkspaceScope(settings?.publerWorkspaceId || "");
+  const allowedDomains = user
+    ? await getWorkspaceAllowedDomainsForUserId(user.id, activeWorkspaceId)
+    : [];
   const jobs = filterByAllowedDomains(allJobs, (job) => job.domainSnapshot, allowedDomains);
 
   const readyToPublish = jobs.filter((job) =>

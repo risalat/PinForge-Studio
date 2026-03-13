@@ -4,6 +4,7 @@ import { requireAuthenticatedDashboardApiUser } from "@/lib/auth/dashboardSessio
 import { isDatabaseConfigured } from "@/lib/env";
 import {
   getIntegrationSettingsSummary,
+  type WorkspaceProfileInput,
   saveIntegrationSettings,
 } from "@/lib/settings/integrationSettings";
 
@@ -13,6 +14,18 @@ const settingsSchema = z.object({
   publerAllowedDomains: z.array(z.string()).optional(),
   publerAccountId: z.string().optional(),
   publerBoardId: z.string().optional(),
+  workspaceProfiles: z
+    .array(
+      z.object({
+        workspaceId: z.string(),
+        workspaceName: z.string(),
+        allowedDomains: z.array(z.string()),
+        defaultAccountId: z.string().optional(),
+        defaultBoardId: z.string().optional(),
+        isDefault: z.boolean().optional(),
+      }),
+    )
+    .optional(),
   aiProvider: z.enum(["gemini", "openai", "openrouter", "custom_endpoint"]).optional(),
   aiApiKey: z.string().optional(),
   aiModel: z.string().optional(),
@@ -62,7 +75,10 @@ export async function POST(request: Request) {
   try {
     const rawPayload = await request.json();
     const payload = settingsSchema.parse(rawPayload);
-    await saveIntegrationSettings(payload);
+    await saveIntegrationSettings({
+      ...payload,
+      workspaceProfiles: payload.workspaceProfiles as WorkspaceProfileInput[] | undefined,
+    });
     const settings = await getIntegrationSettingsSummary();
 
     return NextResponse.json({

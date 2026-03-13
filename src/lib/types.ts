@@ -42,6 +42,7 @@ export interface IntegrationSettingsSummary {
   publerAllowedDomains: string[];
   publerAccountId: string;
   publerBoardId: string;
+  workspaceProfiles: WorkspaceProfileSummary[];
   aiProvider: AIProvider;
   aiModel: string;
   aiCustomEndpoint: string;
@@ -53,6 +54,15 @@ export interface IntegrationSettingsSummary {
   aiCredentialState: "missing" | "ready" | "unavailable";
   publerCredentialMessage: string;
   aiCredentialMessage: string;
+}
+
+export interface WorkspaceProfileSummary {
+  workspaceId: string;
+  workspaceName: string;
+  allowedDomains: string[];
+  defaultAccountId: string;
+  defaultBoardId: string;
+  isDefault: boolean;
 }
 
 export interface DashboardPublerOptionsResponse {

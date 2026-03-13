@@ -8,8 +8,8 @@ import { getDashboardWorkspaceScope } from "@/lib/dashboard/workspaceScope";
 import { isDatabaseConfigured } from "@/lib/env";
 import { listJobsForUser } from "@/lib/jobs/generatePins";
 import {
-  getEffectivePublerAllowedDomainsForUserId,
   getIntegrationSettingsSummary,
+  getWorkspaceAllowedDomainsForUserId,
 } from "@/lib/settings/integrationSettings";
 
 async function getDashboardData() {
@@ -26,12 +26,12 @@ async function getDashboardData() {
 
   try {
     const user = await getOrCreateDashboardUser();
-    const [settings, allowedDomains, allJobs] = await Promise.all([
+    const [settings, allJobs] = await Promise.all([
       getIntegrationSettingsSummary(),
-      getEffectivePublerAllowedDomainsForUserId(user.id),
       listJobsForUser(user.id),
     ]);
     const activeWorkspaceId = await getDashboardWorkspaceScope(settings.publerWorkspaceId);
+    const allowedDomains = await getWorkspaceAllowedDomainsForUserId(user.id, activeWorkspaceId);
     const filteredJobs = filterByAllowedDomains(allJobs, (job) => job.domainSnapshot, allowedDomains);
     const postPulseRecords = await listPostPulseRecordsForUser(user.id, {
       workspaceId: activeWorkspaceId,

@@ -5,7 +5,10 @@ import { requireAuthenticatedDashboardUser } from "@/lib/auth/dashboardSession";
 import { getDashboardWorkspaceScope } from "@/lib/dashboard/workspaceScope";
 import { isDatabaseConfigured } from "@/lib/env";
 import { getJobForUser } from "@/lib/jobs/generatePins";
-import { getIntegrationSettingsSummary } from "@/lib/settings/integrationSettings";
+import {
+  getIntegrationSettingsSummary,
+  getWorkspaceProfileForUserId,
+} from "@/lib/settings/integrationSettings";
 import { resolveStoredAssetUrl } from "@/lib/storage/assetUrl";
 
 type PageProps = {
@@ -34,6 +37,7 @@ export default async function DashboardJobPublishPage({ params }: PageProps) {
       publerAllowedDomains: [],
       publerAccountId: "",
       publerBoardId: "",
+      workspaceProfiles: [],
       aiProvider: "gemini" as const,
       aiModel: "",
       aiCustomEndpoint: "",
@@ -53,6 +57,7 @@ export default async function DashboardJobPublishPage({ params }: PageProps) {
   }
 
   const activeWorkspaceId = await getDashboardWorkspaceScope(settings.publerWorkspaceId);
+  const activeWorkspaceProfile = await getWorkspaceProfileForUserId(user.id, activeWorkspaceId);
 
   return (
     <div className="space-y-8 text-[var(--dashboard-text)]">
@@ -101,8 +106,8 @@ export default async function DashboardJobPublishPage({ params }: PageProps) {
           }))}
           defaults={{
             workspaceId: activeWorkspaceId,
-            accountId: settings.publerAccountId,
-            boardId: settings.publerBoardId,
+            accountId: activeWorkspaceProfile?.defaultAccountId ?? settings.publerAccountId,
+            boardId: activeWorkspaceProfile?.defaultBoardId ?? settings.publerBoardId,
           }}
           integrationReady={{
             hasPublerApiKey: settings.hasPublerApiKey,

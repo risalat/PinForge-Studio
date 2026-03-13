@@ -84,6 +84,7 @@ model User {
   integrationSettings UserIntegrationSettings?
   publicationRecords  PublicationRecord[]
   publicationSyncStates PublicationSyncState[]
+  workspaceProfiles   WorkspaceProfile[]
 }
 
 model Post {
@@ -364,4 +365,21 @@ model UserIntegrationSettings {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model WorkspaceProfile {
+  id               String   @id @default(cuid())
+  userId           String
+  workspaceId      String
+  workspaceName    String
+  allowedDomains   String[] @default([])
+  defaultAccountId String?
+  defaultBoardId   String?
+  isDefault        Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, workspaceId])
+  @@index([userId, isDefault])
 }

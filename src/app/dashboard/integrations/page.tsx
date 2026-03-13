@@ -10,6 +10,7 @@ export default async function DashboardIntegrationsPage() {
     publerAllowedDomains: [],
     publerAccountId: "",
     publerBoardId: "",
+    workspaceProfiles: [],
     aiProvider: "gemini" as const,
     aiModel: "",
     aiCustomEndpoint: "",
@@ -57,8 +58,8 @@ export default async function DashboardIntegrationsPage() {
           tone={settings.aiCredentialState === "missing" ? "warning" : settings.aiCredentialState === "ready" ? "good" : "warning"}
         />
         <IntegrationStat
-          label="Workspace domains"
-          value={settings.publerAllowedDomains.length > 0 ? settings.publerAllowedDomains.join(", ") : "Not set"}
+          label="Workspace profiles"
+          value={settings.workspaceProfiles.length > 0 ? String(settings.workspaceProfiles.length) : "Not set"}
           tone="neutral"
         />
       </section>
