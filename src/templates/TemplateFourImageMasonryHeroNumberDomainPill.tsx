@@ -40,7 +40,7 @@ export function TemplateFourImageMasonryHeroNumberDomainPill({
   const cleanedDomain = domain.replace(/^https?:\/\//, "").replace(/^www\./, "");
   const displayNumber = typeof itemNumber === "number" && itemNumber > 0 ? itemNumber : 15;
   const imageSet = normalizeImages(images);
-  const frameBackground = mixHex(preset.palette.canvas, "#ffffff", 0.42);
+  const frameBackground = preset.palette.canvas;
   const frameInset = 10;
   const dividerThickness = 8;
   const collageTop = 10;
@@ -51,27 +51,32 @@ export function TemplateFourImageMasonryHeroNumberDomainPill({
   const titleColor = pickBestContrastColor(titleCardBackground, [
     preset.palette.title,
     preset.palette.footer,
-    preset.palette.band,
+    preset.palette.domain,
+    preset.palette.canvas,
     "#3d2414",
   ]);
   const circleSize = 288;
   const circleTop = 514;
-  const circleBackground = mixHex(preset.palette.band, "#ffffff", 0.82);
+  const circleBackground = preset.palette.canvas;
+  const circleBorderColor = withAlpha(preset.palette.divider, 0.96);
   const circleTextColor = pickBestContrastColor(circleBackground, [
     preset.palette.number,
     preset.palette.title,
     preset.palette.footer,
+    preset.palette.domain,
+    preset.palette.band,
     "#6d3810",
   ]);
   const domainPillWidth = 258;
   const domainPillHeight = 36;
   const domainPillTop = titleCardTop + titleCardHeight - 8;
-  const domainPillBackground = mixHex(preset.palette.canvas, "#ffffff", 0.78);
+  const domainPillBackground = withAlpha(preset.palette.footer, 0.94);
   const domainTextColor = pickBestContrastColor(domainPillBackground, [
     preset.palette.domain,
-    preset.palette.footer,
-    titleColor,
-    "#8b613e",
+    preset.palette.canvas,
+    preset.palette.band,
+    preset.palette.title,
+    "#ffffff",
   ]);
   const collageHeight = 1920 - frameInset * 2;
   const leftTopHeight = Math.round(collageHeight * 0.35);
@@ -146,6 +151,7 @@ export function TemplateFourImageMasonryHeroNumberDomainPill({
             width: circleSize,
             height: circleSize,
             backgroundColor: circleBackground,
+            border: `8px solid ${circleBorderColor}`,
           }}
         >
           <span
@@ -255,32 +261,15 @@ function normalizeImages(images: string[]) {
   ];
 }
 
-function mixHex(fromHex: string, toHex: string, amount: number) {
-  const from = parseHex(fromHex);
-  const to = parseHex(toHex);
-  if (!from || !to) {
-    return fromHex;
-  }
-
-  const mix = (left: number, right: number) =>
-    Math.round(left + (right - left) * Math.max(0, Math.min(1, amount)));
-
-  return `#${[mix(from[0], to[0]), mix(from[1], to[1]), mix(from[2], to[2])]
-    .map((value) => value.toString(16).padStart(2, "0"))
-    .join("")}`;
-}
-
-function parseHex(value: string) {
-  const normalized = value.replace("#", "");
+function withAlpha(hex: string, opacity: number) {
+  const normalized = hex.replace("#", "");
   if (!/^[0-9a-fA-F]{6}$/.test(normalized)) {
-    return null;
+    return hex;
   }
-
-  return [0, 2, 4].map((index) => parseInt(normalized.slice(index, index + 2), 16)) as [
-    number,
-    number,
-    number,
-  ];
+  const alpha = Math.round(Math.max(0, Math.min(1, opacity)) * 255)
+    .toString(16)
+    .padStart(2, "0");
+  return `#${normalized}${alpha}`;
 }
 
 function pickBestContrastColor(backgroundHex: string, candidates: string[]) {
