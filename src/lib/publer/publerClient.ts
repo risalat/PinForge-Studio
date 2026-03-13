@@ -65,6 +65,14 @@ export interface PublerPost {
   raw: Record<string, unknown>;
 }
 
+export interface PublerPostPage {
+  posts: PublerPost[];
+  total: number | null;
+  page: number | null;
+  perPage: number | null;
+  totalPages: number | null;
+}
+
 export interface ScheduleOutcome {
   postId?: string;
   status?: string;
@@ -141,15 +149,19 @@ export class PublerClient {
     return this.request<Record<string, unknown>>(`/job_status/${encodeURIComponent(jobId)}`);
   }
 
-  async getPosts(input?: {
+  async getPostsPage(input?: {
     states?: string[];
+    page?: number;
     limit?: number;
-  }): Promise<PublerPost[]> {
+  }): Promise<PublerPostPage> {
     const params = new URLSearchParams();
     for (const state of input?.states ?? []) {
       if (state.trim() !== "") {
         params.append("state[]", state.trim());
       }
+    }
+    if (typeof input?.page === "number") {
+      params.set("page", String(input.page));
     }
     if (input?.limit) {
       params.set("limit", String(input.limit));
@@ -157,9 +169,26 @@ export class PublerClient {
 
     const query = params.toString();
     const payload = await this.request<unknown>(`/posts${query ? `?${query}` : ""}`);
-    return extractArray(payload)
+    const posts = extractArray(payload)
       .map((item) => toPublerPost(item))
       .filter((post): post is PublerPost => Boolean(post));
+    const objectPayload = isObject(payload) ? payload : {};
+
+    return {
+      posts,
+      total: toOptionalNumber(objectPayload.total),
+      page: toOptionalNumber(objectPayload.page),
+      perPage: toOptionalNumber(objectPayload.per_page),
+      totalPages: toOptionalNumber(objectPayload.total_pages),
+    };
+  }
+
+  async getPosts(input?: {
+    states?: string[];
+    limit?: number;
+  }): Promise<PublerPost[]> {
+    const page = await this.getPostsPage(input);
+    return page.posts;
   }
 
   async uploadMediaFromUrl(
@@ -407,6 +436,19 @@ function pickStringOrNumber(
     }
   }
   return undefined;
+}
+
+function toOptionalNumber(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
 }
 
 function toPublerPost(value: Record<string, unknown>): PublerPost | null {

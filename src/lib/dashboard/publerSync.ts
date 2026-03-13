@@ -17,14 +17,11 @@ export async function syncPublerPublicationRecordsForUser(
     throw new Error("Select a Publer workspace before syncing post activity.");
   }
 
-  const client = createPublerClient({
+const client = createPublerClient({
     apiKey: settings.publerApiKey,
     workspaceId,
   });
-  const posts = await client.getPosts({
-    states: ["scheduled", "published", "published_posted"],
-    limit: 200,
-  });
+  const posts = await fetchAllRelevantPublerPosts(client);
 
   const existingRecords = await prisma.publicationRecord.findMany({
     where: {
@@ -169,6 +166,45 @@ export async function syncPublerPublicationRecordsForUser(
     created,
     updated,
   };
+}
+
+async function fetchAllRelevantPublerPosts(client: ReturnType<typeof createPublerClient>) {
+  const seenPostIds = new Set<string>();
+  const posts: PublerPost[] = [];
+  const maxPages = 50;
+
+  for (let page = 0; page < maxPages; page += 1) {
+    const result = await client.getPostsPage({
+      states: ["scheduled", "published", "published_posted"],
+      page,
+      limit: 100,
+    });
+
+    for (const post of result.posts) {
+      if (seenPostIds.has(post.id)) {
+        continue;
+      }
+      seenPostIds.add(post.id);
+      posts.push(post);
+    }
+
+    if (result.posts.length === 0) {
+      break;
+    }
+
+    if (result.totalPages !== null) {
+      const reachedLastPage =
+        result.page !== null
+          ? result.page >= result.totalPages || result.page + 1 >= result.totalPages
+          : page + 1 >= result.totalPages;
+
+      if (reachedLastPage) {
+        break;
+      }
+    }
+  }
+
+  return posts;
 }
 
 function normalizePublicationState(value: string) {
