@@ -153,6 +153,7 @@ export function JobReviewManager({
   const [generationFeedback, setGenerationFeedback] = useState<FeedbackState>(null);
   const [previewPinIndex, setPreviewPinIndex] = useState<number | null>(null);
   const [previewSource, setPreviewSource] = useState<{ url: string; label: string } | null>(null);
+  const [missingAssetPinIds, setMissingAssetPinIds] = useState<string[]>([]);
 
   const selectedImages = images.filter((image) => image.isSelected);
   const manualTemplate = templates.find((item) => item.id === manualTemplateId) ?? null;
@@ -179,6 +180,12 @@ export function JobReviewManager({
     previewPinIndex !== null && previewPinIndex >= 0 && previewPinIndex < generatedPins.length
       ? generatedPins[previewPinIndex]
       : null;
+
+  function markPinAssetMissing(pinId: string) {
+    setMissingAssetPinIds((current) =>
+      current.includes(pinId) ? current : [...current, pinId],
+    );
+  }
 
   function toggleTemplate(templateId: string) {
     setSelectedTemplateIds((current) =>
@@ -1182,6 +1189,7 @@ export function JobReviewManager({
                     <div className="mt-4 grid gap-4 xl:grid-cols-2">
                       {orderedGeneratedPins.map((pin) => {
                         const absoluteIndex = generatedPins.findIndex((entry) => entry.id === pin.id);
+                        const assetMissing = missingAssetPinIds.includes(pin.id);
                         return (
                           <article
                             key={pin.id}
@@ -1190,14 +1198,24 @@ export function JobReviewManager({
                             <div className="grid gap-4 sm:grid-cols-[148px_minmax(0,1fr)]">
                               <button
                                 type="button"
-                                onClick={() => setPreviewPinIndex(absoluteIndex)}
+                                onClick={() => {
+                                  if (!assetMissing) {
+                                    setPreviewPinIndex(absoluteIndex);
+                                  }
+                                }}
+                                disabled={assetMissing}
                                 className="group overflow-hidden rounded-xl border border-[var(--dashboard-line)] text-left"
                               >
-                                <img
-                                  src={pin.exportPath}
-                                  alt={pin.title ?? "Generated pin"}
-                                  className="w-full transition duration-200 group-hover:scale-[1.02]"
-                                />
+                                {assetMissing ? (
+                                  <MissingAssetCard />
+                                ) : (
+                                  <img
+                                    src={pin.exportPath}
+                                    alt={pin.title ?? "Generated pin"}
+                                    className="w-full transition duration-200 group-hover:scale-[1.02]"
+                                    onError={() => markPinAssetMissing(pin.id)}
+                                  />
+                                )}
                               </button>
                               <div className="space-y-3 text-sm text-[var(--dashboard-subtle)]">
                                 <div className="flex flex-wrap gap-2">
@@ -1206,10 +1224,18 @@ export function JobReviewManager({
                                     label={formatLabel(pin.mediaStatus)}
                                     tone={toneForPinStatus(pin.mediaStatus)}
                                   />
+                                  {assetMissing ? (
+                                    <StatusPill label="Asset missing" tone="warning" />
+                                  ) : null}
                                   {pin.planId === selectedPlan.id ? (
                                     <StatusPill label="Active plan" tone="good" />
                                   ) : null}
                                 </div>
+                                {assetMissing ? (
+                                  <div className="rounded-2xl border border-[var(--dashboard-danger-border)] bg-[var(--dashboard-danger-soft)] px-3 py-3 text-sm text-[var(--dashboard-danger-ink)]">
+                                    Preview asset is missing from storage. Rerender required.
+                                  </div>
+                                ) : null}
                                 <p className="line-clamp-3">
                                   <strong className="text-[var(--dashboard-text)]">Title:</strong>{" "}
                                   {pin.title || "No saved title"}
@@ -1222,18 +1248,25 @@ export function JobReviewManager({
                                   <button
                                     type="button"
                                     onClick={() => setPreviewPinIndex(absoluteIndex)}
+                                    disabled={assetMissing}
                                     className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)]"
                                   >
                                     View full size
                                   </button>
-                                  <a
-                                    href={pin.exportPath}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)]"
-                                  >
-                                    Open image
-                                  </a>
+                                  {assetMissing ? (
+                                    <span className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-muted)]">
+                                      Rerender required
+                                    </span>
+                                  ) : (
+                                    <a
+                                      href={pin.exportPath}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)]"
+                                    >
+                                      Open image
+                                    </a>
+                                  )}
                                   <button
                                     type="button"
                                     onClick={() => handleDiscardGeneratedPins([pin.id])}
@@ -1345,11 +1378,18 @@ export function JobReviewManager({
             </div>
             <div className="grid max-h-[calc(92vh-80px)] gap-6 overflow-auto p-5 xl:grid-cols-[minmax(0,1fr)_320px]">
               <div className="flex items-start justify-center rounded-2xl bg-[var(--dashboard-panel)] p-4">
-                <img
-                  src={previewPin.exportPath}
-                  alt={previewPin.title ?? "Generated pin"}
-                  className="max-h-[78vh] w-auto rounded-xl border border-[var(--dashboard-line)]"
-                />
+                {missingAssetPinIds.includes(previewPin.id) ? (
+                  <div className="flex min-h-[420px] w-full items-center justify-center rounded-xl border border-dashed border-[var(--dashboard-danger-border)] bg-[var(--dashboard-danger-soft)] p-8 text-center text-sm font-semibold text-[var(--dashboard-danger-ink)]">
+                    This asset is missing from storage. Discard and rerender this pin.
+                  </div>
+                ) : (
+                  <img
+                    src={previewPin.exportPath}
+                    alt={previewPin.title ?? "Generated pin"}
+                    className="max-h-[78vh] w-auto rounded-xl border border-[var(--dashboard-line)]"
+                    onError={() => markPinAssetMissing(previewPin.id)}
+                  />
+                )}
               </div>
               <div className="space-y-4">
                 <div className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-4">
@@ -1396,6 +1436,16 @@ function InlineFeedback({ feedback }: { feedback: Exclude<FeedbackState, null> }
       : "border-[var(--dashboard-danger-border)] bg-[var(--dashboard-danger-soft)] text-[var(--dashboard-danger-ink)]";
 
   return <div className={`rounded-2xl border px-4 py-3 text-sm ${className}`}>{feedback.message}</div>;
+}
+
+function MissingAssetCard() {
+  return (
+    <div className="flex min-h-[220px] w-full items-center justify-center bg-[var(--dashboard-danger-soft)] p-4 text-center text-sm font-semibold text-[var(--dashboard-danger-ink)]">
+      Asset missing.
+      <br />
+      Rerender required.
+    </div>
+  );
 }
 
 function MetadataRow({ label, value }: { label: string; value: string | null }) {

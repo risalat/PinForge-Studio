@@ -1,7 +1,7 @@
 export type DashboardNavItem = {
   label: string;
   href: string;
-  icon: "overview" | "inbox" | "jobs" | "publishing" | "library" | "keys" | "integrations" | "settings";
+  icon: "overview" | "inbox" | "jobs" | "publishing" | "pulse" | "library" | "keys" | "integrations" | "settings";
 };
 
 export const dashboardNavigation = [
@@ -12,6 +12,7 @@ export const dashboardNavigation = [
       { label: "Inbox", href: "/dashboard/inbox", icon: "inbox" },
       { label: "Jobs", href: "/dashboard/jobs", icon: "jobs" },
       { label: "Publishing", href: "/dashboard/publishing", icon: "publishing" },
+      { label: "Post Pulse", href: "/dashboard/post-pulse", icon: "pulse" },
     ],
   },
   {
@@ -103,6 +104,18 @@ export function getDashboardPageTitle(pathname: string) {
       primaryActionHref: "/dashboard/jobs",
       secondaryActionLabel: "Inbox",
       secondaryActionHref: "/dashboard/inbox",
+    };
+  }
+
+  if (pathname === "/dashboard/post-pulse") {
+    return {
+      eyebrow: "Post Pulse",
+      title: "Post freshness tracker",
+      description: "Track which articles are fresh on Pinterest and which ones need new pins.",
+      primaryActionLabel: "Open jobs board",
+      primaryActionHref: "/dashboard/jobs",
+      secondaryActionLabel: "Publishing queue",
+      secondaryActionHref: "/dashboard/publishing",
     };
   }
 

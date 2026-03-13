@@ -167,6 +167,7 @@ function buildBreadcrumb(pathname: string) {
       if (segment === "jobs") return "Jobs";
       if (segment === "inbox") return "Inbox";
       if (segment === "publishing") return "Publishing";
+      if (segment === "post-pulse") return "Post Pulse";
       if (segment === "library") return "Library";
       if (segment === "integrations") return "Integrations";
       if (segment === "settings") return "Settings";
@@ -213,6 +214,12 @@ function NavIcon({
           <path d="M12 16V4" />
           <path d="m7 9 5-5 5 5" />
           <path d="M5 20h14" />
+        </svg>
+      );
+    case "pulse":
+      return (
+        <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.8">
+          <path d="M4 13h4l2-5 4 9 2-4h4" />
         </svg>
       );
     case "library":

@@ -115,8 +115,8 @@ So the recommended architecture is:
 
 All templates use a fixed pin canvas:
 
-- Width: **1000 px**
-- Height: **1500 px**
+- Width: **1080 px**
+- Height: **1920 px**
 - Aspect ratio: **2:3**
 
 Every template component must render against this exact canvas.

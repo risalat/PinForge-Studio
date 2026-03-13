@@ -150,11 +150,18 @@ export function JobPublishManager({
     descriptions: null,
     schedule: null,
   });
+  const [missingAssetPinIds, setMissingAssetPinIds] = useState<string[]>([]);
   const [isLoadingOptions, setIsLoadingOptions] = useState(false);
   const [isRefreshingStatus, setIsRefreshingStatus] = useState(false);
   const [activeAction, setActiveAction] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const currentPins = livePins;
+
+  function markPinAssetMissing(pinId: string) {
+    setMissingAssetPinIds((current) =>
+      current.includes(pinId) ? current : [...current, pinId],
+    );
+  }
 
   const copyByPinId = useMemo(
     () =>
@@ -1342,17 +1349,30 @@ export function JobPublishManager({
                         label={`Schedule ${formatLabel(pin.scheduleStatus)}`}
                         tone={toneForStatus(pin.scheduleStatus)}
                       />
+                      {missingAssetPinIds.includes(pin.id) ? (
+                        <StatusChip label="Asset missing" tone="warning" />
+                      ) : null}
                     </div>
                   </div>
 
                   <div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
-                    <img
-                      src={pin.exportPath}
-                      alt={copy?.title || "Generated pin"}
-                      className="w-full rounded-xl border border-[var(--dashboard-line)]"
-                    />
+                    {missingAssetPinIds.includes(pin.id) ? (
+                      <MissingAssetCard />
+                    ) : (
+                      <img
+                        src={pin.exportPath}
+                        alt={copy?.title || "Generated pin"}
+                        className="w-full rounded-xl border border-[var(--dashboard-line)]"
+                        onError={() => markPinAssetMissing(pin.id)}
+                      />
+                    )}
                     <div className="space-y-3">
                       <p className="text-sm font-semibold text-[var(--dashboard-text)]">{pin.templateId}</p>
+                      {missingAssetPinIds.includes(pin.id) ? (
+                        <div className="rounded-2xl border border-[var(--dashboard-danger-border)] bg-[var(--dashboard-danger-soft)] px-3 py-3 text-sm text-[var(--dashboard-danger-ink)]">
+                          This pin asset is missing from storage. Discard and rerender it before upload or scheduling.
+                        </div>
+                      ) : null}
                       <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
                         <span className="flex items-center justify-between gap-3">
                           <span>Title</span>
@@ -1828,4 +1848,14 @@ function resolveSectionForAction(action: string): PublishSectionKey | undefined 
     default:
       return undefined;
   }
+}
+
+function MissingAssetCard() {
+  return (
+    <div className="flex min-h-[300px] w-full items-center justify-center rounded-xl border border-dashed border-[var(--dashboard-danger-border)] bg-[var(--dashboard-danger-soft)] p-6 text-center text-sm font-semibold text-[var(--dashboard-danger-ink)]">
+      Asset missing.
+      <br />
+      Discard and rerender required.
+    </div>
+  );
 }

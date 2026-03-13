@@ -2,6 +2,7 @@ import { GenerationJobStatus } from "@prisma/client";
 import Link from "next/link";
 import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
 import { requireAuthenticatedDashboardUser } from "@/lib/auth/dashboardSession";
+import { buildPostPulseSummary, listPostPulseRecordsForUser } from "@/lib/dashboard/postPulse";
 import { isDatabaseConfigured } from "@/lib/env";
 import { listJobsForUser } from "@/lib/jobs/generatePins";
 import { prisma } from "@/lib/prisma";
@@ -12,6 +13,7 @@ async function getDashboardData() {
       postsProcessed: 0,
       pinsGenerated: 0,
       readyToSchedule: 0,
+      postsNeedingFreshPins: 0,
       recentJobs: [],
       databaseReady: false,
     };
@@ -19,7 +21,7 @@ async function getDashboardData() {
 
   try {
     const user = await getOrCreateDashboardUser();
-    const [postsProcessed, pinsGenerated, readyToSchedule, recentJobs] = await Promise.all([
+    const [postsProcessed, pinsGenerated, readyToSchedule, recentJobs, postPulseRecords] = await Promise.all([
       prisma.post.count(),
       prisma.generatedPin.count({
         where: {
@@ -35,12 +37,14 @@ async function getDashboardData() {
         },
       }),
       listJobsForUser(user.id).then((jobs) => jobs.slice(0, 8)),
+      listPostPulseRecordsForUser(user.id),
     ]);
 
     return {
       postsProcessed,
       pinsGenerated,
       readyToSchedule,
+      postsNeedingFreshPins: buildPostPulseSummary(postPulseRecords).needsFreshPins,
       recentJobs,
       databaseReady: true,
     };
@@ -49,6 +53,7 @@ async function getDashboardData() {
       postsProcessed: 0,
       pinsGenerated: 0,
       readyToSchedule: 0,
+      postsNeedingFreshPins: 0,
       recentJobs: [],
       databaseReady: false,
     };
@@ -136,9 +141,10 @@ export default async function DashboardPage() {
         </div>
       </section>
 
-      <section className="grid gap-5 xl:grid-cols-3">
+      <section className="grid gap-5 xl:grid-cols-4">
         <MetricCard label="Posts processed" value={data.postsProcessed} />
         <MetricCard label="Pins generated" value={data.pinsGenerated} />
+        <MetricCard label="Needs fresh pins" value={data.postsNeedingFreshPins} />
         <div className="rounded-[30px] border border-[var(--dashboard-line)] bg-[linear-gradient(145deg,#0d5fff_0%,#1e5eff_50%,#2f8fff_100%)] p-6 text-white shadow-[var(--dashboard-shadow-accent)]">
           <p className="text-sm font-semibold uppercase tracking-[0.26em] text-white/70">
             Ready to schedule
