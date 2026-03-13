@@ -30,3 +30,16 @@ export const sampleTemplateDataSingleImageSubtitleTitleCta: TemplateRenderProps 
   domain: "mightypaint.com",
   visualPreset: "midnight-gold",
 };
+
+export const sampleTemplateDataFourImageMasonryHeroNumberDomainPill: TemplateRenderProps = {
+  title: "Accent Wall Bedroom Ideas",
+  images: [
+    "/sample-images/1.jpg",
+    "/sample-images/2.jpg",
+    "/sample-images/3.jpg",
+    "/sample-images/4.jpg",
+  ],
+  domain: "mightypaint.com",
+  itemNumber: 15,
+  visualPreset: "emerald-sun",
+};

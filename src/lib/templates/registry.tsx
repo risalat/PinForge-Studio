@@ -2,8 +2,10 @@ import { TemplateSplitVerticalTitle } from "@/templates/TemplateSplitVerticalTit
 import { TemplateSplitVerticalTitleNoSubtitle } from "@/templates/TemplateSplitVerticalTitleNoSubtitle";
 import { TemplateSplitVerticalTitleNumber } from "@/templates/TemplateSplitVerticalTitleNumber";
 import { TemplateSingleImageSubtitleTitleCta } from "@/templates/TemplateSingleImageSubtitleTitleCta";
+import { TemplateFourImageMasonryHeroNumberDomainPill } from "@/templates/TemplateFourImageMasonryHeroNumberDomainPill";
 import type { JSX } from "react";
 import {
+  sampleTemplateDataFourImageMasonryHeroNumberDomainPill,
   sampleTemplateDataNumber,
   sampleTemplateDataNoSubtitle,
   sampleTemplateDataSingleImageSubtitleTitleCta,
@@ -72,6 +74,21 @@ export const TEMPLATE_CONFIGS: Record<string, TemplateConfig> = {
       footer: true,
     },
   },
+  "four-image-masonry-hero-number-domain-pill": {
+    id: "four-image-masonry-hero-number-domain-pill",
+    name: "Four Image Number Title Sitename",
+    componentKey: "TemplateFourImageMasonryHeroNumberDomainPill",
+    previewPath: "/preview/four-image-masonry-hero-number-domain-pill",
+    locked: true,
+    canvas: { width: 1080, height: 1920 },
+    imageSlotCount: 4,
+    textFields: ["title", "itemNumber", "domain", "visualPreset"],
+    features: {
+      overlay: true,
+      numberTreatment: "hero",
+      footer: false,
+    },
+  },
 };
 
 const TEMPLATE_COMPONENTS: Record<
@@ -82,6 +99,7 @@ const TEMPLATE_COMPONENTS: Record<
   "split-vertical-title-no-subtitle": TemplateSplitVerticalTitleNoSubtitle,
   "split-vertical-title-number": TemplateSplitVerticalTitleNumber,
   "single-image-subtitle-title-cta": TemplateSingleImageSubtitleTitleCta,
+  "four-image-masonry-hero-number-domain-pill": TemplateFourImageMasonryHeroNumberDomainPill,
 };
 
 export function getTemplateConfig(templateId: string) {
@@ -113,6 +131,10 @@ export function getSampleTemplateProps(templateId: string) {
 
   if (templateId === "single-image-subtitle-title-cta") {
     return sampleTemplateDataSingleImageSubtitleTitleCta;
+  }
+
+  if (templateId === "four-image-masonry-hero-number-domain-pill") {
+    return sampleTemplateDataFourImageMasonryHeroNumberDomainPill;
   }
 
   return sampleTemplateDataWithSubtitle;
