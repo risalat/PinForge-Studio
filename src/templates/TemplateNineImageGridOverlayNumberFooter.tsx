@@ -9,7 +9,6 @@ const TEMPLATE_TYPOGRAPHY = {
   title: {
     fontFamily: "var(--font-libre-baskerville), serif",
     fontWeight: 700,
-    letterSpacing: "0.028em",
     lineHeight: 1,
     textTransform: "uppercase" as const,
   },
@@ -47,9 +46,7 @@ export function TemplateNineImageGridOverlayNumberFooter({
   const imageSet = normalizeImages(images, 9);
   const cleanedDomain = domain.replace(/^https?:\/\//, "").replace(/^www\./, "");
   const compactTitle = compactOverlayTitle(title);
-  const compactTitleLength = compactTitle.replace(/\s+/g, "").length;
-  const titleMinFontSize = compactTitleLength <= 18 ? 66 : compactTitleLength <= 22 ? 56 : 42;
-  const titleMaxFontSize = compactTitleLength <= 18 ? 96 : compactTitleLength <= 22 ? 84 : 66;
+  const titleSizing = getTitleSizing(compactTitle);
   const displayNumber = typeof itemNumber === "number" && itemNumber > 0 ? itemNumber : 25;
   const frameInset = 10;
   const gutter = 8;
@@ -68,32 +65,15 @@ export function TemplateNineImageGridOverlayNumberFooter({
   const gridFrameColor = withAlpha(deepenHex(preset.palette.divider, 0.06), 0.9);
   const bandBackground = tintTowardsWhite(preset.palette.band, 0.78);
   const titleColor = ensureContrastTone(preset.palette.title, bandBackground, 5.4);
-  const subtitleColor = pickDistinctReadableTone(
-    [
-      preset.palette.divider,
-      preset.palette.subtitle,
-      mixHex(preset.palette.divider, preset.palette.subtitle, 0.4),
-      mixHex(preset.palette.divider, preset.palette.title, 0.18),
-    ],
+  const rawAccentColor = pickDistinctReadableTone(
+    [preset.palette.divider, preset.palette.subtitle, mixHex(preset.palette.divider, "#ffffff", 0.08)],
     titleColor,
     bandBackground,
     3.8,
-    72,
+    96,
   );
-  const dividerColor = withAlpha(
-    pickDistinctReadableTone(
-      [
-        preset.palette.divider,
-        subtitleColor,
-        mixHex(preset.palette.divider, "#ffffff", 0.14),
-      ],
-      titleColor,
-      bandBackground,
-      2.2,
-      54,
-    ),
-    0.9,
-  );
+  const subtitleColor = ensureContrastTone(rawAccentColor, bandBackground, 3.8);
+  const dividerColor = withAlpha(rawAccentColor, 0.92);
   const circleBackground = pickDarkReadableTone(
     [
       deepenHex(preset.palette.footer, 0.32),
@@ -105,12 +85,12 @@ export function TemplateNineImageGridOverlayNumberFooter({
   );
   const circleTextColor = pickLightReadableTone(
     [
-      mixHex(preset.palette.divider, "#ffffff", 0.38),
-      mixHex(preset.palette.number, "#ffffff", 0.62),
-      "#fff6eb",
+      "#fffaf3",
+      mixHex(preset.palette.number, "#ffffff", 0.78),
+      mixHex(preset.palette.divider, "#ffffff", 0.58),
     ],
     circleBackground,
-    5.2,
+    6.2,
   );
   const domainPillBackground = withAlpha(
     pickDarkReadableTone(
@@ -173,19 +153,19 @@ export function TemplateNineImageGridOverlayNumberFooter({
             backgroundColor: bandBackground,
           }}
         >
-          <div className="absolute inset-x-[18px] top-[140px]">
+          <div className="absolute inset-x-[12px] top-[140px]">
             <AutoFitText
               as="p"
               text={compactTitle}
-              minFontSize={titleMinFontSize}
-              maxFontSize={titleMaxFontSize}
+              minFontSize={titleSizing.minFontSize}
+              maxFontSize={titleSizing.maxFontSize}
               maxLines={1}
               lineHeight={TEMPLATE_TYPOGRAPHY.title.lineHeight}
               className="mx-auto w-full uppercase text-center"
               textColor={titleColor}
               fontFamily={TEMPLATE_TYPOGRAPHY.title.fontFamily}
               fontWeight={TEMPLATE_TYPOGRAPHY.title.fontWeight}
-              letterSpacing={TEMPLATE_TYPOGRAPHY.title.letterSpacing}
+              letterSpacing={titleSizing.letterSpacing}
               textTransform={TEMPLATE_TYPOGRAPHY.title.textTransform}
             />
           </div>
@@ -233,7 +213,7 @@ export function TemplateNineImageGridOverlayNumberFooter({
               letterSpacing: TEMPLATE_TYPOGRAPHY.number.letterSpacing,
               lineHeight: TEMPLATE_TYPOGRAPHY.number.lineHeight,
               fontVariantNumeric: "lining-nums proportional-nums",
-              textShadow: "0 2px 10px rgba(0,0,0,0.16)",
+              textShadow: "0 2px 12px rgba(0,0,0,0.2)",
               transform: "translateY(-2px)",
             }}
           >
@@ -330,6 +310,41 @@ function compactOverlayTitle(title: string) {
   }
 
   return trimHeadlineToBudget(words.slice(0, 5), 24);
+}
+
+function getTitleSizing(title: string) {
+  const condensedLength = title.replace(/\s+/g, "").length;
+  const longestWordLength = Math.max(...title.split(/\s+/).map((word) => word.length), 0);
+
+  if (condensedLength <= 18 && longestWordLength <= 7) {
+    return {
+      minFontSize: 70,
+      maxFontSize: 98,
+      letterSpacing: "0.028em",
+    };
+  }
+
+  if (condensedLength <= 22 && longestWordLength <= 8) {
+    return {
+      minFontSize: 56,
+      maxFontSize: 84,
+      letterSpacing: "0.022em",
+    };
+  }
+
+  if (condensedLength <= 26 && longestWordLength <= 10) {
+    return {
+      minFontSize: 40,
+      maxFontSize: 66,
+      letterSpacing: "0.014em",
+    };
+  }
+
+  return {
+    minFontSize: 32,
+    maxFontSize: 56,
+    letterSpacing: "0.008em",
+  };
 }
 
 function trimHeadlineToBudget(words: string[], maxLength: number) {
