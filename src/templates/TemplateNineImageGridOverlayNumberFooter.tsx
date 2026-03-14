@@ -318,7 +318,7 @@ function getTitleSizing(title: string) {
 
   if (wordCount <= 3 && condensedLength <= 20 && longestWordLength <= 8) {
     return {
-      minFontSize: 60,
+      minFontSize: 46,
       maxFontSize: 108,
       letterSpacing: "0.008em",
     };
@@ -326,7 +326,7 @@ function getTitleSizing(title: string) {
 
   if (wordCount <= 4 && condensedLength <= 28 && longestWordLength <= 10) {
     return {
-      minFontSize: 48,
+      minFontSize: 40,
       maxFontSize: 92,
       letterSpacing: "0.002em",
     };

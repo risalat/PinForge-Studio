@@ -73,6 +73,22 @@ export function AutoFitText({
         element.style.fontSize = `${nextSize}px`;
       }
 
+      while (nextSize > 12) {
+        const computedLineHeight = Number.parseFloat(getComputedStyle(element).lineHeight);
+        const allowedHeight = Math.ceil(computedLineHeight * maxLines);
+
+        if (
+          element.scrollHeight <= allowedHeight + 2 &&
+          element.scrollWidth <= element.clientWidth + 2 &&
+          element.scrollHeight <= maxHeight + 2
+        ) {
+          break;
+        }
+
+        nextSize -= 1;
+        element.style.fontSize = `${nextSize}px`;
+      }
+
       if (!cancelled) {
         setFontSize(nextSize);
         setIsReady(true);
