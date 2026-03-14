@@ -59,3 +59,22 @@ export const sampleTemplateDataSixImageTripleSplitSlantHeroFooter: TemplateRende
   itemNumber: 15,
   visualPreset: "terracotta-ink",
 };
+
+export const sampleTemplateDataNineImageGridOverlayNumberFooter: TemplateRenderProps = {
+  title: "Mailbox Decor Ideas",
+  subtitle: "That Totally Transform Your Front Yard",
+  images: [
+    "/sample-images/1.jpg",
+    "/sample-images/2.jpg",
+    "/sample-images/3.jpg",
+    "/sample-images/4.jpg",
+    "/sample-images/5..jpg",
+    "/sample-images/6.jpg",
+    "/sample-images/7.jpg",
+    "/sample-images/8.jpg",
+    "/sample-images/9.jpg",
+  ],
+  domain: "mightypaint.com",
+  itemNumber: 25,
+  visualPreset: "cobalt-coral",
+};

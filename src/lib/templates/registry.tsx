@@ -4,9 +4,11 @@ import { TemplateSplitVerticalTitleNumber } from "@/templates/TemplateSplitVerti
 import { TemplateSingleImageSubtitleTitleCta } from "@/templates/TemplateSingleImageSubtitleTitleCta";
 import { TemplateFourImageMasonryHeroNumberDomainPill } from "@/templates/TemplateFourImageMasonryHeroNumberDomainPill";
 import { TemplateSixImageTripleSplitSlantHeroFooter } from "@/templates/TemplateSixImageTripleSplitSlantHeroFooter";
+import { TemplateNineImageGridOverlayNumberFooter } from "@/templates/TemplateNineImageGridOverlayNumberFooter";
 import type { JSX } from "react";
 import {
   sampleTemplateDataFourImageMasonryHeroNumberDomainPill,
+  sampleTemplateDataNineImageGridOverlayNumberFooter,
   sampleTemplateDataNumber,
   sampleTemplateDataNoSubtitle,
   sampleTemplateDataSixImageTripleSplitSlantHeroFooter,
@@ -106,6 +108,21 @@ export const TEMPLATE_CONFIGS: Record<string, TemplateConfig> = {
       footer: true,
     },
   },
+  "nine-image-grid-overlay-number-footer": {
+    id: "nine-image-grid-overlay-number-footer",
+    name: "Nine Image Grid Overlay Number Footer",
+    componentKey: "TemplateNineImageGridOverlayNumberFooter",
+    previewPath: "/preview/nine-image-grid-overlay-number-footer",
+    locked: true,
+    canvas: { width: 1080, height: 1920 },
+    imageSlotCount: 9,
+    textFields: ["title", "subtitle", "itemNumber", "domain", "visualPreset"],
+    features: {
+      overlay: true,
+      numberTreatment: "hero",
+      footer: true,
+    },
+  },
 };
 
 const TEMPLATE_COMPONENTS: Record<
@@ -118,6 +135,7 @@ const TEMPLATE_COMPONENTS: Record<
   "single-image-subtitle-title-cta": TemplateSingleImageSubtitleTitleCta,
   "four-image-masonry-hero-number-domain-pill": TemplateFourImageMasonryHeroNumberDomainPill,
   "six-image-triple-split-slant-hero-footer": TemplateSixImageTripleSplitSlantHeroFooter,
+  "nine-image-grid-overlay-number-footer": TemplateNineImageGridOverlayNumberFooter,
 };
 
 export function getTemplateConfig(templateId: string) {
@@ -157,6 +175,10 @@ export function getSampleTemplateProps(templateId: string) {
 
   if (templateId === "six-image-triple-split-slant-hero-footer") {
     return sampleTemplateDataSixImageTripleSplitSlantHeroFooter;
+  }
+
+  if (templateId === "nine-image-grid-overlay-number-footer") {
+    return sampleTemplateDataNineImageGridOverlayNumberFooter;
   }
 
   return sampleTemplateDataWithSubtitle;
