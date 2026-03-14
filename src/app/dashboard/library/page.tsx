@@ -160,6 +160,10 @@ function getTemplateDescription(templateId: string) {
       return "Split layout with a hero number badge, locked editorial typography, and stronger listicle packaging.";
     case "single-image-subtitle-title-cta":
       return "Single-image editorial card with a reference-locked subtitle, headline, and footer CTA treatment.";
+    case "four-image-masonry-hero-number-domain-pill":
+      return "Four-image masonry collage with a centered number medallion, bold title card, and compact domain pill.";
+    case "six-image-triple-split-slant-hero-footer":
+      return "Six-image collage with a triple top strip, tilted middle photos, editorial title band, and full-width footer.";
     default:
       return "Locked Pinterest template ready for preview, render, and manual plan use.";
   }
@@ -175,6 +179,10 @@ function getTemplateUsage(templateId: string) {
       return "Best for numbered listicles that need a visible count hook.";
     case "single-image-subtitle-title-cta":
       return "Best for single-image pins where the subtitle names a paint, product, or featured idea.";
+    case "four-image-masonry-hero-number-domain-pill":
+      return "Best for multi-image inspiration roundups that need a visible count and centered title block.";
+    case "six-image-triple-split-slant-hero-footer":
+      return "Best for exterior or roundup pins that benefit from multiple angles plus one strong hero image.";
     default:
       return "Best for locked template-driven render tests and job planning.";
   }

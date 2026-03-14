@@ -5,6 +5,7 @@ import {
   Libre_Baskerville,
   Lora,
   Manrope,
+  Satisfy,
   Space_Grotesk,
 } from "next/font/google";
 import "./globals.css";
@@ -40,6 +41,12 @@ const leagueSpartan = League_Spartan({
   subsets: ["latin"],
 });
 
+const satisfy = Satisfy({
+  variable: "--font-satisfy",
+  subsets: ["latin"],
+  weight: ["400"],
+});
+
 export const metadata: Metadata = {
   title: "PinForge Studio",
   description: "Pinterest pin rendering and scheduling scaffold for PinForge.",
@@ -53,7 +60,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${spaceGrotesk.variable} ${cormorantGaramond.variable} ${libreBaskerville.variable} ${lora.variable} ${manrope.variable} ${leagueSpartan.variable} antialiased`}
+        className={`${spaceGrotesk.variable} ${cormorantGaramond.variable} ${libreBaskerville.variable} ${lora.variable} ${manrope.variable} ${leagueSpartan.variable} ${satisfy.variable} antialiased`}
       >
         {children}
       </body>

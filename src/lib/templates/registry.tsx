@@ -3,11 +3,13 @@ import { TemplateSplitVerticalTitleNoSubtitle } from "@/templates/TemplateSplitV
 import { TemplateSplitVerticalTitleNumber } from "@/templates/TemplateSplitVerticalTitleNumber";
 import { TemplateSingleImageSubtitleTitleCta } from "@/templates/TemplateSingleImageSubtitleTitleCta";
 import { TemplateFourImageMasonryHeroNumberDomainPill } from "@/templates/TemplateFourImageMasonryHeroNumberDomainPill";
+import { TemplateSixImageTripleSplitSlantHeroFooter } from "@/templates/TemplateSixImageTripleSplitSlantHeroFooter";
 import type { JSX } from "react";
 import {
   sampleTemplateDataFourImageMasonryHeroNumberDomainPill,
   sampleTemplateDataNumber,
   sampleTemplateDataNoSubtitle,
+  sampleTemplateDataSixImageTripleSplitSlantHeroFooter,
   sampleTemplateDataSingleImageSubtitleTitleCta,
   sampleTemplateDataWithSubtitle,
 } from "@/lib/templates/sampleData";
@@ -89,6 +91,21 @@ export const TEMPLATE_CONFIGS: Record<string, TemplateConfig> = {
       footer: false,
     },
   },
+  "six-image-triple-split-slant-hero-footer": {
+    id: "six-image-triple-split-slant-hero-footer",
+    name: "Six Image Triple Split Slant Hero Footer",
+    componentKey: "TemplateSixImageTripleSplitSlantHeroFooter",
+    previewPath: "/preview/six-image-triple-split-slant-hero-footer",
+    locked: true,
+    canvas: { width: 1080, height: 1920 },
+    imageSlotCount: 6,
+    textFields: ["title", "subtitle", "itemNumber", "domain", "visualPreset"],
+    features: {
+      overlay: true,
+      numberTreatment: "hero",
+      footer: true,
+    },
+  },
 };
 
 const TEMPLATE_COMPONENTS: Record<
@@ -100,6 +117,7 @@ const TEMPLATE_COMPONENTS: Record<
   "split-vertical-title-number": TemplateSplitVerticalTitleNumber,
   "single-image-subtitle-title-cta": TemplateSingleImageSubtitleTitleCta,
   "four-image-masonry-hero-number-domain-pill": TemplateFourImageMasonryHeroNumberDomainPill,
+  "six-image-triple-split-slant-hero-footer": TemplateSixImageTripleSplitSlantHeroFooter,
 };
 
 export function getTemplateConfig(templateId: string) {
@@ -135,6 +153,10 @@ export function getSampleTemplateProps(templateId: string) {
 
   if (templateId === "four-image-masonry-hero-number-domain-pill") {
     return sampleTemplateDataFourImageMasonryHeroNumberDomainPill;
+  }
+
+  if (templateId === "six-image-triple-split-slant-hero-footer") {
+    return sampleTemplateDataSixImageTripleSplitSlantHeroFooter;
   }
 
   return sampleTemplateDataWithSubtitle;
