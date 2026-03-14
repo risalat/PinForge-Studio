@@ -46,7 +46,7 @@ export function TemplateNineImageGridOverlayNumberFooter({
   const imageSet = normalizeImages(images, 9);
   const cleanedDomain = domain.replace(/^https?:\/\//, "").replace(/^www\./, "");
   const compactTitle = compactOverlayTitle(title);
-  const titleSizing = getTitleSizing(compactTitle);
+  const titlePresentation = getOneLineTitlePresentation(compactTitle);
   const displayNumber = typeof itemNumber === "number" && itemNumber > 0 ? itemNumber : 25;
   const frameInset = 10;
   const gutter = 8;
@@ -154,20 +154,20 @@ export function TemplateNineImageGridOverlayNumberFooter({
           }}
         >
           <div className="absolute inset-x-0 top-[140px]">
-            <AutoFitText
-              as="p"
-              text={compactTitle}
-              minFontSize={titleSizing.minFontSize}
-              maxFontSize={titleSizing.maxFontSize}
-              maxLines={1}
-              lineHeight={TEMPLATE_TYPOGRAPHY.title.lineHeight}
-              className="mx-auto w-full uppercase text-center"
-              textColor={titleColor}
-              fontFamily={TEMPLATE_TYPOGRAPHY.title.fontFamily}
-              fontWeight={TEMPLATE_TYPOGRAPHY.title.fontWeight}
-              letterSpacing={titleSizing.letterSpacing}
-              textTransform={TEMPLATE_TYPOGRAPHY.title.textTransform}
-            />
+            <p
+              className="mx-auto w-full text-center uppercase"
+              style={{
+                color: titleColor,
+                fontFamily: TEMPLATE_TYPOGRAPHY.title.fontFamily,
+                fontWeight: TEMPLATE_TYPOGRAPHY.title.fontWeight,
+                fontSize: `${titlePresentation.fontSize}px`,
+                letterSpacing: titlePresentation.letterSpacing,
+                lineHeight: TEMPLATE_TYPOGRAPHY.title.lineHeight,
+                textTransform: TEMPLATE_TYPOGRAPHY.title.textTransform,
+              }}
+            >
+              {compactTitle}
+            </p>
           </div>
 
           <div
@@ -311,39 +311,35 @@ function compactOverlayTitle(title: string) {
   return words.slice(0, 5).join(" ");
 }
 
-function getTitleSizing(title: string) {
+function getOneLineTitlePresentation(title: string) {
   const condensedLength = title.replace(/[\s-]+/g, "").length;
   const wordCount = title.split(/\s+/).filter(Boolean).length;
   const longestWordLength = Math.max(...title.split(/[\s-]+/).map((word) => word.length), 0);
 
   if (wordCount <= 3 && condensedLength <= 20 && longestWordLength <= 8) {
     return {
-      minFontSize: 46,
-      maxFontSize: 108,
-      letterSpacing: "0.008em",
+      fontSize: 76,
+      letterSpacing: "0.004em",
     };
   }
 
   if (wordCount <= 4 && condensedLength <= 28 && longestWordLength <= 10) {
     return {
-      minFontSize: 40,
-      maxFontSize: 92,
-      letterSpacing: "0.002em",
+      fontSize: 62,
+      letterSpacing: "0",
     };
   }
 
   if (condensedLength <= 34 && longestWordLength <= 11) {
     return {
-      minFontSize: 38,
-      maxFontSize: 80,
+      fontSize: 52,
       letterSpacing: "-0.004em",
     };
   }
 
   return {
-    minFontSize: 30,
-    maxFontSize: 64,
-    letterSpacing: "-0.006em",
+    fontSize: 44,
+    letterSpacing: "-0.008em",
   };
 }
 
