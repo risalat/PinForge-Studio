@@ -7,7 +7,7 @@ import type { CSSProperties } from "react";
 
 const TEMPLATE_TYPOGRAPHY = {
   title: {
-    fontFamily: "var(--font-libre-baskerville), serif",
+    fontFamily: "var(--font-cormorant-garamond), serif",
     fontWeight: 700,
     lineHeight: 1,
     textTransform: "uppercase" as const,
@@ -157,7 +157,7 @@ export function TemplateNineImageGridOverlayNumberFooter({
               as="p"
               text={compactTitle}
               minFontSize={46}
-              maxFontSize={118}
+              maxFontSize={132}
               maxLines={1}
               lineHeight={TEMPLATE_TYPOGRAPHY.title.lineHeight}
               className="mx-auto w-full text-center"
@@ -178,8 +178,8 @@ export function TemplateNineImageGridOverlayNumberFooter({
             <AutoFitText
               as="p"
               text={subtitle?.trim() || "That Totally Transform Your Front Yard"}
-              minFontSize={20}
-              maxFontSize={28}
+              minFontSize={26}
+              maxFontSize={36}
               maxLines={1}
               lineHeight={TEMPLATE_TYPOGRAPHY.subtitle.lineHeight}
               className="mx-auto w-full"

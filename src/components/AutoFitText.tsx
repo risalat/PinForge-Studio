@@ -51,6 +51,21 @@ export function AutoFitText({
 
       const element = elementRef.current;
       const maxHeight = Math.ceil(maxLines * maxFontSize * lineHeight);
+      const fitsAtCurrentSize = () => {
+        const widthFits = element.scrollWidth <= element.clientWidth + 2;
+        if (maxLines === 1) {
+          return widthFits;
+        }
+
+        const computedLineHeight = Number.parseFloat(getComputedStyle(element).lineHeight);
+        const allowedHeight = Math.ceil(computedLineHeight * maxLines);
+
+        return (
+          widthFits &&
+          element.scrollHeight <= allowedHeight + 2 &&
+          element.scrollHeight <= maxHeight + 2
+        );
+      };
 
       let nextSize = maxFontSize;
       element.style.fontSize = `${nextSize}px`;
@@ -58,14 +73,7 @@ export function AutoFitText({
       element.style.whiteSpace = maxLines === 1 ? "nowrap" : "normal";
 
       while (nextSize > minFontSize) {
-        const computedLineHeight = Number.parseFloat(getComputedStyle(element).lineHeight);
-        const allowedHeight = Math.ceil(computedLineHeight * maxLines);
-
-        if (
-          element.scrollHeight <= allowedHeight + 2 &&
-          element.scrollWidth <= element.clientWidth + 2 &&
-          element.scrollHeight <= maxHeight + 2
-        ) {
+        if (fitsAtCurrentSize()) {
           break;
         }
 
@@ -74,14 +82,7 @@ export function AutoFitText({
       }
 
       while (nextSize > 12) {
-        const computedLineHeight = Number.parseFloat(getComputedStyle(element).lineHeight);
-        const allowedHeight = Math.ceil(computedLineHeight * maxLines);
-
-        if (
-          element.scrollHeight <= allowedHeight + 2 &&
-          element.scrollWidth <= element.clientWidth + 2 &&
-          element.scrollHeight <= maxHeight + 2
-        ) {
+        if (fitsAtCurrentSize()) {
           break;
         }
 
