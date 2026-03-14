@@ -153,7 +153,7 @@ export function TemplateNineImageGridOverlayNumberFooter({
             backgroundColor: bandBackground,
           }}
         >
-          <div className="absolute inset-x-[6px] top-[140px]">
+          <div className="absolute inset-x-0 top-[140px]">
             <AutoFitText
               as="p"
               text={compactTitle}
@@ -312,37 +312,37 @@ function compactOverlayTitle(title: string) {
 }
 
 function getTitleSizing(title: string) {
-  const condensedLength = title.replace(/\s+/g, "").length;
+  const condensedLength = title.replace(/[\s-]+/g, "").length;
   const longestWordLength = Math.max(...title.split(/[\s-]+/).map((word) => word.length), 0);
 
   if (condensedLength <= 18 && longestWordLength <= 7) {
     return {
-      minFontSize: 70,
-      maxFontSize: 98,
-      letterSpacing: "0.02em",
+      minFontSize: 54,
+      maxFontSize: 104,
+      letterSpacing: "0.012em",
     };
   }
 
   if (condensedLength <= 22 && longestWordLength <= 8) {
     return {
-      minFontSize: 48,
-      maxFontSize: 78,
-      letterSpacing: "0.014em",
-    };
-  }
-
-  if (condensedLength <= 26 && longestWordLength <= 10) {
-    return {
-      minFontSize: 34,
-      maxFontSize: 58,
+      minFontSize: 44,
+      maxFontSize: 90,
       letterSpacing: "0.006em",
     };
   }
 
+  if (condensedLength <= 30 && longestWordLength <= 10) {
+    return {
+      minFontSize: 34,
+      maxFontSize: 74,
+      letterSpacing: "0",
+    };
+  }
+
   return {
-    minFontSize: 22,
-    maxFontSize: 44,
-    letterSpacing: "0",
+    minFontSize: 26,
+    maxFontSize: 58,
+    letterSpacing: "-0.002em",
   };
 }
 
