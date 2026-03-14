@@ -153,7 +153,7 @@ export function TemplateNineImageGridOverlayNumberFooter({
             backgroundColor: bandBackground,
           }}
         >
-          <div className="absolute inset-x-[12px] top-[140px]">
+          <div className="absolute inset-x-[6px] top-[140px]">
             <AutoFitText
               as="p"
               text={compactTitle}
@@ -319,30 +319,30 @@ function getTitleSizing(title: string) {
     return {
       minFontSize: 70,
       maxFontSize: 98,
-      letterSpacing: "0.028em",
+      letterSpacing: "0.02em",
     };
   }
 
   if (condensedLength <= 22 && longestWordLength <= 8) {
     return {
-      minFontSize: 56,
-      maxFontSize: 84,
-      letterSpacing: "0.022em",
+      minFontSize: 48,
+      maxFontSize: 78,
+      letterSpacing: "0.014em",
     };
   }
 
   if (condensedLength <= 26 && longestWordLength <= 10) {
     return {
-      minFontSize: 40,
-      maxFontSize: 66,
-      letterSpacing: "0.014em",
+      minFontSize: 34,
+      maxFontSize: 58,
+      letterSpacing: "0.006em",
     };
   }
 
   return {
-    minFontSize: 26,
-    maxFontSize: 50,
-    letterSpacing: "0.004em",
+    minFontSize: 22,
+    maxFontSize: 44,
+    letterSpacing: "0",
   };
 }
 
