@@ -18,7 +18,7 @@ export async function renderPin({ jobId, planId, templateId }: RenderPinInput) {
   const storageProvider = getStorageProvider();
   const key = createRenderedPinStorageKey(jobId, planId, templateId);
 
-  for (let attempt = 1; attempt <= 2; attempt += 1) {
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
     const browser = await launchBrowser();
 
     try {
@@ -30,9 +30,11 @@ export async function renderPin({ jobId, planId, templateId }: RenderPinInput) {
         contentType: "image/png",
       });
     } catch (error) {
-      if (attempt === 2 || !isRetryableRenderError(error)) {
+      if (attempt === 3 || !isRetryableRenderError(error)) {
         throw error;
       }
+
+      await waitBeforeRetry(attempt);
     } finally {
       await browser.close();
     }
@@ -58,23 +60,52 @@ async function renderPinScreenshot(
     waitUntil: "domcontentloaded",
     timeout: isServerlessRuntime() ? 20_000 : 60_000,
   });
-  await page.waitForLoadState("networkidle", {
-    timeout: isServerlessRuntime() ? 10_000 : 30_000,
-  }).catch(() => null);
-  await page.waitForFunction(() => document.fonts?.status === "loaded", { timeout: 15_000 });
   await page.locator("[data-pin-canvas='true']").waitFor({ state: "visible", timeout: 15_000 });
-  await page.waitForFunction(() =>
-    Array.from(
-      document.querySelectorAll<HTMLImageElement>("[data-pin-canvas='true'] img"),
-    ).every((img) => img.complete && img.naturalWidth > 0),
-  );
-  await page.waitForFunction(() =>
-    Array.from(document.querySelectorAll("[data-autofit='true']")).every(
-      (node) => node.getAttribute("data-autofit-ready") === "true",
-    ),
-  );
+  await waitForStableCanvas(page);
 
   return capturePinCanvas(page);
+}
+
+async function waitForStableCanvas(page: Page) {
+  await page
+    .waitForLoadState("networkidle", {
+      timeout: isServerlessRuntime() ? 8_000 : 20_000,
+    })
+    .catch(() => null);
+
+  await waitForCondition(
+    page,
+    () => document.fonts?.status === "loaded",
+    isServerlessRuntime() ? 8_000 : 15_000,
+  );
+  await waitForCondition(
+    page,
+    () =>
+      Array.from(
+        document.querySelectorAll<HTMLImageElement>("[data-pin-canvas='true'] img"),
+      ).every((img) => img.complete && img.naturalWidth > 0),
+    isServerlessRuntime() ? 8_000 : 15_000,
+  );
+  await waitForCondition(
+    page,
+    () =>
+      Array.from(document.querySelectorAll("[data-autofit='true']")).every(
+        (node) => node.getAttribute("data-autofit-ready") === "true",
+      ),
+    isServerlessRuntime() ? 8_000 : 15_000,
+  );
+
+  await page.waitForTimeout(isServerlessRuntime() ? 250 : 150);
+}
+
+async function waitForCondition(page: Page, predicate: () => boolean, timeout: number) {
+  try {
+    await page.waitForFunction(predicate, { timeout });
+  } catch (error) {
+    if (page.isClosed()) {
+      throw error;
+    }
+  }
 }
 
 async function capturePinCanvas(page: Page) {
@@ -123,8 +154,17 @@ function isRetryableRenderError(error: unknown) {
   return (
     message.includes("Target page, context or browser has been closed") ||
     message.includes("page.goto: Target page, context or browser has been closed") ||
-    message.includes("locator.waitFor: Target page, context or browser has been closed")
+    message.includes("locator.waitFor: Target page, context or browser has been closed") ||
+    message.includes("page.waitForFunction: Target page, context or browser has been closed") ||
+    message.includes("Navigation failed because page crashed") ||
+    message.includes("Page crashed") ||
+    message.includes("Browser has been closed")
   );
+}
+
+function waitBeforeRetry(attempt: number) {
+  const delay = 350 * attempt;
+  return new Promise((resolve) => setTimeout(resolve, delay));
 }
 
 function createRenderedPinStorageKey(jobId: string, planId: string, templateId: string) {
