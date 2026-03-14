@@ -43,9 +43,13 @@ export interface GeneratePinRenderCopyRequest extends GeneratePinTitleRequest {
   locked_title?: string;
   subtitle_style_hint?: string;
   template_name?: string;
+  template_id?: string;
   template_supports_subtitle?: boolean;
   template_number_treatment?: TemplateNumberTreatment;
   artwork_goal?: string;
+  artwork_title_max_chars?: number;
+  artwork_title_max_words?: number;
+  artwork_title_single_line?: boolean;
 }
 
 export interface GeneratePinDescriptionRequest {
@@ -425,9 +429,13 @@ export class AIClient {
         `Tone hint: ${renderPayload.tone_hint ?? "none"}`,
         `Subtitle style hint: ${renderPayload.subtitle_style_hint ?? "short editorial kicker"}`,
         `Template name: ${renderPayload.template_name ?? "unknown"}`,
+        `Template id: ${renderPayload.template_id ?? "unknown"}`,
         `Template supports subtitle: ${renderPayload.template_supports_subtitle ? "yes" : "no"}`,
         `Template number treatment: ${renderPayload.template_number_treatment ?? "none"}`,
         `Artwork goal: ${renderPayload.artwork_goal ?? "Clean Pinterest artwork copy"}`,
+        `Artwork title should fit one line: ${renderPayload.artwork_title_single_line ? "yes" : "no"}`,
+        `Artwork title max chars: ${renderPayload.artwork_title_max_chars ?? "default"}`,
+        `Artwork title max words: ${renderPayload.artwork_title_max_words ?? "default"}`,
         `Locked title: ${renderPayload.locked_title ?? "none"}`,
         `Article title: ${renderPayload.article_title}`,
         `Destination URL: ${renderPayload.destination_url}`,
@@ -437,6 +445,9 @@ export class AIClient {
         JSON.stringify(renderPayload.images ?? [], null, 2),
         'Return JSON with this shape: {"items":[{"title":"...","subtitle":"..."}]}',
         "Rules: title <= 100 chars, subtitle <= 40 chars, subtitle <= 5 words, no hashtags, keep both specific and editorial. For subtitle templates, prefer artwork titles around 55 characters or less when possible.",
+        renderPayload.artwork_title_single_line
+          ? `Critical constraint for this template: the artwork title must fit on a single line. Keep it within ${renderPayload.artwork_title_max_words ?? 5} words and ${renderPayload.artwork_title_max_chars ?? 30} characters whenever possible. Rewrite for brevity instead of clipping or dropping random words.`
+          : "Use the template shape normally.",
       ].join("\n");
     }
 

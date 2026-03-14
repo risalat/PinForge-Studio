@@ -1650,6 +1650,7 @@ async function generateRenderCopyForPlan(
   if (!title || (supportsSubtitle && !subtitle)) {
     const renderCopy = await generatePinRenderCopy(
       buildRenderCopyRequest(job, {
+        templateId: plan.templateId,
         templateName: plan.template.name,
         templateSupportsSubtitle: supportsSubtitle,
         numberTreatment,
@@ -1714,11 +1715,12 @@ function buildRenderCopyRequest(
     listCountHint: number | null;
     titleVariationCount?: number | null;
   },
-  pin: {
-    templateName: string;
-    templateSupportsSubtitle: boolean;
-    numberTreatment: TemplateNumberTreatment;
-    imageAssignments: Array<{
+    pin: {
+      templateId: string;
+      templateName: string;
+      templateSupportsSubtitle: boolean;
+      numberTreatment: TemplateNumberTreatment;
+      imageAssignments: Array<{
       sourceImage: {
         url: string;
         alt: string | null;
@@ -1731,22 +1733,27 @@ function buildRenderCopyRequest(
     itemNumber?: number;
     lockedTitle?: string;
   },
-): GeneratePinRenderCopyRequest {
-  const titleRequest = buildTitleRequest(job, pin);
-  return {
-    ...titleRequest,
-    locked_title: pin.lockedTitle?.trim() || undefined,
-    subtitle_style_hint: pin.templateSupportsSubtitle
-      ? "Very short editorial kicker, 3 to 5 words."
-      : "No subtitle slot. Keep any secondary angle out of the artwork title.",
-    template_name: pin.templateName,
-    template_supports_subtitle: pin.templateSupportsSubtitle,
-    template_number_treatment: pin.numberTreatment,
-    artwork_goal: pin.templateSupportsSubtitle
-      ? "Create a clean Pinterest title + subtitle pairing for the artwork."
-      : "Create one clean Pinterest artwork headline that reads well without a subtitle.",
-  };
-}
+  ): GeneratePinRenderCopyRequest {
+    const titleRequest = buildTitleRequest(job, pin);
+    const isNineImageGridTemplate = pin.templateId === "nine-image-grid-overlay-number-footer";
+    return {
+      ...titleRequest,
+      locked_title: pin.lockedTitle?.trim() || undefined,
+      subtitle_style_hint: pin.templateSupportsSubtitle
+        ? "Very short editorial kicker, 3 to 5 words."
+        : "No subtitle slot. Keep any secondary angle out of the artwork title.",
+      template_id: pin.templateId,
+      template_name: pin.templateName,
+      template_supports_subtitle: pin.templateSupportsSubtitle,
+      template_number_treatment: pin.numberTreatment,
+      artwork_goal: pin.templateSupportsSubtitle
+        ? "Create a clean Pinterest title + subtitle pairing for the artwork."
+        : "Create one clean Pinterest artwork headline that reads well without a subtitle.",
+      artwork_title_single_line: isNineImageGridTemplate,
+      artwork_title_max_chars: isNineImageGridTemplate ? 28 : undefined,
+      artwork_title_max_words: isNineImageGridTemplate ? 4 : undefined,
+    };
+  }
 
 function buildTitleRequest(
   job: {
