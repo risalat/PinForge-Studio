@@ -3,6 +3,7 @@ import path from "node:path";
 import serverlessChromium from "@sparticuz/chromium";
 import { chromium as localChromium } from "playwright";
 import { chromium as serverlessPlaywright } from "playwright-core";
+import type { Page } from "playwright-core";
 import { env } from "@/lib/env";
 import { getStorageProvider } from "@/lib/storage";
 import { getTemplateConfig } from "@/lib/templates/registry";
@@ -43,9 +44,7 @@ export async function renderPin({ jobId, planId, templateId }: RenderPinInput) {
       ),
     );
 
-    const screenshot = await page.locator("[data-pin-canvas='true']").screenshot({
-      type: "png",
-    });
+    const screenshot = await capturePinCanvas(page);
 
     const storageProvider = getStorageProvider();
     const key = createRenderedPinStorageKey(jobId, planId, templateId);
@@ -57,6 +56,35 @@ export async function renderPin({ jobId, planId, templateId }: RenderPinInput) {
     });
   } finally {
     await browser.close();
+  }
+}
+
+async function capturePinCanvas(page: Page) {
+  const canvas = page.locator("[data-pin-canvas='true']");
+
+  try {
+    return await canvas.screenshot({
+      type: "png",
+    });
+  } catch (error) {
+    if (page.isClosed()) {
+      throw error;
+    }
+
+    const boundingBox = await canvas.boundingBox();
+    if (!boundingBox) {
+      throw error;
+    }
+
+    return page.screenshot({
+      type: "png",
+      clip: {
+        x: Math.max(0, Math.floor(boundingBox.x)),
+        y: Math.max(0, Math.floor(boundingBox.y)),
+        width: Math.ceil(boundingBox.width),
+        height: Math.ceil(boundingBox.height),
+      },
+    });
   }
 }
 

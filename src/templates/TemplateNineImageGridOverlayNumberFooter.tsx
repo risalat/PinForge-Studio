@@ -9,7 +9,7 @@ const TEMPLATE_TYPOGRAPHY = {
   title: {
     fontFamily: "var(--font-libre-baskerville), serif",
     fontWeight: 700,
-    letterSpacing: "0.045em",
+    letterSpacing: "0.028em",
     lineHeight: 1,
     textTransform: "uppercase" as const,
   },
@@ -47,6 +47,9 @@ export function TemplateNineImageGridOverlayNumberFooter({
   const imageSet = normalizeImages(images, 9);
   const cleanedDomain = domain.replace(/^https?:\/\//, "").replace(/^www\./, "");
   const compactTitle = compactOverlayTitle(title);
+  const compactTitleLength = compactTitle.replace(/\s+/g, "").length;
+  const titleMinFontSize = compactTitleLength <= 18 ? 66 : compactTitleLength <= 22 ? 56 : 42;
+  const titleMaxFontSize = compactTitleLength <= 18 ? 96 : compactTitleLength <= 22 ? 84 : 66;
   const displayNumber = typeof itemNumber === "number" && itemNumber > 0 ? itemNumber : 25;
   const frameInset = 10;
   const gutter = 8;
@@ -63,55 +66,51 @@ export function TemplateNineImageGridOverlayNumberFooter({
   const domainPillHeight = 54;
   const domainPillBottom = 46;
   const gridFrameColor = withAlpha(deepenHex(preset.palette.divider, 0.06), 0.9);
-  const bandBackground = tintTowardsWhite(preset.palette.band, 0.72);
-  const titleColor = ensureContrastTone(
-    mixHex(preset.palette.title, deepenHex(preset.palette.footer, 0.08), 0.14),
-    bandBackground,
-    5.4,
-  );
+  const bandBackground = tintTowardsWhite(preset.palette.band, 0.78);
+  const titleColor = ensureContrastTone(preset.palette.title, bandBackground, 5.4);
   const subtitleColor = pickDistinctReadableTone(
     [
-      preset.palette.subtitle,
       preset.palette.divider,
-      mixHex(preset.palette.subtitle, preset.palette.divider, 0.55),
-      mixHex(preset.palette.divider, deepenHex(preset.palette.footer, 0.1), 0.28),
+      preset.palette.subtitle,
+      mixHex(preset.palette.divider, preset.palette.subtitle, 0.4),
+      mixHex(preset.palette.divider, preset.palette.title, 0.18),
     ],
     titleColor,
     bandBackground,
     3.8,
-    54,
+    72,
   );
   const dividerColor = withAlpha(
     pickDistinctReadableTone(
       [
         preset.palette.divider,
-        mixHex(preset.palette.divider, preset.palette.subtitle, 0.35),
-        mixHex(preset.palette.subtitle, "#ffffff", 0.18),
+        subtitleColor,
+        mixHex(preset.palette.divider, "#ffffff", 0.14),
       ],
       titleColor,
       bandBackground,
       2.2,
-      26,
+      54,
     ),
     0.9,
   );
   const circleBackground = pickDarkReadableTone(
     [
-      deepenHex(preset.palette.footer, 0.14),
-      deepenHex(mixHex(preset.palette.footer, preset.palette.title, 0.32), 0.18),
-      deepenHex(preset.palette.title, 0.28),
+      deepenHex(preset.palette.footer, 0.32),
+      deepenHex(mixHex(preset.palette.footer, preset.palette.title, 0.24), 0.3),
+      deepenHex(preset.palette.title, 0.44),
     ],
     bandBackground,
     7.2,
   );
   const circleTextColor = pickLightReadableTone(
     [
-      mixHex(preset.palette.divider, "#ffffff", 0.24),
-      mixHex(preset.palette.number, "#ffffff", 0.48),
+      mixHex(preset.palette.divider, "#ffffff", 0.38),
+      mixHex(preset.palette.number, "#ffffff", 0.62),
       "#fff6eb",
     ],
     circleBackground,
-    4.5,
+    5.2,
   );
   const domainPillBackground = withAlpha(
     pickDarkReadableTone(
@@ -178,8 +177,8 @@ export function TemplateNineImageGridOverlayNumberFooter({
             <AutoFitText
               as="p"
               text={compactTitle}
-              minFontSize={58}
-              maxFontSize={74}
+              minFontSize={titleMinFontSize}
+              maxFontSize={titleMaxFontSize}
               maxLines={1}
               lineHeight={TEMPLATE_TYPOGRAPHY.title.lineHeight}
               className="mx-auto w-full uppercase text-center"
@@ -200,8 +199,8 @@ export function TemplateNineImageGridOverlayNumberFooter({
             <AutoFitText
               as="p"
               text={subtitle?.trim() || "That Totally Transform Your Front Yard"}
-              minFontSize={25}
-              maxFontSize={33}
+              minFontSize={26}
+              maxFontSize={36}
               maxLines={1}
               lineHeight={TEMPLATE_TYPOGRAPHY.subtitle.lineHeight}
               className="mx-auto w-full"
@@ -230,10 +229,11 @@ export function TemplateNineImageGridOverlayNumberFooter({
               color: circleTextColor,
               fontFamily: TEMPLATE_TYPOGRAPHY.number.fontFamily,
               fontWeight: TEMPLATE_TYPOGRAPHY.number.fontWeight,
-              fontSize: displayNumber >= 100 ? "138px" : "168px",
+              fontSize: displayNumber >= 100 ? "152px" : "184px",
               letterSpacing: TEMPLATE_TYPOGRAPHY.number.letterSpacing,
               lineHeight: TEMPLATE_TYPOGRAPHY.number.lineHeight,
               fontVariantNumeric: "lining-nums proportional-nums",
+              textShadow: "0 2px 10px rgba(0,0,0,0.16)",
               transform: "translateY(-2px)",
             }}
           >
@@ -304,8 +304,9 @@ function normalizeImages(images: string[], count: number) {
 function compactOverlayTitle(title: string) {
   const safeTitle = title.trim() || "Mailbox Decor Ideas";
   const words = safeTitle.split(/\s+/).filter(Boolean);
+  const titleLength = safeTitle.replace(/\s+/g, " ").length;
 
-  if (words.length <= 5) {
+  if (words.length <= 5 && titleLength <= 24) {
     return safeTitle;
   }
 
@@ -320,15 +321,44 @@ function compactOverlayTitle(title: string) {
 
   for (const suffix of twoWordSuffixes) {
     if (normalizedWords.at(-2) === suffix[0] && normalizedWords.at(-1) === suffix[1]) {
-      return [...words.slice(0, 3), ...words.slice(-2)].join(" ");
+      return trimHeadlineToBudget([...words.slice(0, 3), ...words.slice(-2)], 24);
     }
   }
 
   if (oneWordSuffixes.has(normalizedWords.at(-1) ?? "")) {
-    return [...words.slice(0, 4), words.at(-1)].join(" ");
+    return trimHeadlineToBudget([...words.slice(0, 4), words.at(-1)!], 24);
   }
 
-  return words.slice(0, 5).join(" ");
+  return trimHeadlineToBudget(words.slice(0, 5), 24);
+}
+
+function trimHeadlineToBudget(words: string[], maxLength: number) {
+  const cleanedWords = [...words];
+
+  while (cleanedWords.length > 3 && cleanedWords.join(" ").length > maxLength) {
+    cleanedWords.splice(cleanedWords.length - 2, 1);
+  }
+
+  let headline = cleanedWords.join(" ");
+  if (headline.length <= maxLength) {
+    return headline;
+  }
+
+  headline = headline
+    .replace(/-inspired/gi, "")
+    .replace(/\bbeautiful\b/gi, "")
+    .replace(/\bgorgeous\b/gi, "")
+    .replace(/\bstunning\b/gi, "")
+    .replace(/\bcharming\b/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+
+  const compactedWords = headline.split(/\s+/).filter(Boolean);
+  while (compactedWords.length > 3 && compactedWords.join(" ").length > maxLength) {
+    compactedWords.shift();
+  }
+
+  return compactedWords.join(" ");
 }
 
 function withAlpha(hex: string, opacity: number) {
