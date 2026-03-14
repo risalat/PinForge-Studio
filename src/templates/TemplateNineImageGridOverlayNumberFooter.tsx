@@ -46,7 +46,6 @@ export function TemplateNineImageGridOverlayNumberFooter({
   const imageSet = normalizeImages(images, 9);
   const cleanedDomain = domain.replace(/^https?:\/\//, "").replace(/^www\./, "");
   const compactTitle = compactOverlayTitle(title);
-  const titlePresentation = getOneLineTitlePresentation(compactTitle);
   const displayNumber = typeof itemNumber === "number" && itemNumber > 0 ? itemNumber : 25;
   const frameInset = 10;
   const gutter = 8;
@@ -153,21 +152,21 @@ export function TemplateNineImageGridOverlayNumberFooter({
             backgroundColor: bandBackground,
           }}
         >
-          <div className="absolute inset-x-0 top-[140px]">
-            <p
-              className="mx-auto w-full text-center uppercase"
-              style={{
-                color: titleColor,
-                fontFamily: TEMPLATE_TYPOGRAPHY.title.fontFamily,
-                fontWeight: TEMPLATE_TYPOGRAPHY.title.fontWeight,
-                fontSize: `${titlePresentation.fontSize}px`,
-                letterSpacing: titlePresentation.letterSpacing,
-                lineHeight: TEMPLATE_TYPOGRAPHY.title.lineHeight,
-                textTransform: TEMPLATE_TYPOGRAPHY.title.textTransform,
-              }}
-            >
-              {compactTitle}
-            </p>
+          <div className="absolute inset-x-[42px] top-[132px]">
+            <AutoFitText
+              as="p"
+              text={compactTitle}
+              minFontSize={34}
+              maxFontSize={74}
+              maxLines={1}
+              lineHeight={TEMPLATE_TYPOGRAPHY.title.lineHeight}
+              className="mx-auto w-full text-center"
+              textColor={titleColor}
+              fontFamily={TEMPLATE_TYPOGRAPHY.title.fontFamily}
+              fontWeight={TEMPLATE_TYPOGRAPHY.title.fontWeight}
+              letterSpacing={getOneLineTitleLetterSpacing(compactTitle)}
+              textTransform={TEMPLATE_TYPOGRAPHY.title.textTransform}
+            />
           </div>
 
           <div
@@ -311,36 +310,23 @@ function compactOverlayTitle(title: string) {
   return words.slice(0, 5).join(" ");
 }
 
-function getOneLineTitlePresentation(title: string) {
+function getOneLineTitleLetterSpacing(title: string) {
   const condensedLength = title.replace(/[\s-]+/g, "").length;
-  const wordCount = title.split(/\s+/).filter(Boolean).length;
   const longestWordLength = Math.max(...title.split(/[\s-]+/).map((word) => word.length), 0);
 
-  if (wordCount <= 3 && condensedLength <= 20 && longestWordLength <= 8) {
-    return {
-      fontSize: 76,
-      letterSpacing: "0.004em",
-    };
+  if (condensedLength <= 18 && longestWordLength <= 8) {
+    return "-0.012em";
   }
 
-  if (wordCount <= 4 && condensedLength <= 28 && longestWordLength <= 10) {
-    return {
-      fontSize: 62,
-      letterSpacing: "0",
-    };
+  if (condensedLength <= 26 && longestWordLength <= 10) {
+    return "-0.02em";
   }
 
-  if (condensedLength <= 34 && longestWordLength <= 11) {
-    return {
-      fontSize: 52,
-      letterSpacing: "-0.004em",
-    };
+  if (condensedLength <= 32 && longestWordLength <= 11) {
+    return "-0.03em";
   }
 
-  return {
-    fontSize: 44,
-    letterSpacing: "-0.008em",
-  };
+  return "-0.04em";
 }
 
 function withAlpha(hex: string, opacity: number) {
