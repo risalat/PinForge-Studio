@@ -35,6 +35,7 @@ export function AutoFitText({
 }: AutoFitTextProps) {
   const elementRef = useRef<HTMLElement>(null);
   const [fontSize, setFontSize] = useState(maxFontSize);
+  const [isReady, setIsReady] = useState(false);
 
   useLayoutEffect(() => {
     let cancelled = false;
@@ -74,6 +75,7 @@ export function AutoFitText({
 
       if (!cancelled) {
         setFontSize(nextSize);
+        setIsReady(true);
       }
     }
 
@@ -109,7 +111,13 @@ export function AutoFitText({
 
   if (as === "h1") {
     return (
-      <h1 ref={elementRef as RefObject<HTMLHeadingElement>} className={className} style={style}>
+      <h1
+        ref={elementRef as RefObject<HTMLHeadingElement>}
+        className={className}
+        style={style}
+        data-autofit="true"
+        data-autofit-ready={isReady ? "true" : "false"}
+      >
         {text}
       </h1>
     );
@@ -117,7 +125,13 @@ export function AutoFitText({
 
   if (as === "h2") {
     return (
-      <h2 ref={elementRef as RefObject<HTMLHeadingElement>} className={className} style={style}>
+      <h2
+        ref={elementRef as RefObject<HTMLHeadingElement>}
+        className={className}
+        style={style}
+        data-autofit="true"
+        data-autofit-ready={isReady ? "true" : "false"}
+      >
         {text}
       </h2>
     );
@@ -125,14 +139,26 @@ export function AutoFitText({
 
   if (as === "span") {
     return (
-      <span ref={elementRef as RefObject<HTMLSpanElement>} className={className} style={style}>
+      <span
+        ref={elementRef as RefObject<HTMLSpanElement>}
+        className={className}
+        style={style}
+        data-autofit="true"
+        data-autofit-ready={isReady ? "true" : "false"}
+      >
         {text}
       </span>
     );
   }
 
   return (
-    <p ref={elementRef as RefObject<HTMLParagraphElement>} className={className} style={style}>
+    <p
+      ref={elementRef as RefObject<HTMLParagraphElement>}
+      className={className}
+      style={style}
+      data-autofit="true"
+      data-autofit-ready={isReady ? "true" : "false"}
+    >
       {text}
     </p>
   );

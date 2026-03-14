@@ -284,9 +284,8 @@ function normalizeImages(images: string[], count: number) {
 function compactOverlayTitle(title: string) {
   const safeTitle = title.trim() || "Mailbox Decor Ideas";
   const words = safeTitle.split(/\s+/).filter(Boolean);
-  const titleLength = safeTitle.replace(/\s+/g, " ").length;
 
-  if (words.length <= 5 && titleLength <= 24) {
+  if (words.length <= 5) {
     return safeTitle;
   }
 
@@ -301,20 +300,20 @@ function compactOverlayTitle(title: string) {
 
   for (const suffix of twoWordSuffixes) {
     if (normalizedWords.at(-2) === suffix[0] && normalizedWords.at(-1) === suffix[1]) {
-      return trimHeadlineToBudget([...words.slice(0, 3), ...words.slice(-2)], 24);
+      return [...words.slice(0, 3), ...words.slice(-2)].join(" ");
     }
   }
 
   if (oneWordSuffixes.has(normalizedWords.at(-1) ?? "")) {
-    return trimHeadlineToBudget([...words.slice(0, 4), words.at(-1)!], 24);
+      return [...words.slice(0, 4), words.at(-1)!].join(" ");
   }
 
-  return trimHeadlineToBudget(words.slice(0, 5), 24);
+  return words.slice(0, 5).join(" ");
 }
 
 function getTitleSizing(title: string) {
   const condensedLength = title.replace(/\s+/g, "").length;
-  const longestWordLength = Math.max(...title.split(/\s+/).map((word) => word.length), 0);
+  const longestWordLength = Math.max(...title.split(/[\s-]+/).map((word) => word.length), 0);
 
   if (condensedLength <= 18 && longestWordLength <= 7) {
     return {
@@ -341,39 +340,10 @@ function getTitleSizing(title: string) {
   }
 
   return {
-    minFontSize: 32,
-    maxFontSize: 56,
-    letterSpacing: "0.008em",
+    minFontSize: 26,
+    maxFontSize: 50,
+    letterSpacing: "0.004em",
   };
-}
-
-function trimHeadlineToBudget(words: string[], maxLength: number) {
-  const cleanedWords = [...words];
-
-  while (cleanedWords.length > 3 && cleanedWords.join(" ").length > maxLength) {
-    cleanedWords.splice(cleanedWords.length - 2, 1);
-  }
-
-  let headline = cleanedWords.join(" ");
-  if (headline.length <= maxLength) {
-    return headline;
-  }
-
-  headline = headline
-    .replace(/-inspired/gi, "")
-    .replace(/\bbeautiful\b/gi, "")
-    .replace(/\bgorgeous\b/gi, "")
-    .replace(/\bstunning\b/gi, "")
-    .replace(/\bcharming\b/gi, "")
-    .replace(/\s{2,}/g, " ")
-    .trim();
-
-  const compactedWords = headline.split(/\s+/).filter(Boolean);
-  while (compactedWords.length > 3 && compactedWords.join(" ").length > maxLength) {
-    compactedWords.shift();
-  }
-
-  return compactedWords.join(" ");
 }
 
 function withAlpha(hex: string, opacity: number) {
