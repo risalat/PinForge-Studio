@@ -8,7 +8,7 @@ const DEFAULT_COLORS = {
   bandBackground: "#f6eedf",
   footerBackground: "#f1e3cf",
   title: "#5f371f",
-  accent: "#d85637",
+  accent: "#e15438",
   subtitle: "#74432a",
   divider: "#b69176",
   domain: "#4f2f1f",
@@ -84,44 +84,46 @@ export function TemplateSixImageTripleSplitSlantHeroFooter({
   const rightTiltedPhotoLeft = tiltedPairLeft + tiltedPhotoWidth - tiltedPhotoOverlap;
   const topImageFilter = "saturate(1.04) contrast(1.03)";
   const middleBandBackground = preset
-    ? mixHex(DEFAULT_COLORS.bandBackground, tintTowardsWhite(preset.palette.band, 0.82), 0.46)
+    ? mixHex(tintTowardsWhite(preset.palette.band, 0.62), "#fff2dc", 0.32)
     : DEFAULT_COLORS.bandBackground;
   const footerBackground = preset
-    ? mixHex(DEFAULT_COLORS.footerBackground, tintTowardsWhite(preset.palette.canvas, 0.78), 0.4)
+    ? mixHex(tintTowardsWhite(preset.palette.footer, 0.42), "#f4e6d2", 0.18)
     : DEFAULT_COLORS.footerBackground;
   const gutterColor = preset
-    ? mixHex(DEFAULT_COLORS.gutter, deepenHex(preset.palette.footer, 0.46), 0.35)
+    ? ensureContrastTone(
+        mixHex(deepenHex(preset.palette.footer, 0.3), deepenHex(preset.palette.title, 0.4), 0.45),
+        middleBandBackground,
+        8,
+      )
     : DEFAULT_COLORS.gutter;
-  const titleColor = ensureContrastColor(
-    middleBandBackground,
-    preset ? deepenHex(preset.palette.title, 0.34) : DEFAULT_COLORS.title,
-    [DEFAULT_COLORS.title, deepenHex(DEFAULT_COLORS.gutter, 0.08), "#231812"],
-    5.8,
-  );
-  const accentColor = ensureContrastColor(
-    middleBandBackground,
-    preset ? mixHex(DEFAULT_COLORS.accent, mixHex(preset.palette.divider, "#ef5333", 0.45), 0.58) : DEFAULT_COLORS.accent,
-    [DEFAULT_COLORS.accent, "#d3472d", titleColor],
-    3.2,
-  );
-  const subtitleColor = ensureContrastColor(
-    middleBandBackground,
-    preset ? deepenHex(mixHex(DEFAULT_COLORS.subtitle, preset.palette.subtitle, 0.42), 0.08) : DEFAULT_COLORS.subtitle,
-    [DEFAULT_COLORS.subtitle, titleColor, "#744632"],
-    3.4,
-  );
-  const dividerColor = ensureContrastColor(
-    middleBandBackground,
-    preset ? mixHex(DEFAULT_COLORS.divider, preset.palette.divider, 0.5) : DEFAULT_COLORS.divider,
-    [DEFAULT_COLORS.divider, subtitleColor],
-    2.1,
-  );
-  const domainColor = ensureContrastColor(
-    footerBackground,
-    preset ? deepenHex(mixHex(DEFAULT_COLORS.domain, preset.palette.footer, 0.28), 0.18) : DEFAULT_COLORS.domain,
-    [DEFAULT_COLORS.domain, titleColor, "#241916"],
-    5.6,
-  );
+  const accentColor = DEFAULT_COLORS.accent;
+  const titleColor = resolvePrimaryTitleColor({
+    presetTitleColor: preset?.palette.title,
+    presetFooterColor: preset?.palette.footer,
+    backgroundHex: middleBandBackground,
+    accentHex: accentColor,
+  });
+  const subtitleColor = preset
+    ? ensureContrastTone(
+        mixHex(preset.palette.subtitle, preset.palette.footer, 0.18),
+        middleBandBackground,
+        3.4,
+      )
+    : DEFAULT_COLORS.subtitle;
+  const dividerColor = preset
+    ? ensureContrastTone(
+        mixHex(preset.palette.divider, titleColor, 0.18),
+        middleBandBackground,
+        2.1,
+      )
+    : DEFAULT_COLORS.divider;
+  const domainColor = preset
+    ? ensureContrastTone(
+        mixHex(preset.palette.domain, preset.palette.footer, 0.16),
+        footerBackground,
+        5.6,
+      )
+    : DEFAULT_COLORS.domain;
   const { primaryLine, accentLine } = splitHeadlineTwoLines(title, displayNumber);
 
   return (
@@ -424,31 +426,91 @@ function parseHex(value: string) {
   ];
 }
 
-function pickBestContrastColor(backgroundHex: string, candidates: string[]) {
-  const normalizedCandidates = candidates.filter((candidate) => isHexColor(candidate));
-  if (!isHexColor(backgroundHex) || normalizedCandidates.length === 0) {
-    return candidates[0] ?? backgroundHex;
+function ensureContrastTone(colorHex: string, backgroundHex: string, minimumRatio: number) {
+  if (!isHexColor(colorHex) || !isHexColor(backgroundHex)) {
+    return colorHex;
   }
-  return normalizedCandidates.reduce((best, candidate) =>
-    getContrastRatio(candidate, backgroundHex) > getContrastRatio(best, backgroundHex)
-      ? candidate
-      : best,
-  );
+
+  if (getContrastRatio(colorHex, backgroundHex) >= minimumRatio) {
+    return colorHex;
+  }
+
+  const darkerCandidate = shiftTowardContrast(colorHex, backgroundHex, minimumRatio, "#000000");
+  const lighterCandidate = shiftTowardContrast(colorHex, backgroundHex, minimumRatio, "#ffffff");
+
+  if (!darkerCandidate) {
+    return lighterCandidate ?? colorHex;
+  }
+
+  if (!lighterCandidate) {
+    return darkerCandidate;
+  }
+
+  return colorDistance(colorHex, darkerCandidate) <= colorDistance(colorHex, lighterCandidate)
+    ? darkerCandidate
+    : lighterCandidate;
 }
 
-function ensureContrastColor(
+function resolvePrimaryTitleColor(input: {
+  presetTitleColor?: string;
+  presetFooterColor?: string;
+  backgroundHex: string;
+  accentHex: string;
+}) {
+  const preferred = input.presetTitleColor ?? DEFAULT_COLORS.title;
+  let resolved = ensureContrastTone(preferred, input.backgroundHex, 5.8);
+
+  if (colorDistance(resolved, input.accentHex) >= 90) {
+    return resolved;
+  }
+
+  const darkerFallbacks = [
+    input.presetFooterColor ? deepenHex(input.presetFooterColor, 0.44) : null,
+    deepenHex(preferred, 0.42),
+    DEFAULT_COLORS.title,
+    "#2a190f",
+  ].filter((value): value is string => Boolean(value));
+
+  for (const candidate of darkerFallbacks) {
+    const contrasted = ensureContrastTone(candidate, input.backgroundHex, 5.8);
+    if (colorDistance(contrasted, input.accentHex) >= 90) {
+      return contrasted;
+    }
+    resolved = contrasted;
+  }
+
+  return resolved;
+}
+
+function shiftTowardContrast(
+  colorHex: string,
   backgroundHex: string,
-  preferredHex: string,
-  fallbacks: string[],
   minimumRatio: number,
+  targetHex: string,
 ) {
-  if (isHexColor(backgroundHex) && isHexColor(preferredHex)) {
-    const preferredRatio = getContrastRatio(preferredHex, backgroundHex);
-    if (preferredRatio >= minimumRatio) {
-      return preferredHex;
+  for (let step = 1; step <= 12; step += 1) {
+    const candidate = mixHex(colorHex, targetHex, step * 0.08);
+    if (getContrastRatio(candidate, backgroundHex) >= minimumRatio) {
+      return candidate;
     }
   }
-  return pickBestContrastColor(backgroundHex, [preferredHex, ...fallbacks]);
+
+  return null;
+}
+
+function colorDistance(leftHex: string, rightHex: string) {
+  const left = parseHex(leftHex);
+  const right = parseHex(rightHex);
+
+  if (!left || !right) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  return Math.sqrt(
+    Math.pow(left[0] - right[0], 2) +
+      Math.pow(left[1] - right[1], 2) +
+      Math.pow(left[2] - right[2], 2),
+  );
 }
 
 function getContrastRatio(foregroundHex: string, backgroundHex: string) {
