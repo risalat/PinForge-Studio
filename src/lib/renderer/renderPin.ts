@@ -63,7 +63,11 @@ async function renderPinScreenshot(
   await page.locator("[data-pin-canvas='true']").waitFor({ state: "visible", timeout: 15_000 });
   await waitForStableCanvas(page);
 
-  return capturePinCanvas(page);
+  try {
+    return await capturePinCanvas(page);
+  } finally {
+    await page.close().catch(() => null);
+  }
 }
 
 async function waitForStableCanvas(page: Page) {
@@ -110,21 +114,36 @@ async function waitForCondition(page: Page, predicate: () => boolean, timeout: n
 
 async function capturePinCanvas(page: Page) {
   const canvas = page.locator("[data-pin-canvas='true']");
-  const boundingBox = await canvas.boundingBox();
+  await canvas.scrollIntoViewIfNeeded().catch(() => null);
 
-  if (!boundingBox) {
-    throw new Error("Pin canvas bounds could not be resolved before screenshot.");
+  try {
+    return await canvas.screenshot({
+      type: "png",
+      animations: "disabled",
+      caret: "hide",
+    });
+  } catch (error) {
+    if (page.isClosed()) {
+      throw error;
+    }
+
+    const boundingBox = await canvas.boundingBox();
+    if (!boundingBox) {
+      throw new Error("Pin canvas bounds could not be resolved before screenshot.");
+    }
+
+    return page.screenshot({
+      type: "png",
+      animations: "disabled",
+      caret: "hide",
+      clip: {
+        x: Math.max(0, Math.floor(boundingBox.x)),
+        y: Math.max(0, Math.floor(boundingBox.y)),
+        width: Math.ceil(boundingBox.width),
+        height: Math.ceil(boundingBox.height),
+      },
+    });
   }
-
-  return page.screenshot({
-    type: "png",
-    clip: {
-      x: Math.max(0, Math.floor(boundingBox.x)),
-      y: Math.max(0, Math.floor(boundingBox.y)),
-      width: Math.ceil(boundingBox.width),
-      height: Math.ceil(boundingBox.height),
-    },
-  });
 }
 
 async function launchBrowser() {

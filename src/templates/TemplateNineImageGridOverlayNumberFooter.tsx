@@ -156,8 +156,8 @@ export function TemplateNineImageGridOverlayNumberFooter({
             <AutoFitText
               as="p"
               text={compactTitle}
-              minFontSize={34}
-              maxFontSize={74}
+              minFontSize={46}
+              maxFontSize={118}
               maxLines={1}
               lineHeight={TEMPLATE_TYPOGRAPHY.title.lineHeight}
               className="mx-auto w-full text-center"
@@ -178,8 +178,8 @@ export function TemplateNineImageGridOverlayNumberFooter({
             <AutoFitText
               as="p"
               text={subtitle?.trim() || "That Totally Transform Your Front Yard"}
-              minFontSize={26}
-              maxFontSize={36}
+              minFontSize={20}
+              maxFontSize={28}
               maxLines={1}
               lineHeight={TEMPLATE_TYPOGRAPHY.subtitle.lineHeight}
               className="mx-auto w-full"
