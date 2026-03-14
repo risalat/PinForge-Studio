@@ -313,36 +313,37 @@ function compactOverlayTitle(title: string) {
 
 function getTitleSizing(title: string) {
   const condensedLength = title.replace(/[\s-]+/g, "").length;
+  const wordCount = title.split(/\s+/).filter(Boolean).length;
   const longestWordLength = Math.max(...title.split(/[\s-]+/).map((word) => word.length), 0);
 
-  if (condensedLength <= 18 && longestWordLength <= 7) {
+  if (wordCount <= 3 && condensedLength <= 20 && longestWordLength <= 8) {
     return {
-      minFontSize: 54,
-      maxFontSize: 104,
-      letterSpacing: "0.012em",
+      minFontSize: 60,
+      maxFontSize: 108,
+      letterSpacing: "0.008em",
     };
   }
 
-  if (condensedLength <= 22 && longestWordLength <= 8) {
+  if (wordCount <= 4 && condensedLength <= 28 && longestWordLength <= 10) {
     return {
-      minFontSize: 44,
-      maxFontSize: 90,
-      letterSpacing: "0.006em",
+      minFontSize: 48,
+      maxFontSize: 92,
+      letterSpacing: "0.002em",
     };
   }
 
-  if (condensedLength <= 30 && longestWordLength <= 10) {
+  if (condensedLength <= 34 && longestWordLength <= 11) {
     return {
-      minFontSize: 34,
-      maxFontSize: 74,
-      letterSpacing: "0",
+      minFontSize: 38,
+      maxFontSize: 80,
+      letterSpacing: "-0.004em",
     };
   }
 
   return {
-    minFontSize: 26,
-    maxFontSize: 58,
-    letterSpacing: "-0.002em",
+    minFontSize: 30,
+    maxFontSize: 64,
+    letterSpacing: "-0.006em",
   };
 }
 
