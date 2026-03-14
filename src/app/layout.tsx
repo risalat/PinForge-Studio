@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import {
+  Alata,
   Cormorant_Garamond,
   League_Spartan,
   Libre_Baskerville,
@@ -13,6 +14,12 @@ import "./globals.css";
 const spaceGrotesk = Space_Grotesk({
   variable: "--font-space-grotesk",
   subsets: ["latin"],
+});
+
+const alata = Alata({
+  variable: "--font-alata",
+  subsets: ["latin"],
+  weight: ["400"],
 });
 
 const cormorantGaramond = Cormorant_Garamond({
@@ -60,7 +67,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${spaceGrotesk.variable} ${cormorantGaramond.variable} ${libreBaskerville.variable} ${lora.variable} ${manrope.variable} ${leagueSpartan.variable} ${satisfy.variable} antialiased`}
+        className={`${spaceGrotesk.variable} ${alata.variable} ${cormorantGaramond.variable} ${libreBaskerville.variable} ${lora.variable} ${manrope.variable} ${leagueSpartan.variable} ${satisfy.variable} antialiased`}
       >
         {children}
       </body>

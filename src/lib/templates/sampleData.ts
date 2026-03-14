@@ -44,6 +44,19 @@ export const sampleTemplateDataFourImageMasonryHeroNumberDomainPill: TemplateRen
   visualPreset: "emerald-sun",
 };
 
+export const sampleTemplateDataFourImageGridNumberTitleDomain: TemplateRenderProps = {
+  title: "Small Bedroom Accent Wall Ideas",
+  images: [
+    "/sample-images/1.jpg",
+    "/sample-images/2.jpg",
+    "/sample-images/3.jpg",
+    "/sample-images/4.jpg",
+  ],
+  domain: "mightypaint.com",
+  itemNumber: 15,
+  visualPreset: "terracotta-ink",
+};
+
 export const sampleTemplateDataSixImageTripleSplitSlantHeroFooter: TemplateRenderProps = {
   title: "Gorgeous Lakehouse Exterior Ideas",
   subtitle: "That Wow from Every Angle",

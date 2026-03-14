@@ -3,11 +3,13 @@ import { TemplateSplitVerticalTitleNoSubtitle } from "@/templates/TemplateSplitV
 import { TemplateSplitVerticalTitleNumber } from "@/templates/TemplateSplitVerticalTitleNumber";
 import { TemplateSingleImageSubtitleTitleCta } from "@/templates/TemplateSingleImageSubtitleTitleCta";
 import { TemplateFourImageMasonryHeroNumberDomainPill } from "@/templates/TemplateFourImageMasonryHeroNumberDomainPill";
+import { TemplateFourImageGridNumberTitleDomain } from "@/templates/TemplateFourImageGridNumberTitleDomain";
 import { TemplateSixImageTripleSplitSlantHeroFooter } from "@/templates/TemplateSixImageTripleSplitSlantHeroFooter";
 import { TemplateNineImageGridOverlayNumberFooter } from "@/templates/TemplateNineImageGridOverlayNumberFooter";
 import type { JSX } from "react";
 import {
   sampleTemplateDataFourImageMasonryHeroNumberDomainPill,
+  sampleTemplateDataFourImageGridNumberTitleDomain,
   sampleTemplateDataNineImageGridOverlayNumberFooter,
   sampleTemplateDataNumber,
   sampleTemplateDataNoSubtitle,
@@ -93,6 +95,21 @@ export const TEMPLATE_CONFIGS: Record<string, TemplateConfig> = {
       footer: false,
     },
   },
+  "four-image-grid-number-title-domain": {
+    id: "four-image-grid-number-title-domain",
+    name: "Four Image Grid Number Title Domain",
+    componentKey: "TemplateFourImageGridNumberTitleDomain",
+    previewPath: "/preview/four-image-grid-number-title-domain",
+    locked: true,
+    canvas: { width: 1080, height: 1920 },
+    imageSlotCount: 4,
+    textFields: ["title", "itemNumber", "domain", "visualPreset"],
+    features: {
+      overlay: true,
+      numberTreatment: "hero",
+      footer: true,
+    },
+  },
   "six-image-triple-split-slant-hero-footer": {
     id: "six-image-triple-split-slant-hero-footer",
     name: "Six Image Triple Split Slant Hero Footer",
@@ -134,6 +151,7 @@ const TEMPLATE_COMPONENTS: Record<
   "split-vertical-title-number": TemplateSplitVerticalTitleNumber,
   "single-image-subtitle-title-cta": TemplateSingleImageSubtitleTitleCta,
   "four-image-masonry-hero-number-domain-pill": TemplateFourImageMasonryHeroNumberDomainPill,
+  "four-image-grid-number-title-domain": TemplateFourImageGridNumberTitleDomain,
   "six-image-triple-split-slant-hero-footer": TemplateSixImageTripleSplitSlantHeroFooter,
   "nine-image-grid-overlay-number-footer": TemplateNineImageGridOverlayNumberFooter,
 };
@@ -171,6 +189,10 @@ export function getSampleTemplateProps(templateId: string) {
 
   if (templateId === "four-image-masonry-hero-number-domain-pill") {
     return sampleTemplateDataFourImageMasonryHeroNumberDomainPill;
+  }
+
+  if (templateId === "four-image-grid-number-title-domain") {
+    return sampleTemplateDataFourImageGridNumberTitleDomain;
   }
 
   if (templateId === "six-image-triple-split-slant-hero-footer") {
