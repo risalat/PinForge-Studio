@@ -168,6 +168,8 @@ function getTemplateDescription(templateId: string) {
       return "Six-image collage with a triple top strip, tilted middle photos, editorial title band, and full-width footer.";
     case "nine-image-grid-overlay-number-footer":
       return "Nine-image square grid with a centered number medallion, editorial title band, and compact footer pill.";
+    case "masonry-grid-number-title-footer":
+      return "Seven-image masonry collage with a centered number card, dark editorial title band, and footer domain pill.";
     default:
       return "Locked Pinterest template ready for preview, render, and manual plan use.";
   }
@@ -191,6 +193,8 @@ function getTemplateUsage(templateId: string) {
       return "Best for exterior or roundup pins that benefit from multiple angles plus one strong hero image.";
     case "nine-image-grid-overlay-number-footer":
       return "Best for dense inspiration roundups that need many examples plus a strong listicle hook.";
+    case "masonry-grid-number-title-footer":
+      return "Best for editorial collage pins that need a richer masonry structure with a centered count hook.";
     default:
       return "Best for locked template-driven render tests and job planning.";
   }

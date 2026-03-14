@@ -6,10 +6,12 @@ import { TemplateFourImageMasonryHeroNumberDomainPill } from "@/templates/Templa
 import { TemplateFourImageGridNumberTitleDomain } from "@/templates/TemplateFourImageGridNumberTitleDomain";
 import { TemplateSixImageTripleSplitSlantHeroFooter } from "@/templates/TemplateSixImageTripleSplitSlantHeroFooter";
 import { TemplateNineImageGridOverlayNumberFooter } from "@/templates/TemplateNineImageGridOverlayNumberFooter";
+import { TemplateMasonryGridNumberTitleFooter } from "@/templates/TemplateMasonryGridNumberTitleFooter";
 import type { JSX } from "react";
 import {
   sampleTemplateDataFourImageMasonryHeroNumberDomainPill,
   sampleTemplateDataFourImageGridNumberTitleDomain,
+  sampleTemplateDataMasonryGridNumberTitleFooter,
   sampleTemplateDataNineImageGridOverlayNumberFooter,
   sampleTemplateDataNumber,
   sampleTemplateDataNoSubtitle,
@@ -140,6 +142,21 @@ export const TEMPLATE_CONFIGS: Record<string, TemplateConfig> = {
       footer: true,
     },
   },
+  "masonry-grid-number-title-footer": {
+    id: "masonry-grid-number-title-footer",
+    name: "Masonry Grid Number Title Footer",
+    componentKey: "TemplateMasonryGridNumberTitleFooter",
+    previewPath: "/preview/masonry-grid-number-title-footer",
+    locked: true,
+    canvas: { width: 1080, height: 1920 },
+    imageSlotCount: 8,
+    textFields: ["title", "itemNumber", "domain", "visualPreset"],
+    features: {
+      overlay: true,
+      numberTreatment: "hero",
+      footer: true,
+    },
+  },
 };
 
 const TEMPLATE_COMPONENTS: Record<
@@ -154,6 +171,7 @@ const TEMPLATE_COMPONENTS: Record<
   "four-image-grid-number-title-domain": TemplateFourImageGridNumberTitleDomain,
   "six-image-triple-split-slant-hero-footer": TemplateSixImageTripleSplitSlantHeroFooter,
   "nine-image-grid-overlay-number-footer": TemplateNineImageGridOverlayNumberFooter,
+  "masonry-grid-number-title-footer": TemplateMasonryGridNumberTitleFooter,
 };
 
 export function getTemplateConfig(templateId: string) {
@@ -201,6 +219,10 @@ export function getSampleTemplateProps(templateId: string) {
 
   if (templateId === "nine-image-grid-overlay-number-footer") {
     return sampleTemplateDataNineImageGridOverlayNumberFooter;
+  }
+
+  if (templateId === "masonry-grid-number-title-footer") {
+    return sampleTemplateDataMasonryGridNumberTitleFooter;
   }
 
   return sampleTemplateDataWithSubtitle;
