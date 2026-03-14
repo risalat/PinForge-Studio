@@ -15,6 +15,15 @@ const DEFAULT_COLORS = {
   gutter: "#251c16",
 } as const;
 
+const EMPHASIS_SINGLE_WORDS = new Set(["ideas", "colors", "decor", "looks", "styles"]);
+const EMPHASIS_TWO_WORD_SUFFIXES = [
+  ["paint", "colors"],
+  ["exterior", "ideas"],
+  ["wall", "ideas"],
+  ["accent", "walls"],
+  ["accent", "wall"],
+] as const;
+
 const TEMPLATE_TYPOGRAPHY = {
   title: {
     fontFamily: "var(--font-league-spartan), sans-serif",
@@ -66,6 +75,13 @@ export function TemplateSixImageTripleSplitSlantHeroFooter({
   const heroImageTop = middleBandTop + middleBandHeight;
   const footerHeight = 120;
   const heroHeight = 1920 - heroImageTop - footerHeight;
+  const tiltedPhotoWidth = 332;
+  const tiltedPhotoHeight = 278;
+  const tiltedPhotoOverlap = 34;
+  const tiltedPhotoTop = 400;
+  const tiltedPairLeft = Math.round((1080 - (tiltedPhotoWidth * 2 - tiltedPhotoOverlap)) / 2);
+  const leftTiltedPhotoLeft = tiltedPairLeft;
+  const rightTiltedPhotoLeft = tiltedPairLeft + tiltedPhotoWidth - tiltedPhotoOverlap;
   const topImageFilter = "saturate(1.04) contrast(1.03)";
   const middleBandBackground = preset
     ? mixHex(DEFAULT_COLORS.bandBackground, tintTowardsWhite(preset.palette.band, 0.82), 0.46)
@@ -145,20 +161,20 @@ export function TemplateSixImageTripleSplitSlantHeroFooter({
       <TiltedPhoto
         src={imageSet[3]}
         alt={title}
-        width={326}
-        height={254}
-        left={154}
-        top={392}
+        width={tiltedPhotoWidth}
+        height={tiltedPhotoHeight}
+        left={leftTiltedPhotoLeft}
+        top={tiltedPhotoTop}
         rotate={-11}
         zIndex={20}
       />
       <TiltedPhoto
         src={imageSet[4]}
         alt={title}
-        width={326}
-        height={254}
-        left={418}
-        top={420}
+        width={tiltedPhotoWidth}
+        height={tiltedPhotoHeight}
+        left={rightTiltedPhotoLeft}
+        top={tiltedPhotoTop}
         rotate={7}
         zIndex={22}
       />
@@ -288,11 +304,42 @@ function TiltedPhoto({
 function splitHeadline(title: string) {
   const safeTitle = title.trim() || "Gorgeous Lakehouse Exterior Ideas";
   const words = safeTitle.split(/\s+/).filter(Boolean);
+  const normalizedWords = words.map((word) => word.toLowerCase().replace(/[^a-z]/g, ""));
 
   if (words.length <= 3) {
+    const lastWord = normalizedWords.at(-1);
+    if (lastWord && EMPHASIS_SINGLE_WORDS.has(lastWord) && words.length > 1) {
+      return {
+        primaryTitle: words.slice(0, -1).join(" "),
+        accentTitle: words.slice(-1).join(" "),
+      };
+    }
+
     return {
-      primaryTitle: safeTitle,
-      accentTitle: "Ideas",
+      primaryTitle: words.slice(0, -1).join(" ") || safeTitle,
+      accentTitle: words.slice(-1).join(" "),
+    };
+  }
+
+  if (words.length >= 4) {
+    for (const suffix of EMPHASIS_TWO_WORD_SUFFIXES) {
+      if (
+        normalizedWords.at(-2) === suffix[0] &&
+        normalizedWords.at(-1) === suffix[1]
+      ) {
+        return {
+          primaryTitle: words.slice(0, -2).join(" "),
+          accentTitle: words.slice(-2).join(" "),
+        };
+      }
+    }
+  }
+
+  const lastWord = normalizedWords.at(-1);
+  if (lastWord && EMPHASIS_SINGLE_WORDS.has(lastWord)) {
+    return {
+      primaryTitle: words.slice(0, -1).join(" "),
+      accentTitle: words.slice(-1).join(" "),
     };
   }
 
