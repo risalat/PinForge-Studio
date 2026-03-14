@@ -7,10 +7,12 @@ import { TemplateFourImageGridNumberTitleDomain } from "@/templates/TemplateFour
 import { TemplateSixImageTripleSplitSlantHeroFooter } from "@/templates/TemplateSixImageTripleSplitSlantHeroFooter";
 import { TemplateNineImageGridOverlayNumberFooter } from "@/templates/TemplateNineImageGridOverlayNumberFooter";
 import { TemplateMasonryGridNumberTitleFooter } from "@/templates/TemplateMasonryGridNumberTitleFooter";
+import { TemplateHeroTwoSplitText } from "@/templates/TemplateHeroTwoSplitText";
 import type { JSX } from "react";
 import {
   sampleTemplateDataFourImageMasonryHeroNumberDomainPill,
   sampleTemplateDataFourImageGridNumberTitleDomain,
+  sampleTemplateDataHeroTwoSplitText,
   sampleTemplateDataMasonryGridNumberTitleFooter,
   sampleTemplateDataNineImageGridOverlayNumberFooter,
   sampleTemplateDataNumber,
@@ -157,6 +159,21 @@ export const TEMPLATE_CONFIGS: Record<string, TemplateConfig> = {
       footer: true,
     },
   },
+  "hero-two-split-text": {
+    id: "hero-two-split-text",
+    name: "Hero Two Split Text",
+    componentKey: "TemplateHeroTwoSplitText",
+    previewPath: "/preview/hero-two-split-text",
+    locked: true,
+    canvas: { width: 1080, height: 1920 },
+    imageSlotCount: 3,
+    textFields: ["title", "itemNumber", "domain", "visualPreset"],
+    features: {
+      overlay: true,
+      numberTreatment: "hero",
+      footer: true,
+    },
+  },
 };
 
 const TEMPLATE_COMPONENTS: Record<
@@ -172,6 +189,7 @@ const TEMPLATE_COMPONENTS: Record<
   "six-image-triple-split-slant-hero-footer": TemplateSixImageTripleSplitSlantHeroFooter,
   "nine-image-grid-overlay-number-footer": TemplateNineImageGridOverlayNumberFooter,
   "masonry-grid-number-title-footer": TemplateMasonryGridNumberTitleFooter,
+  "hero-two-split-text": TemplateHeroTwoSplitText,
 };
 
 export function getTemplateConfig(templateId: string) {
@@ -223,6 +241,10 @@ export function getSampleTemplateProps(templateId: string) {
 
   if (templateId === "masonry-grid-number-title-footer") {
     return sampleTemplateDataMasonryGridNumberTitleFooter;
+  }
+
+  if (templateId === "hero-two-split-text") {
+    return sampleTemplateDataHeroTwoSplitText;
   }
 
   return sampleTemplateDataWithSubtitle;

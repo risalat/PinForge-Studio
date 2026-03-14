@@ -108,3 +108,15 @@ export const sampleTemplateDataMasonryGridNumberTitleFooter: TemplateRenderProps
   itemNumber: 20,
   visualPreset: "berry-citrus",
 };
+
+export const sampleTemplateDataHeroTwoSplitText: TemplateRenderProps = {
+  title: "Breathtaking Lake House Exterior Ideas",
+  images: [
+    "/sample-images/1.jpg",
+    "/sample-images/2.jpg",
+    "/sample-images/3.jpg",
+  ],
+  domain: "mightypaint.com",
+  itemNumber: 15,
+  visualPreset: "midnight-gold",
+};

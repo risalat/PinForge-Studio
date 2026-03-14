@@ -170,6 +170,8 @@ function getTemplateDescription(templateId: string) {
       return "Nine-image square grid with a centered number medallion, editorial title band, and compact footer pill.";
     case "masonry-grid-number-title-footer":
       return "Seven-image masonry collage with a centered number card, dark editorial title band, and footer domain pill.";
+    case "hero-two-split-text":
+      return "Full-width hero image with a side-by-side number and three-line title strip, followed by a lower two-image split.";
     default:
       return "Locked Pinterest template ready for preview, render, and manual plan use.";
   }
@@ -195,6 +197,8 @@ function getTemplateUsage(templateId: string) {
       return "Best for dense inspiration roundups that need many examples plus a strong listicle hook.";
     case "masonry-grid-number-title-footer":
       return "Best for editorial collage pins that need a richer masonry structure with a centered count hook.";
+    case "hero-two-split-text":
+      return "Best for listicle pins that need one dominant hero, a huge count, and a strong stacked title in the center strip.";
     default:
       return "Best for locked template-driven render tests and job planning.";
   }

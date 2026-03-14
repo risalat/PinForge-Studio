@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import localFont from "next/font/local";
 import {
   Alata,
   Antonio,
@@ -11,6 +12,11 @@ import {
   Space_Grotesk,
 } from "next/font/google";
 import "./globals.css";
+
+const literaturnaya = localFont({
+  src: "./fonts/Literaturnaya-Regular.ttf",
+  variable: "--font-literaturnaya",
+});
 
 const spaceGrotesk = Space_Grotesk({
   variable: "--font-space-grotesk",
@@ -73,7 +79,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${spaceGrotesk.variable} ${alata.variable} ${antonio.variable} ${cormorantGaramond.variable} ${libreBaskerville.variable} ${lora.variable} ${manrope.variable} ${leagueSpartan.variable} ${satisfy.variable} antialiased`}
+        className={`${literaturnaya.variable} ${spaceGrotesk.variable} ${alata.variable} ${antonio.variable} ${cormorantGaramond.variable} ${libreBaskerville.variable} ${lora.variable} ${manrope.variable} ${leagueSpartan.variable} ${satisfy.variable} antialiased`}
       >
         {children}
       </body>
