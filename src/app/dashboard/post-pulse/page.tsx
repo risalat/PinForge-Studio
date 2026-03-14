@@ -14,8 +14,6 @@ import {
   normalizePostPulseSort,
   sortPostPulseRecords,
   type PostPulseActivityDotState,
-  type PostPulseFilter,
-  type PostPulseSort,
   type PostPulseStatus,
 } from "@/lib/dashboard/postPulse";
 import { PostPulseWorkspaceControls } from "@/app/dashboard/post-pulse/PostPulseWorkspaceControls";

@@ -1,6 +1,16 @@
-import { PublicationRecordState, ScheduleRunItemStatus } from "@prisma/client";
+import { ScheduleRunItemStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { normalizeDomain } from "@/lib/types";
+
+const PUBLICATION_RECORD_STATE = {
+  SCHEDULED: "SCHEDULED",
+  PUBLISHED: "PUBLISHED",
+  PUBLISHED_POSTED: "PUBLISHED_POSTED",
+  OTHER: "OTHER",
+} as const;
+
+type PublicationRecordStateValue =
+  (typeof PUBLICATION_RECORD_STATE)[keyof typeof PUBLICATION_RECORD_STATE];
 
 export type PostPulseStatus =
   | "fresh"
@@ -110,7 +120,7 @@ export async function listPostPulseRecordsForUser(
       const publicationRecords = post.publicationRecords;
       const publishedRecords = publicationRecords.filter((record) => isPublishedState(record.state));
       const scheduledRecords = publicationRecords.filter(
-        (record) => record.state === PublicationRecordState.SCHEDULED,
+        (record) => record.state === PUBLICATION_RECORD_STATE.SCHEDULED,
       );
       const effectivePublerRecordCount =
         publicationRecords.length > 0 ? publicationRecords.length : localScheduledItems.length;
@@ -295,18 +305,18 @@ function resolveFreshnessStatus(input: {
   return "never_published";
 }
 
-function isPublishedState(state: PublicationRecordState) {
+function isPublishedState(state: PublicationRecordStateValue) {
   return (
-    state === PublicationRecordState.PUBLISHED ||
-    state === PublicationRecordState.PUBLISHED_POSTED
+    state === PUBLICATION_RECORD_STATE.PUBLISHED ||
+    state === PUBLICATION_RECORD_STATE.PUBLISHED_POSTED
   );
 }
 
-function toActivityDotState(state: PublicationRecordState): PostPulseActivityDotState {
+function toActivityDotState(state: PublicationRecordStateValue): PostPulseActivityDotState {
   if (isPublishedState(state)) {
     return "published";
   }
-  if (state === PublicationRecordState.SCHEDULED) {
+  if (state === PUBLICATION_RECORD_STATE.SCHEDULED) {
     return "scheduled";
   }
   return "other";

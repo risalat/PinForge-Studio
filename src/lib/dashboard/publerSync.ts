@@ -1,15 +1,31 @@
-import { Prisma, PublicationRecordState, PublicationSyncMode } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { createPublerClient, type PublerClient, type PublerPost } from "@/lib/publer/publerClient";
 import { getIntegrationSettingsForUserId } from "@/lib/settings/integrationSettings";
 import { resolveDomain } from "@/lib/types";
 
-const POSTS_PER_PAGE = 100;
-const BACKFILL_PAGES_PER_RUN = 3;
-const INCREMENTAL_PAGES_PER_RUN = 2;
+const POSTS_PER_PAGE = 50;
+const BACKFILL_PAGES_PER_RUN = 1;
+const INCREMENTAL_PAGES_PER_RUN = 1;
 const FULL_SYNC_STATES = ["scheduled", "published", "published_posted"];
 const INCREMENTAL_LOOKBACK_DAYS = 45;
 const INCREMENTAL_FUTURE_WINDOW_DAYS = 120;
+const WRITE_BATCH_SIZE = 20;
+
+const PUBLICATION_RECORD_STATE = {
+  SCHEDULED: "SCHEDULED",
+  PUBLISHED: "PUBLISHED",
+  PUBLISHED_POSTED: "PUBLISHED_POSTED",
+  OTHER: "OTHER",
+} as const;
+
+const PUBLICATION_SYNC_MODE = {
+  BACKFILL: "BACKFILL",
+  INCREMENTAL: "INCREMENTAL",
+} as const;
+
+type PublicationRecordStateValue =
+  (typeof PUBLICATION_RECORD_STATE)[keyof typeof PUBLICATION_RECORD_STATE];
 
 export type PublerSyncResult = {
   workspaceId: string;
@@ -57,7 +73,7 @@ export async function syncPublerPublicationRecordsForUser(
     },
   });
 
-  const isBackfill = syncState.mode === PublicationSyncMode.BACKFILL;
+  const isBackfill = syncState.mode === PUBLICATION_SYNC_MODE.BACKFILL;
   const startPage = syncState.nextPage;
   const pageBudget = isBackfill ? BACKFILL_PAGES_PER_RUN : INCREMENTAL_PAGES_PER_RUN;
   const incrementalWindow = isBackfill
@@ -180,12 +196,23 @@ async function upsertPublerPostsForUser(input: {
   posts: PublerPost[];
 }) {
   const { userId, workspaceId, posts } = input;
+  const syncablePosts = posts.filter((post) => post.url.trim() !== "");
+
+  if (syncablePosts.length === 0) {
+    return {
+      fetched: 0,
+      created: 0,
+      updated: 0,
+    };
+  }
+
+  const providerPostIds = syncablePosts.map((post) => post.id);
 
   const existingRecords = await prisma.publicationRecord.findMany({
     where: {
       userId,
       providerPostId: {
-        in: posts.map((post) => post.id),
+        in: providerPostIds,
       },
     },
     select: {
@@ -197,7 +224,7 @@ async function upsertPublerPostsForUser(input: {
   const matchedPins = await prisma.scheduleRunItem.findMany({
     where: {
       publerPostId: {
-        in: posts.map((post) => post.id),
+        in: providerPostIds,
       },
       generatedPin: {
         job: {
@@ -232,96 +259,159 @@ async function upsertPublerPostsForUser(input: {
       ]),
   );
 
-  let created = 0;
-  let updated = 0;
-
-  for (const post of posts) {
-    const postUrl = post.url.trim();
-    if (!postUrl) {
-      continue;
-    }
-
-    const matchedPin = pinMatchByPostId.get(post.id);
-    const trackedPost =
-      matchedPin?.postId
-        ? await prisma.post.findUnique({
-            where: { id: matchedPin.postId },
-            select: { id: true },
-          })
-        : null;
-
-    const upsertedPost =
-      trackedPost ??
-      (await prisma.post.upsert({
+  const matchedPostIds = Array.from(
+    new Set(
+      matchedPins
+        .map((item) => item.generatedPin.job.postId)
+        .filter((value): value is string => Boolean(value)),
+    ),
+  );
+  const matchedPosts = matchedPostIds.length
+    ? await prisma.post.findMany({
         where: {
-          url: postUrl,
-        },
-        update: {
-          domain: resolveDomain({ postUrl }),
-        },
-        create: {
-          url: postUrl,
-          domain: resolveDomain({ postUrl }),
-          title: getPublicationTitle(post),
+          id: {
+            in: matchedPostIds,
+          },
         },
         select: {
           id: true,
         },
-      }));
+      })
+    : [];
+  const matchedPostIdSet = new Set(matchedPosts.map((post) => post.id));
+
+  const unresolvedUrls = Array.from(
+    new Set(
+      syncablePosts
+        .filter((post) => {
+          const matchedPin = pinMatchByPostId.get(post.id);
+          return !(matchedPin?.postId && matchedPostIdSet.has(matchedPin.postId));
+        })
+        .map((post) => post.url.trim()),
+    ),
+  );
+
+  if (unresolvedUrls.length > 0) {
+    const existingPosts = await prisma.post.findMany({
+      where: {
+        url: {
+          in: unresolvedUrls,
+        },
+      },
+      select: {
+        id: true,
+        url: true,
+      },
+    });
+    const existingPostUrls = new Set(existingPosts.map((post) => post.url));
+    const missingUrls = unresolvedUrls.filter((url) => !existingPostUrls.has(url));
+
+    if (missingUrls.length > 0) {
+      await prisma.post.createMany({
+        data: missingUrls.map((url) => {
+          const sourcePost = syncablePosts.find((post) => post.url.trim() === url);
+          return {
+            url,
+            domain: resolveDomain({ postUrl: url }),
+            title: sourcePost ? getPublicationTitle(sourcePost) : url,
+          };
+        }),
+        skipDuplicates: true,
+      });
+    }
+  }
+
+  const resolvedPostsByUrl = unresolvedUrls.length
+    ? await prisma.post.findMany({
+        where: {
+          url: {
+            in: unresolvedUrls,
+          },
+        },
+        select: {
+          id: true,
+          url: true,
+        },
+      })
+    : [];
+  const postIdByUrl = new Map(resolvedPostsByUrl.map((post) => [post.url, post.id]));
+
+  let created = 0;
+  let updated = 0;
+  const now = new Date();
+  const createPayloads: Prisma.PublicationRecordCreateManyInput[] = [];
+  const updateOperations: Prisma.PrismaPromise<unknown>[] = [];
+
+  for (const post of syncablePosts) {
+    const postUrl = post.url.trim();
+    const matchedPin = pinMatchByPostId.get(post.id);
+    const resolvedPostId =
+      matchedPin?.postId && matchedPostIdSet.has(matchedPin.postId)
+        ? matchedPin.postId
+        : postIdByUrl.get(postUrl);
+
+    if (!resolvedPostId) {
+      continue;
+    }
 
     const normalizedState = normalizePublicationState(post.state);
     const scheduledAt = parseDate(post.scheduledAt);
     const publishedAt = resolveEffectivePublishedAt(post, normalizedState);
-
-    await prisma.publicationRecord.upsert({
-      where: {
-        userId_providerPostId: {
-          userId,
-          providerPostId: post.id,
-        },
-      },
-      update: {
-        postId: upsertedPost.id,
-        generatedPinId: matchedPin?.generatedPinId ?? null,
-        providerWorkspaceId: workspaceId,
-        providerPostLink: post.postLink ?? null,
-        providerAccountId: post.accountId ?? null,
-        providerBoardId: post.boardId ?? null,
-        state: normalizedState,
-        rawState: post.state.trim().toLowerCase(),
-        postUrl,
-        scheduledAt,
-        publishedAt,
-        rawPayload: post.raw as Prisma.InputJsonValue,
-        syncedAt: new Date(),
-      },
-      create: {
-        userId,
-        postId: upsertedPost.id,
-        generatedPinId: matchedPin?.generatedPinId ?? null,
-        providerPostId: post.id,
-        providerWorkspaceId: workspaceId,
-        providerPostLink: post.postLink ?? null,
-        providerAccountId: post.accountId ?? null,
-        providerBoardId: post.boardId ?? null,
-        state: normalizedState,
-        rawState: post.state.trim().toLowerCase(),
-        postUrl,
-        scheduledAt,
-        publishedAt,
-        rawPayload: post.raw as Prisma.InputJsonValue,
-      },
-    });
+    const sharedData = {
+      postId: resolvedPostId,
+      generatedPinId: matchedPin?.generatedPinId ?? null,
+      providerWorkspaceId: workspaceId,
+      providerPostLink: post.postLink ?? null,
+      providerAccountId: post.accountId ?? null,
+      providerBoardId: post.boardId ?? null,
+      state: normalizedState,
+      rawState: post.state.trim().toLowerCase(),
+      postUrl,
+      scheduledAt,
+      publishedAt,
+      rawPayload: post.raw as Prisma.InputJsonValue,
+      syncedAt: now,
+    } satisfies Omit<
+      Prisma.PublicationRecordUncheckedCreateInput,
+      "id" | "userId" | "providerPostId" | "createdAt" | "updatedAt"
+    >;
 
     if (existingRecordIds.has(post.id)) {
+      updateOperations.push(
+        prisma.publicationRecord.update({
+          where: {
+            userId_providerPostId: {
+              userId,
+              providerPostId: post.id,
+            },
+          },
+          data: sharedData,
+        }),
+      );
       updated += 1;
     } else {
+      createPayloads.push({
+        userId,
+        providerPostId: post.id,
+        ...sharedData,
+      });
       created += 1;
     }
   }
 
+  if (createPayloads.length > 0) {
+    await prisma.publicationRecord.createMany({
+      data: createPayloads,
+      skipDuplicates: true,
+    });
+  }
+
+  for (let index = 0; index < updateOperations.length; index += WRITE_BATCH_SIZE) {
+    await prisma.$transaction(updateOperations.slice(index, index + WRITE_BATCH_SIZE));
+  }
+
   return {
-    fetched: posts.length,
+    fetched: syncablePosts.length,
     created,
     updated,
   };
@@ -336,7 +426,7 @@ async function markBackfillCompleted(userId: string, workspaceId: string) {
       },
     },
     data: {
-      mode: PublicationSyncMode.INCREMENTAL,
+      mode: PUBLICATION_SYNC_MODE.INCREMENTAL,
       nextPage: 0,
       lastCompletedAt: new Date(),
       lastRunAt: new Date(),
@@ -405,17 +495,17 @@ function normalizePublicationState(value: string) {
   const normalized = value.trim().toLowerCase();
   switch (normalized) {
     case "scheduled":
-      return PublicationRecordState.SCHEDULED;
+      return PUBLICATION_RECORD_STATE.SCHEDULED;
     case "published":
-      return PublicationRecordState.PUBLISHED;
+      return PUBLICATION_RECORD_STATE.PUBLISHED;
     case "published_posted":
-      return PublicationRecordState.PUBLISHED_POSTED;
+      return PUBLICATION_RECORD_STATE.PUBLISHED_POSTED;
     default:
-      return PublicationRecordState.OTHER;
+      return PUBLICATION_RECORD_STATE.OTHER;
   }
 }
 
-function resolveEffectivePublishedAt(post: PublerPost, state: PublicationRecordState) {
+function resolveEffectivePublishedAt(post: PublerPost, state: PublicationRecordStateValue) {
   const rawPublishedAt =
     parseDate(pickRawString(post.raw, ["published_at", "publishedAt", "posted_at", "postedAt"])) ??
     null;
@@ -424,8 +514,8 @@ function resolveEffectivePublishedAt(post: PublerPost, state: PublicationRecordS
     return rawPublishedAt;
   }
 
-  return state === PublicationRecordState.PUBLISHED ||
-    state === PublicationRecordState.PUBLISHED_POSTED
+  return state === PUBLICATION_RECORD_STATE.PUBLISHED ||
+    state === PUBLICATION_RECORD_STATE.PUBLISHED_POSTED
     ? parseDate(post.scheduledAt)
     : null;
 }

@@ -145,20 +145,20 @@ export function TemplateSixImageTripleSplitSlantHeroFooter({
       <TiltedPhoto
         src={imageSet[3]}
         alt={title}
-        width={300}
-        height={220}
-        left={174}
-        top={414}
+        width={326}
+        height={254}
+        left={154}
+        top={392}
         rotate={-11}
         zIndex={20}
       />
       <TiltedPhoto
         src={imageSet[4]}
         alt={title}
-        width={300}
-        height={220}
-        left={430}
-        top={438}
+        width={326}
+        height={254}
+        left={418}
+        top={420}
         rotate={7}
         zIndex={22}
       />

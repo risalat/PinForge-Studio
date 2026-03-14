@@ -120,13 +120,13 @@ Only show the latest few records per post to avoid visual noise.
 
 Version 1:
 - manual sync action from `Post Pulse`
-- fetch recent Publer posts from the selected workspace
-- upsert ledger rows
-- refresh page
+- sync one bounded batch per invocation to avoid serverless timeouts
+- continue backfill across repeated clicks until history is complete
+- once backfill is complete, switch to incremental sync only
+- incremental sync uses a bounded recent window instead of re-syncing all history
 
 Later:
 - periodic background sync
-- delta sync using last sync timestamp or paging
 - targeted sync after schedule completion
 
 ## Duplicate prevention direction

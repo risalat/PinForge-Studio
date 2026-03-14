@@ -1,9 +1,18 @@
-import { PublicationRecordState, ScheduleRunItemStatus } from "@prisma/client";
+import { ScheduleRunItemStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { PublishScheduleContext } from "@/lib/types";
 
 const MIN_SPACING_DAYS = 25;
 const MAX_SPACING_DAYS = 30;
+const PUBLICATION_RECORD_STATE = {
+  SCHEDULED: "SCHEDULED",
+  PUBLISHED: "PUBLISHED",
+  PUBLISHED_POSTED: "PUBLISHED_POSTED",
+  OTHER: "OTHER",
+} as const;
+
+type PublicationRecordStateValue =
+  (typeof PUBLICATION_RECORD_STATE)[keyof typeof PUBLICATION_RECORD_STATE];
 
 export async function getPublishScheduleContextForPost(input: {
   userId: string;
@@ -47,7 +56,7 @@ export async function getPublishScheduleContextForPost(input: {
     ...publicationRecords
       .filter(
         (record) =>
-          record.state === PublicationRecordState.SCHEDULED &&
+          record.state === PUBLICATION_RECORD_STATE.SCHEDULED &&
           record.scheduledAt &&
           record.scheduledAt >= now,
       )
@@ -83,10 +92,10 @@ export async function getPublishScheduleContextForPost(input: {
   };
 }
 
-function isPublishedState(state: PublicationRecordState) {
+function isPublishedState(state: PublicationRecordStateValue) {
   return (
-    state === PublicationRecordState.PUBLISHED ||
-    state === PublicationRecordState.PUBLISHED_POSTED
+    state === PUBLICATION_RECORD_STATE.PUBLISHED ||
+    state === PUBLICATION_RECORD_STATE.PUBLISHED_POSTED
   );
 }
 
