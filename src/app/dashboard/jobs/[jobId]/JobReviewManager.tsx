@@ -840,9 +840,15 @@ export function JobReviewManager({
         <div className="flex items-center justify-between gap-4">
           <div>
             <h2 className="text-xl font-bold">Render queue</h2>
-            <p className="mt-1 text-sm text-[var(--dashboard-subtle)]">
-              Work one saved plan at a time, then review the outputs before moving into publishing.
-            </p>
+            <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-muted)]">
+              <span>{renderablePlans.length} ready</span>
+              <span>·</span>
+              <span>{selectedActionPlans.length} selected</span>
+              <span>·</span>
+              <span>{alreadyRenderedPlans.length} rendered</span>
+              <span>·</span>
+              <span>{generatedPins.length} outputs</span>
+            </div>
           </div>
           <div className="flex flex-wrap gap-3">
             <button
@@ -873,61 +879,6 @@ export function JobReviewManager({
         </div>
         {generationFeedback ? <InlineFeedback feedback={generationFeedback} /> : null}
 
-        <div className="grid gap-3 sm:grid-cols-4">
-          <RenderMetric
-            label="Ready to render"
-            value={String(renderablePlans.length)}
-            detail="Plans waiting for the next render run"
-          />
-          <RenderMetric
-            label="Selected plans"
-            value={String(selectedActionPlans.length)}
-            detail="Plans currently targeted for discard or render"
-          />
-          <RenderMetric
-            label="Already rendered"
-            value={String(alreadyRenderedPlans.length)}
-            detail="Saved outputs already exist for these plans"
-          />
-          <RenderMetric
-            label="Visible outputs"
-            value={String(generatedPins.length)}
-            detail="Generated pins currently saved on this job"
-          />
-          <RenderMetric
-            label="Active plan outputs"
-            value={String(selectedPlanGeneratedPins.length)}
-            detail="Saved outputs tied to the plan you are editing"
-          />
-        </div>
-
-        <div className="grid gap-3 rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-alt)] p-4 text-sm text-[var(--dashboard-subtle)] lg:grid-cols-4">
-          <div>
-            <p className="font-semibold text-[var(--dashboard-text)]">AI before render</p>
-            <p className="mt-1">
-              Blank artwork fields are filled with AI before render. Final publish titles are generated later in the publishing flow.
-            </p>
-          </div>
-          <div>
-            <p className="font-semibold text-[var(--dashboard-text)]">Manual overrides win</p>
-            <p className="mt-1">
-              Anything saved here is used directly in the template instead of auto-generating a replacement.
-            </p>
-          </div>
-          <div>
-            <p className="font-semibold text-[var(--dashboard-text)]">Fresh start</p>
-            <p className="mt-1">
-              Discarding generated pins keeps plans and source selections but clears current outputs.
-            </p>
-          </div>
-          <div>
-            <p className="font-semibold text-[var(--dashboard-text)]">Plan targeting</p>
-            <p className="mt-1">
-              Use the saved-plan checkboxes to generate or discard only that subset instead of the whole queue.
-            </p>
-          </div>
-        </div>
-
         {plansFeedback ? <InlineFeedback feedback={plansFeedback} /> : null}
 
         {plans.length === 0 ? (
@@ -938,9 +889,6 @@ export function JobReviewManager({
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <h3 className="text-base font-bold text-[var(--dashboard-text)]">Saved plans</h3>
-                  <p className="text-sm text-[var(--dashboard-subtle)]">
-                    Pick one plan to edit and preview.
-                  </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <StatusPill label={`${plans.length} total`} tone="neutral" />
@@ -1001,9 +949,6 @@ export function JobReviewManager({
                           <p className="mt-2 text-sm text-[var(--dashboard-subtle)]">
                             {formatLabel(plan.mode)} / {plan.assignments.length} slot
                             {plan.assignments.length === 1 ? "" : "s"}
-                          </p>
-                          <p className="mt-2 line-clamp-2 text-sm text-[var(--dashboard-subtle)]">
-                            {describePlanCopyMode(draft)}
                           </p>
                           <div className="mt-3 flex flex-wrap gap-2">
                             <StatusPill
@@ -1457,24 +1402,6 @@ function MetadataRow({ label, value }: { label: string; value: string | null }) 
   );
 }
 
-function RenderMetric({
-  label,
-  value,
-  detail,
-}: {
-  label: string;
-  value: string;
-  detail: string;
-}) {
-  return (
-    <div className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3">
-      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--dashboard-muted)]">{label}</p>
-      <p className="mt-1 text-2xl font-bold text-[var(--dashboard-text)]">{value}</p>
-      <p className="mt-1 text-sm text-[var(--dashboard-subtle)]">{detail}</p>
-    </div>
-  );
-}
-
 function StatusPill({
   label,
   tone,
@@ -1529,30 +1456,6 @@ function formatLabel(value: string) {
     .split("_")
     .map((part) => part.charAt(0) + part.slice(1).toLowerCase())
     .join(" ");
-}
-
-function describePlanCopyMode(
-  draft:
-    | {
-        title: string;
-        subtitle: string;
-      }
-    | undefined,
-) {
-  const hasTitle = Boolean(draft?.title.trim());
-  const hasSubtitle = Boolean(draft?.subtitle.trim());
-
-  if (hasTitle && hasSubtitle) {
-    return "Manual title and subtitle overrides will be used in render.";
-  }
-  if (hasTitle) {
-    return "Title is locked. Subtitle will auto-generate if left blank.";
-  }
-  if (hasSubtitle) {
-    return "Subtitle is locked. Title will auto-generate if left blank.";
-  }
-
-  return "Title and subtitle will auto-generate during render if left blank.";
 }
 
 function formatCompactUrl(value: string) {
