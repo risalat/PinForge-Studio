@@ -15,48 +15,66 @@ type RenderPinInput = {
 };
 
 export async function renderPin({ jobId, planId, templateId }: RenderPinInput) {
-  const browser = await launchBrowser();
+  const storageProvider = getStorageProvider();
+  const key = createRenderedPinStorageKey(jobId, planId, templateId);
 
-  try {
-    const templateConfig = getTemplateConfig(templateId);
-    const viewport = templateConfig?.canvas ?? { width: 1080, height: 1920 };
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    const browser = await launchBrowser();
 
-    const page = await browser.newPage({
-      viewport,
-      deviceScaleFactor: 1,
-    });
+    try {
+      const screenshot = await renderPinScreenshot(browser, { jobId, planId, templateId });
 
-    const url = `${env.appUrl}/render/${templateId}?jobId=${jobId}&planId=${planId}`;
-    await page.goto(url, {
-      waitUntil: isServerlessRuntime() ? "networkidle" : "domcontentloaded",
-      timeout: isServerlessRuntime() ? 30_000 : 60_000,
-    });
-    await page.waitForFunction(() => document.fonts?.status === "loaded");
-    await page.locator("[data-pin-canvas='true']").waitFor();
-    await page.waitForFunction(() =>
-      Array.from(
-        document.querySelectorAll<HTMLImageElement>("[data-pin-canvas='true'] img"),
-      ).every((img) => img.complete && img.naturalWidth > 0),
-    );
-    await page.waitForFunction(() =>
-      Array.from(document.querySelectorAll("[data-autofit='true']")).every(
-        (node) => node.getAttribute("data-autofit-ready") === "true",
-      ),
-    );
-
-    const screenshot = await capturePinCanvas(page);
-
-    const storageProvider = getStorageProvider();
-    const key = createRenderedPinStorageKey(jobId, planId, templateId);
-
-    return storageProvider.upload({
-      key,
-      body: screenshot,
-      contentType: "image/png",
-    });
-  } finally {
-    await browser.close();
+      return storageProvider.upload({
+        key,
+        body: screenshot,
+        contentType: "image/png",
+      });
+    } catch (error) {
+      if (attempt === 2 || !isRetryableRenderError(error)) {
+        throw error;
+      }
+    } finally {
+      await browser.close();
+    }
   }
+
+  throw new Error("Unable to render pin.");
+}
+
+async function renderPinScreenshot(
+  browser: Awaited<ReturnType<typeof launchBrowser>>,
+  { jobId, planId, templateId }: RenderPinInput,
+) {
+  const templateConfig = getTemplateConfig(templateId);
+  const viewport = templateConfig?.canvas ?? { width: 1080, height: 1920 };
+
+  const page = await browser.newPage({
+    viewport,
+    deviceScaleFactor: 1,
+  });
+
+  const url = `${env.appUrl}/render/${templateId}?jobId=${jobId}&planId=${planId}`;
+  await page.goto(url, {
+    waitUntil: "domcontentloaded",
+    timeout: isServerlessRuntime() ? 20_000 : 60_000,
+  });
+  await page.waitForLoadState("networkidle", {
+    timeout: isServerlessRuntime() ? 10_000 : 30_000,
+  }).catch(() => null);
+  await page.waitForFunction(() => document.fonts?.status === "loaded", { timeout: 15_000 });
+  await page.locator("[data-pin-canvas='true']").waitFor({ state: "visible", timeout: 15_000 });
+  await page.waitForFunction(() =>
+    Array.from(
+      document.querySelectorAll<HTMLImageElement>("[data-pin-canvas='true'] img"),
+    ).every((img) => img.complete && img.naturalWidth > 0),
+  );
+  await page.waitForFunction(() =>
+    Array.from(document.querySelectorAll("[data-autofit='true']")).every(
+      (node) => node.getAttribute("data-autofit-ready") === "true",
+    ),
+  );
+
+  return capturePinCanvas(page);
 }
 
 async function capturePinCanvas(page: Page) {
@@ -108,6 +126,15 @@ async function launchBrowser() {
   }
 
   return localChromium.launch({ headless: true });
+}
+
+function isRetryableRenderError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    message.includes("Target page, context or browser has been closed") ||
+    message.includes("page.goto: Target page, context or browser has been closed") ||
+    message.includes("locator.waitFor: Target page, context or browser has been closed")
+  );
 }
 
 function createRenderedPinStorageKey(jobId: string, planId: string, templateId: string) {

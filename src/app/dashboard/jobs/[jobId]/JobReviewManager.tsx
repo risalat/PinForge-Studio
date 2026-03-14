@@ -366,17 +366,23 @@ export function JobReviewManager({
         const targetRenderablePlans = targetPlans.filter((plan) =>
           ["READY", "DRAFT", "FAILED"].includes(plan.status),
         );
-        const result = await runAction(`/api/dashboard/jobs/${jobId}/generate`, {
-          planIds: targetRenderablePlans.map((plan) => plan.id),
-        });
+        let generatedPinCount = 0;
+
+        for (const plan of targetRenderablePlans) {
+          const result = await runAction(`/api/dashboard/jobs/${jobId}/generate`, {
+            planIds: [plan.id],
+          });
+          generatedPinCount += result.generatedPinCount ?? 0;
+        }
+
         const rerenderedCount = targetRenderablePlans.length;
         const alreadyUpToDateCount = Math.max(0, targetPlans.length - rerenderedCount);
         setGenerationFeedback({
           tone: "success",
           message:
             alreadyUpToDateCount > 0
-              ? `${result.generatedPinCount ?? rerenderedCount} pin${(result.generatedPinCount ?? rerenderedCount) === 1 ? "" : "s"} rendered from the selected plans. ${alreadyUpToDateCount} plan${alreadyUpToDateCount === 1 ? " was" : "s were"} already up to date and skipped.`
-              : `${result.generatedPinCount ?? 0} pin${result.generatedPinCount === 1 ? "" : "s"} rendered from the selected plans.`,
+              ? `${generatedPinCount || rerenderedCount} pin${(generatedPinCount || rerenderedCount) === 1 ? "" : "s"} rendered from the selected plans. ${alreadyUpToDateCount} plan${alreadyUpToDateCount === 1 ? " was" : "s were"} already up to date and skipped.`
+              : `${generatedPinCount} pin${generatedPinCount === 1 ? "" : "s"} rendered from the selected plans.`,
         });
         router.refresh();
       } catch (actionError) {
