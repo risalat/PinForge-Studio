@@ -63,27 +63,66 @@ export function TemplateNineImageGridOverlayNumberFooter({
   const domainPillHeight = 54;
   const domainPillBottom = 46;
   const gridFrameColor = withAlpha(deepenHex(preset.palette.divider, 0.06), 0.9);
-  const bandBackground = tintTowardsWhite(preset.palette.band, 0.68);
-  const titleColor = ensureContrastTone(preset.palette.title, bandBackground, 5.4);
-  const subtitleColor = ensureContrastTone(
-    mixHex(preset.palette.subtitle, deepenHex(preset.palette.footer, 0.12), 0.2),
+  const bandBackground = tintTowardsWhite(preset.palette.band, 0.72);
+  const titleColor = ensureContrastTone(
+    mixHex(preset.palette.title, deepenHex(preset.palette.footer, 0.08), 0.14),
     bandBackground,
-    4,
+    5.4,
   );
-  const dividerColor = withAlpha(ensureContrastTone(preset.palette.divider, bandBackground, 2.1), 0.72);
-  const circleBackground = ensureContrastTone(
-    mixHex(deepenHex(preset.palette.footer, 0.22), deepenHex(preset.palette.title, 0.18), 0.48),
+  const subtitleColor = pickDistinctReadableTone(
+    [
+      preset.palette.subtitle,
+      preset.palette.divider,
+      mixHex(preset.palette.subtitle, preset.palette.divider, 0.55),
+      mixHex(preset.palette.divider, deepenHex(preset.palette.footer, 0.1), 0.28),
+    ],
+    titleColor,
+    bandBackground,
+    3.8,
+    54,
+  );
+  const dividerColor = withAlpha(
+    pickDistinctReadableTone(
+      [
+        preset.palette.divider,
+        mixHex(preset.palette.divider, preset.palette.subtitle, 0.35),
+        mixHex(preset.palette.subtitle, "#ffffff", 0.18),
+      ],
+      titleColor,
+      bandBackground,
+      2.2,
+      26,
+    ),
+    0.9,
+  );
+  const circleBackground = pickDarkReadableTone(
+    [
+      deepenHex(preset.palette.footer, 0.14),
+      deepenHex(mixHex(preset.palette.footer, preset.palette.title, 0.32), 0.18),
+      deepenHex(preset.palette.title, 0.28),
+    ],
     bandBackground,
     7.2,
   );
-  const circleTextColor = ensureContrastTone(
-    mixHex(preset.palette.number, preset.palette.divider, 0.45),
+  const circleTextColor = pickLightReadableTone(
+    [
+      mixHex(preset.palette.divider, "#ffffff", 0.24),
+      mixHex(preset.palette.number, "#ffffff", 0.48),
+      "#fff6eb",
+    ],
     circleBackground,
-    3.4,
+    4.5,
   );
-  const domainPillBackground = withAlpha(circleBackground, 0.96);
-  const domainTextColor = ensureContrastTone(
-    mixHex(preset.palette.domain, "#ffffff", 0.22),
+  const domainPillBackground = withAlpha(
+    pickDarkReadableTone(
+      [mixHex(circleBackground, preset.palette.footer, 0.68), deepenHex(preset.palette.footer, 0.2)],
+      bandBackground,
+      7.2,
+    ),
+    0.96,
+  );
+  const domainTextColor = pickLightReadableTone(
+    [mixHex(preset.palette.domain, "#ffffff", 0.34), "#fff7ef"],
     stripAlphaChannel(domainPillBackground),
     5.5,
   );
@@ -360,6 +399,85 @@ function ensureContrastTone(colorHex: string, backgroundHex: string, minimumRati
   return colorDistance(colorHex, darkerCandidate) <= colorDistance(colorHex, lighterCandidate)
     ? darkerCandidate
     : lighterCandidate;
+}
+
+function ensureDarkContrastTone(colorHex: string, backgroundHex: string, minimumRatio: number) {
+  if (!isHexColor(colorHex) || !isHexColor(backgroundHex)) {
+    return colorHex;
+  }
+
+  if (
+    getContrastRatio(colorHex, backgroundHex) >= minimumRatio &&
+    getRelativeLuminance(colorHex) < getRelativeLuminance(backgroundHex)
+  ) {
+    return colorHex;
+  }
+
+  return shiftTowardContrast(colorHex, backgroundHex, minimumRatio, "#000000") ?? deepenHex(colorHex, 0.36);
+}
+
+function ensureLightContrastTone(colorHex: string, backgroundHex: string, minimumRatio: number) {
+  if (!isHexColor(colorHex) || !isHexColor(backgroundHex)) {
+    return colorHex;
+  }
+
+  if (
+    getContrastRatio(colorHex, backgroundHex) >= minimumRatio &&
+    getRelativeLuminance(colorHex) > getRelativeLuminance(backgroundHex)
+  ) {
+    return colorHex;
+  }
+
+  return shiftTowardContrast(colorHex, backgroundHex, minimumRatio, "#ffffff") ?? tintTowardsWhite(colorHex, 0.42);
+}
+
+function pickDistinctReadableTone(
+  candidates: string[],
+  avoidHex: string,
+  backgroundHex: string,
+  minimumRatio: number,
+  minimumDistance: number,
+) {
+  let bestCandidate = ensureContrastTone(candidates[0] ?? avoidHex, backgroundHex, minimumRatio);
+  let bestDistance = colorDistance(bestCandidate, avoidHex);
+
+  for (const candidate of candidates) {
+    const adjusted = ensureContrastTone(candidate, backgroundHex, minimumRatio);
+    const distance = colorDistance(adjusted, avoidHex);
+
+    if (distance >= minimumDistance) {
+      return adjusted;
+    }
+
+    if (distance > bestDistance) {
+      bestCandidate = adjusted;
+      bestDistance = distance;
+    }
+  }
+
+  return bestCandidate;
+}
+
+function pickDarkReadableTone(candidates: string[], backgroundHex: string, minimumRatio: number) {
+  for (const candidate of candidates) {
+    const adjusted = ensureDarkContrastTone(candidate, backgroundHex, minimumRatio);
+    if (getContrastRatio(adjusted, backgroundHex) >= minimumRatio) {
+      return adjusted;
+    }
+  }
+
+  return ensureDarkContrastTone(candidates[0] ?? "#1b2232", backgroundHex, minimumRatio);
+}
+
+function pickLightReadableTone(candidates: string[], backgroundHex: string, minimumRatio: number) {
+  for (const candidate of candidates) {
+    const adjusted = ensureLightContrastTone(candidate, backgroundHex, minimumRatio);
+    if (getContrastRatio(adjusted, backgroundHex) >= minimumRatio) {
+      return adjusted;
+    }
+  }
+
+  return ensureLightContrastTone(candidates[0] ?? "#fff7ef", backgroundHex, minimumRatio);
 }
 
 function shiftTowardContrast(
