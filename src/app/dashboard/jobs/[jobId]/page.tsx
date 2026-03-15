@@ -44,7 +44,7 @@ export default async function DashboardJobDetailsPage({ params }: PageProps) {
 
   const user = await getOrCreateDashboardUser();
   const [job, settings] = await Promise.all([
-    getJobForUser(jobId, user.id).catch(() => null),
+    getJobForUser(jobId, user.id),
     getIntegrationSettingsSummary().catch(() => null),
   ]);
   if (!job) {

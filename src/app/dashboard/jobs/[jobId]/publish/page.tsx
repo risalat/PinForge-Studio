@@ -35,7 +35,7 @@ export default async function DashboardJobPublishPage({ params }: PageProps) {
 
   const user = await getOrCreateDashboardUser();
   const [job, settings] = await Promise.all([
-    getJobForUser(jobId, user.id).catch(() => null),
+    getJobForUser(jobId, user.id),
     getIntegrationSettingsSummary().catch(() => ({
       publerWorkspaceId: "",
       publerAllowedDomains: [],

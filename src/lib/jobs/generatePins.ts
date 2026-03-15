@@ -1595,21 +1595,21 @@ export async function listJobsForUser(userId: string) {
   });
 }
 
-export async function getJobForUser(jobId: string, userId: string): Promise<WorkflowJob> {
-  return getOwnedJobOrThrow(jobId, userId);
-}
-
-async function getOwnedJobOrThrow(
-  jobId: string,
-  userId: string,
-): Promise<WorkflowJob> {
-  const job = await prisma.generationJob.findFirst({
+export async function getJobForUser(jobId: string, userId: string): Promise<WorkflowJob | null> {
+  return prisma.generationJob.findFirst({
     where: {
       id: jobId,
       userId,
     },
     include: jobDetailInclude,
   });
+}
+
+async function getOwnedJobOrThrow(
+  jobId: string,
+  userId: string,
+): Promise<WorkflowJob> {
+  const job = await getJobForUser(jobId, userId);
 
   if (!job) {
     throw new Error("Job not found.");

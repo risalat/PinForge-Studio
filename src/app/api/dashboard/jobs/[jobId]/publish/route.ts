@@ -77,6 +77,9 @@ export async function GET(_request: Request, { params }: RouteProps) {
     const { jobId } = await params;
     const user = await getOrCreateDashboardUser();
     const job = await getJobForUser(jobId, user.id);
+    if (!job) {
+      return NextResponse.json({ ok: false, error: "Job not found." }, { status: 404 });
+    }
 
     return NextResponse.json({
       ok: true,
@@ -170,7 +173,7 @@ export async function POST(request: Request, { params }: RouteProps) {
   }
 }
 
-function serializePin(pin: Awaited<ReturnType<typeof getJobForUser>>["generatedPins"][number]) {
+function serializePin(pin: NonNullable<Awaited<ReturnType<typeof getJobForUser>>>["generatedPins"][number]) {
   return {
     id: pin.id,
     templateId: pin.templateId,
