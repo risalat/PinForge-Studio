@@ -64,6 +64,11 @@ export function SettingsManager({
   const [aiCredentials, setAiCredentials] = useState<AiCredentialDraft[]>(
     initialSettings.aiCredentials.map(toAiCredentialDraft),
   );
+  const [aiModelsByCredentialKey, setAiModelsByCredentialKey] = useState<Record<string, string[]>>({});
+  const [loadingAiCredentialIndex, setLoadingAiCredentialIndex] = useState<number | null>(null);
+  const [aiModelLoadErrorByCredentialKey, setAiModelLoadErrorByCredentialKey] = useState<
+    Record<string, string>
+  >({});
   const [hasStoredPublerKey, setHasStoredPublerKey] = useState(initialSettings.hasPublerApiKey);
   const [canUseStoredPublerKey, setCanUseStoredPublerKey] = useState(initialSettings.canUsePublerApiKey);
   const [publerCredentialMessage, setPublerCredentialMessage] = useState(
@@ -276,6 +281,7 @@ export function SettingsManager({
     key: K,
     value: AiCredentialDraft[K],
   ) {
+    const cacheKey = getAiCredentialCacheKey(aiCredentials[index], index);
     setAiCredentials((current) =>
       current.map((credential, currentIndex) =>
         currentIndex === index
@@ -286,6 +292,18 @@ export function SettingsManager({
           : credential,
       ),
     );
+    if (key === "provider" || key === "apiKeyInput" || key === "customEndpoint") {
+      setAiModelsByCredentialKey((current) => {
+        const next = { ...current };
+        delete next[cacheKey];
+        return next;
+      });
+      setAiModelLoadErrorByCredentialKey((current) => {
+        const next = { ...current };
+        delete next[cacheKey];
+        return next;
+      });
+    }
   }
 
   function setDefaultAiCredential(index: number) {
@@ -308,6 +326,68 @@ export function SettingsManager({
       }
       return nextCredentials;
     });
+  }
+
+  async function loadAiModels(index: number) {
+    const credential = aiCredentials[index];
+    if (!credential) {
+      return;
+    }
+
+    const cacheKey = getAiCredentialCacheKey(credential, index);
+
+    setLoadingAiCredentialIndex(index);
+    setAiModelLoadErrorByCredentialKey((current) => {
+      const next = { ...current };
+      delete next[cacheKey];
+      return next;
+    });
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const response = await fetch("/api/dashboard/settings/ai-models", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          provider: credential.provider,
+          credentialId: credential.id || undefined,
+          apiKey: credential.apiKeyInput || undefined,
+          model: credential.model || undefined,
+          customEndpoint: credential.customEndpoint || undefined,
+        }),
+      });
+
+      const json = (await response.json()) as {
+        ok: boolean;
+        error?: string;
+        models?: string[];
+      };
+
+      if (!json.ok) {
+        throw new Error(json.error ?? "Unable to load models.");
+      }
+
+      const models = Array.from(new Set((json.models ?? []).filter(Boolean)));
+      setAiModelsByCredentialKey((current) => ({
+        ...current,
+        [cacheKey]:
+          credential.model && !models.includes(credential.model)
+            ? [credential.model, ...models]
+            : models,
+      }));
+      setSuccess(models.length > 0 ? `Loaded ${models.length} models.` : "No models returned for this key.");
+    } catch (loadError) {
+      const message = loadError instanceof Error ? loadError.message : "Unable to load models.";
+      setAiModelLoadErrorByCredentialKey((current) => ({
+        ...current,
+        [cacheKey]: message,
+      }));
+    } finally {
+      setLoadingAiCredentialIndex((current) => (current === index ? null : current));
+    }
   }
 
   async function loadPublerWorkspaces(options?: { silent?: boolean }) {
@@ -450,6 +530,29 @@ export function SettingsManager({
 
   return (
     <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-end gap-4">
+        <button
+          type="button"
+          onClick={() => void handleSave()}
+          disabled={isSaving}
+          className="rounded-full dashboard-accent-action dashboard-accent-action bg-[var(--dashboard-accent)] px-6 py-3 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
+        >
+          <BusyActionLabel
+            busy={isSaving}
+            label="Save settings"
+            busyLabel="Saving settings..."
+            inverse
+          />
+        </button>
+
+        {success ? (
+          <p className="rounded-full border border-[var(--dashboard-success-border)] bg-[var(--dashboard-success-soft)] px-4 py-2 text-sm text-[var(--dashboard-success-ink)]">{success}</p>
+        ) : null}
+        {error ? (
+          <p className="rounded-full border border-[var(--dashboard-danger-border)] bg-[var(--dashboard-danger-soft)] px-4 py-2 text-sm text-[var(--dashboard-danger-ink)]">{error}</p>
+        ) : null}
+      </div>
+
       <section className="overflow-hidden rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] shadow-[var(--dashboard-shadow-sm)]">
         <div className="border-b border-[var(--dashboard-line)] bg-[var(--dashboard-panel-alt)] px-5 py-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -681,7 +784,7 @@ export function SettingsManager({
                 ) : (
                   aiCredentials.map((credential, index) => (
                     <tr
-                      key={`${credential.id || "new"}-${index}`}
+                      key={getAiCredentialCacheKey(credential, index)}
                       className={index === aiCredentials.length - 1 ? "" : "border-b border-[var(--dashboard-line)]"}
                     >
                       <td className="px-5 py-4 align-top">
@@ -728,12 +831,60 @@ export function SettingsManager({
                         </div>
                       </td>
                       <td className="px-5 py-4 align-top">
-                        <input
-                          value={credential.model}
-                          onChange={(event) => updateAiCredential(index, "model", event.target.value)}
-                          placeholder="gemini-2.5-flash"
-                          className="w-full rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 outline-none"
-                        />
+                        <div className="space-y-2">
+                          {(() => {
+                            const cacheKey = getAiCredentialCacheKey(credential, index);
+                            const loadedModels = aiModelsByCredentialKey[cacheKey] ?? [];
+                            const hasLoadedModels = loadedModels.length > 0;
+                            const modelOptions =
+                              credential.model && !loadedModels.includes(credential.model)
+                                ? [credential.model, ...loadedModels]
+                                : loadedModels;
+
+                            return (
+                              <>
+                                {hasLoadedModels ? (
+                                  <select
+                                    value={credential.model}
+                                    onChange={(event) => updateAiCredential(index, "model", event.target.value)}
+                                    className="w-full rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 outline-none"
+                                  >
+                                    <option value="">Select model</option>
+                                    {modelOptions.map((model) => (
+                                      <option key={model} value={model}>
+                                        {model}
+                                      </option>
+                                    ))}
+                                  </select>
+                                ) : (
+                                  <input
+                                    value={credential.model}
+                                    onChange={(event) => updateAiCredential(index, "model", event.target.value)}
+                                    placeholder="gemini-2.5-flash"
+                                    className="w-full rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 outline-none"
+                                  />
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => void loadAiModels(index)}
+                                  disabled={loadingAiCredentialIndex === index}
+                                  className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] disabled:opacity-60"
+                                >
+                                  <BusyActionLabel
+                                    busy={loadingAiCredentialIndex === index}
+                                    label="Load models"
+                                    busyLabel="Loading..."
+                                  />
+                                </button>
+                                {aiModelLoadErrorByCredentialKey[cacheKey] ? (
+                                  <p className="text-sm text-[var(--dashboard-danger-ink)]">
+                                    {aiModelLoadErrorByCredentialKey[cacheKey]}
+                                  </p>
+                                ) : null}
+                              </>
+                            );
+                          })()}
+                        </div>
                       </td>
                       <td className="px-5 py-4 align-top">
                         <input
@@ -891,5 +1042,9 @@ function resolveWorkspaceName(
 
 function getWorkspaceBoardCacheKey(workspaceId: string, accountId: string) {
   return `${workspaceId}:${accountId || ""}`;
+}
+
+function getAiCredentialCacheKey(credential: AiCredentialDraft, index: number) {
+  return `${credential.id || "new"}-${index}`;
 }
 
