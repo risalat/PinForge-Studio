@@ -3,8 +3,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { useAppFeedback } from "@/components/ui/AppFeedbackProvider";
 import { buildSchedulePreview } from "@/lib/jobs/schedulePreview";
 import type { PublishScheduleContext, WorkspaceProfileSummary } from "@/lib/types";
 
@@ -116,6 +117,11 @@ type PublishStatusResponse = {
   latestScheduleRun?: JobPublishManagerProps["latestScheduleRun"];
 };
 
+type UploadTrackingState = {
+  active: boolean;
+  pinIds: string[];
+};
+
 export function JobPublishManager({
   jobId,
   workspaceProfiles,
@@ -126,6 +132,7 @@ export function JobPublishManager({
   latestScheduleRun,
 }: JobPublishManagerProps) {
   const router = useRouter();
+  const { notify, updateNotification, dismissNotification } = useAppFeedback();
   const [livePins, setLivePins] = useState<PinItem[]>(pins);
   const [liveLatestScheduleRun, setLiveLatestScheduleRun] = useState(latestScheduleRun);
   const [copyState, setCopyState] = useState(
@@ -169,9 +176,16 @@ export function JobPublishManager({
   const [isSavingProfileDefaults, setIsSavingProfileDefaults] = useState(false);
   const [isRefreshingStatus, setIsRefreshingStatus] = useState(false);
   const [activeAction, setActiveAction] = useState<string | null>(null);
+  const [uploadTracking, setUploadTracking] = useState<UploadTrackingState | null>(null);
   const [hasEditedFirstPublishAt, setHasEditedFirstPublishAt] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const uploadProgressToastIdRef = useRef<string | null>(null);
   const currentPins = livePins;
+  const isUploadingMedia = activeAction === "upload_media";
+  const isGeneratingTitles = activeAction === "generate_titles";
+  const isSavingCopy = activeAction === "save_copy";
+  const isGeneratingDescriptions = activeAction === "generate_descriptions";
+  const isSchedulingPins = activeAction === "schedule";
 
   function markPinAssetMissing(pinId: string) {
     setMissingAssetPinIds((current) =>
@@ -297,21 +311,21 @@ export function JobPublishManager({
     [currentPins, selectedPinIds],
   );
   const selectedUploadProgress = useMemo(() => {
-    const total = selectedUploadPins.length;
-    const uploaded = selectedUploadPins.filter((pin) => pin.mediaStatus === "UPLOADED").length;
-    const failed = selectedUploadPins.filter((pin) => pin.mediaStatus === "FAILED").length;
-    const uploading = selectedUploadPins.filter((pin) => pin.mediaStatus === "UPLOADING").length;
-    const completed = uploaded + failed;
-
-    return {
-      total,
-      uploaded,
-      failed,
-      uploading,
-      completed,
-      percent: total > 0 ? Math.round((completed / total) * 100) : 0,
-    };
+    return buildUploadProgress(selectedUploadPins);
   }, [selectedUploadPins]);
+  const trackedUploadPins = useMemo(
+    () =>
+      uploadTracking
+        ? currentPins.filter((pin) => uploadTracking.pinIds.includes(pin.id))
+        : [],
+    [currentPins, uploadTracking],
+  );
+  const trackedUploadProgress = useMemo(
+    () => buildUploadProgress(trackedUploadPins),
+    [trackedUploadPins],
+  );
+  const visibleUploadPins = uploadTracking?.active ? trackedUploadPins : selectedUploadPins;
+  const visibleUploadProgress = uploadTracking?.active ? trackedUploadProgress : selectedUploadProgress;
 
   const canScheduleSelected = useMemo(
     () =>
@@ -408,6 +422,10 @@ export function JobPublishManager({
   }, [primaryBoardId, selectedBoardIds]);
 
   useEffect(() => {
+    if (uploadTracking?.active) {
+      return;
+    }
+
     if (activeAction !== "upload_media" && !currentPins.some((pin) => pin.mediaStatus === "UPLOADING")) {
       return;
     }
@@ -451,7 +469,44 @@ export function JobPublishManager({
       isCancelled = true;
       clearInterval(interval);
     };
-  }, [activeAction, currentPins, jobId]);
+  }, [activeAction, currentPins, jobId, uploadTracking]);
+
+  useEffect(() => {
+    if (!uploadTracking?.active) {
+      if (uploadProgressToastIdRef.current) {
+        dismissNotification(uploadProgressToastIdRef.current);
+        uploadProgressToastIdRef.current = null;
+      }
+      return;
+    }
+
+    const snapshot = buildUploadProgress(trackedUploadPins);
+    const title = `${snapshot.completed} of ${snapshot.total} pins uploaded`;
+    const message = buildUploadProgressMessage(snapshot);
+
+    if (!uploadProgressToastIdRef.current) {
+      uploadProgressToastIdRef.current = notify({
+        tone: "progress",
+        title,
+        message,
+        sticky: true,
+      });
+      return;
+    }
+
+    updateNotification(uploadProgressToastIdRef.current, {
+      tone: "progress",
+      title,
+      message,
+      sticky: true,
+    });
+  }, [
+    dismissNotification,
+    notify,
+    trackedUploadPins,
+    updateNotification,
+    uploadTracking,
+  ]);
 
   function getWorkspaceProfileDefaults(nextWorkspaceId: string) {
     const profile = profileCatalog.find((item) => item.workspaceId === nextWorkspaceId);
@@ -629,14 +684,15 @@ export function JobPublishManager({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
-    const data = (await response.json()) as {
+    const rawBody = await response.text();
+    const data = parsePublishActionResponse(rawBody) as {
       ok?: boolean;
       error?: string;
       result?: PublishActionResult;
     };
 
     if (!response.ok || !data.ok) {
-      throw new Error(data.error ?? "Request failed.");
+      throw new Error(data.error ?? extractResponseErrorMessage(rawBody) ?? "Request failed.");
     }
 
     return data.result;
@@ -703,6 +759,13 @@ export function JobPublishManager({
         const action = typeof payload === "object" && payload && "action" in payload
           ? String((payload as { action?: string }).action ?? "")
           : "";
+        const actionPinIds =
+          typeof payload === "object" &&
+          payload &&
+          "generatedPinIds" in payload &&
+          Array.isArray((payload as { generatedPinIds?: unknown }).generatedPinIds)
+            ? ((payload as { generatedPinIds: string[] }).generatedPinIds ?? [])
+            : [];
         const feedbackSection = section ?? resolveSectionForAction(action);
         if (feedbackSection) {
           setSectionFeedback((current) => ({
@@ -712,6 +775,23 @@ export function JobPublishManager({
         }
         if (action) {
           setActiveAction(action);
+        }
+        if (action === "upload_media") {
+          setUploadTracking({
+            active: true,
+            pinIds: actionPinIds,
+          });
+          setLivePins((current) =>
+            current.map((pin) =>
+              actionPinIds.includes(pin.id) && pin.mediaStatus !== "UPLOADED"
+                ? {
+                    ...pin,
+                    mediaStatus: "UPLOADING",
+                    mediaError: null,
+                  }
+                : pin,
+            ),
+          );
         }
         const result = await runAction(payload);
         if (feedbackSection) {
@@ -731,6 +811,18 @@ export function JobPublishManager({
             ),
           }));
         }
+        if (action === "upload_media") {
+          const uploadedCount = result?.succeeded ?? 0;
+          const failedCount = result?.failed ?? 0;
+          notify({
+            tone: failedCount > 0 ? "info" : "success",
+            title: failedCount > 0 ? "Upload finished with issues" : "Media upload complete",
+            message:
+              failedCount > 0
+                ? `${uploadedCount} pin${uploadedCount === 1 ? "" : "s"} uploaded, ${failedCount} failed.`
+                : `${uploadedCount} pin${uploadedCount === 1 ? "" : "s"} uploaded to Publer.`,
+          });
+        }
         if (action) {
           const response = await fetch(`/api/dashboard/jobs/${jobId}/publish`, {
             method: "GET",
@@ -742,6 +834,30 @@ export function JobPublishManager({
             if (data.pins) {
               setLivePins(data.pins);
               setCopyState((current) => mergeCopyStateWithPins(current, data.pins ?? []));
+              if (action === "upload_media") {
+                const failedPinIds = data.pins
+                  .filter((pin) => actionPinIds.includes(pin.id) && pin.mediaStatus === "FAILED")
+                  .map((pin) => pin.id);
+
+                if (failedPinIds.length > 0) {
+                  setSelectedPinIds(failedPinIds);
+                  setSectionFeedback((current) => ({
+                    ...current,
+                    upload: {
+                      tone: "warning",
+                      message: `${result?.succeeded ?? 0} uploaded, ${failedPinIds.length} failed. Failed pins are selected so you can retry them.`,
+                    },
+                  }));
+                } else if (actionPinIds.length > 0) {
+                  setSectionFeedback((current) => ({
+                    ...current,
+                    upload: {
+                      tone: "success",
+                      message: `${result?.succeeded ?? 0} pin${(result?.succeeded ?? 0) === 1 ? "" : "s"} uploaded successfully.`,
+                    },
+                  }));
+                }
+              }
             }
           }
         }
@@ -760,7 +876,30 @@ export function JobPublishManager({
             },
           }));
         }
+        if (action === "upload_media") {
+          notify({
+            tone: "error",
+            title: "Media upload failed",
+            message: error instanceof Error ? error.message : fallbackMessage,
+            sticky: true,
+          });
+        }
       } finally {
+        if (
+          typeof payload === "object" &&
+          payload &&
+          "action" in payload &&
+          String((payload as { action?: string }).action ?? "") === "upload_media"
+        ) {
+          setUploadTracking((current) =>
+            current
+              ? {
+                  ...current,
+                  active: false,
+                }
+              : null,
+          );
+        }
         setActiveAction(null);
       }
     });
@@ -890,9 +1029,12 @@ function formatDateLabel(value: string) {
           <div className="flex flex-wrap gap-2">
             <ToolbarButton
               label="Upload"
+              busy={isUploadingMedia}
+              busyLabel="Uploading..."
               onClick={triggerUploadSelected}
               disabled={
                 isPending ||
+                Boolean(activeAction) ||
                 selectedPins.length === 0 ||
                 !integrationReady.canUsePublerApiKey ||
                 !workspaceId
@@ -901,19 +1043,30 @@ function formatDateLabel(value: string) {
             />
             <ToolbarButton
               label="Titles"
+              busy={isGeneratingTitles}
+              busyLabel="Generating..."
               onClick={triggerGenerateTitles}
-              disabled={isPending || selectedPins.length === 0 || !integrationReady.canUseAiApiKey}
+              disabled={
+                isPending || Boolean(activeAction) || selectedPins.length === 0 || !integrationReady.canUseAiApiKey
+              }
             />
             <ToolbarButton
               label="Descriptions"
+              busy={isGeneratingDescriptions}
+              busyLabel="Generating..."
               onClick={triggerGenerateDescriptions}
-              disabled={isPending || selectedPins.length === 0 || !integrationReady.canUseAiApiKey}
+              disabled={
+                isPending || Boolean(activeAction) || selectedPins.length === 0 || !integrationReady.canUseAiApiKey
+              }
             />
             <ToolbarButton
               label="Schedule"
+              busy={isSchedulingPins}
+              busyLabel="Scheduling..."
               onClick={triggerScheduleSelected}
               disabled={
                 isPending ||
+                Boolean(activeAction) ||
                 !firstPublishAt ||
                 !canScheduleSelected ||
                 selectedPins.length === 0 ||
@@ -1008,7 +1161,11 @@ function formatDateLabel(value: string) {
                 disabled={!canSaveProfileDefaults || !hasUnsavedProfileDefaults || isSavingProfileDefaults}
                 className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] disabled:opacity-60"
               >
-                {isSavingProfileDefaults ? "Saving..." : "Save to profile"}
+                <ActionButtonContent
+                  busy={isSavingProfileDefaults}
+                  label="Save to profile"
+                  busyLabel="Saving..."
+                />
               </button>
             ) : null}
             <button
@@ -1023,7 +1180,11 @@ function formatDateLabel(value: string) {
               disabled={isLoadingOptions || !integrationReady.canUsePublerApiKey}
               className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] disabled:opacity-60"
             >
-              {isLoadingOptions ? "Refreshing..." : "Refresh destination"}
+              <ActionButtonContent
+                busy={isLoadingOptions}
+                label="Refresh destination"
+                busyLabel="Refreshing..."
+              />
             </button>
           </div>
         </div>
@@ -1300,13 +1461,19 @@ function formatDateLabel(value: string) {
                 }
                 disabled={
                   isPending ||
+                  Boolean(activeAction) ||
                   selectedPins.length === 0 ||
                   !integrationReady.canUsePublerApiKey ||
                   !workspaceId
                 }
                 className="rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
               >
-                Upload selected pins
+                <ActionButtonContent
+                  busy={isUploadingMedia}
+                  label="Upload selected pins"
+                  busyLabel="Uploading selected pins..."
+                  inverse
+                />
               </button>
               <button
                 type="button"
@@ -1328,13 +1495,18 @@ function formatDateLabel(value: string) {
                 }}
                 disabled={
                   isPending ||
+                  Boolean(activeAction) ||
                   failedUploadPins.length === 0 ||
                   !integrationReady.canUsePublerApiKey ||
                   !workspaceId
                 }
                 className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] disabled:opacity-60"
               >
-                Retry failed uploads
+                <ActionButtonContent
+                  busy={isUploadingMedia}
+                  label="Retry failed uploads"
+                  busyLabel="Retrying uploads..."
+                />
               </button>
             </div>
             {sectionFeedback.upload ? <SectionFeedback feedback={sectionFeedback.upload} className="mt-4" /> : null}
@@ -1343,40 +1515,45 @@ function formatDateLabel(value: string) {
               <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-[var(--dashboard-subtle)]">
                 <p className="font-semibold text-[var(--dashboard-text)]">Upload progress</p>
                 <p>
-                  {selectedUploadProgress.completed}/{selectedUploadProgress.total} processed
-                  {selectedUploadProgress.uploading > 0
-                    ? ` - ${selectedUploadProgress.uploading} uploading`
+                  {visibleUploadProgress.completed}/{visibleUploadProgress.total} processed
+                  {visibleUploadProgress.uploading > 0
+                    ? ` - ${visibleUploadProgress.uploading} uploading`
                     : ""}
                 </p>
               </div>
+              {uploadTracking?.active ? (
+                <p className="mt-3 text-sm font-medium text-[var(--dashboard-accent-strong)]">
+                  {buildUploadProgressMessage(visibleUploadProgress)}
+                </p>
+              ) : null}
               <div className="mt-3 h-3 overflow-hidden rounded-full bg-[var(--dashboard-panel)]">
                 <div
                   className="h-full rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] transition-all"
-                  style={{ width: `${selectedUploadProgress.percent}%` }}
+                  style={{ width: `${visibleUploadProgress.percent}%` }}
                 />
               </div>
               <div className="mt-3 grid gap-2 text-sm text-[var(--dashboard-subtle)] md:grid-cols-4">
                 <p>
-                  <strong>{selectedUploadProgress.uploaded}</strong> uploaded
+                  <strong>{visibleUploadProgress.uploaded}</strong> uploaded
                 </p>
                 <p>
-                  <strong>{selectedUploadProgress.failed}</strong> failed
+                  <strong>{visibleUploadProgress.failed}</strong> failed
                 </p>
                 <p>
-                  <strong>{selectedUploadProgress.uploading}</strong> uploading
+                  <strong>{visibleUploadProgress.uploading}</strong> uploading
                 </p>
                 <p>
-                  <strong>{selectedUploadProgress.total - selectedUploadProgress.completed - selectedUploadProgress.uploading}</strong>{" "}
+                  <strong>{visibleUploadProgress.total - visibleUploadProgress.completed - visibleUploadProgress.uploading}</strong>{" "}
                   pending
                 </p>
               </div>
               <div className="mt-4 max-h-52 space-y-2 overflow-y-auto pr-1">
-                {selectedUploadPins.length === 0 ? (
+                {visibleUploadPins.length === 0 ? (
                   <p className="text-sm text-[var(--dashboard-subtle)]">
                     Select one or more pins to watch upload progress.
                   </p>
                 ) : (
-                  selectedUploadPins.map((pin) => (
+                  visibleUploadPins.map((pin) => (
                     <div
                       key={pin.id}
                       className="flex items-center justify-between gap-3 rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-2"
@@ -1405,7 +1582,11 @@ function formatDateLabel(value: string) {
             title="Step 2 - Titles"
             countLabel={`${summary.titlesReady} ready`}
             actionLabel="Generate titles for selected pins"
-            disabled={isPending || selectedPins.length === 0 || !integrationReady.canUseAiApiKey}
+            actionBusy={isGeneratingTitles}
+            actionBusyLabel="Generating titles..."
+            disabled={
+              isPending || Boolean(activeAction) || selectedPins.length === 0 || !integrationReady.canUseAiApiKey
+            }
             feedback={sectionFeedback.titles}
             onClick={() =>
               handleAction(
@@ -1416,13 +1597,15 @@ function formatDateLabel(value: string) {
             }
             secondaryAction={{
               label: "Save copy edits",
+              busy: isSavingCopy,
+              busyLabel: "Saving copy...",
               onClick: () =>
                 handleAction(
                   { action: "save_copy", copies: copyState },
                   "Unable to save copy edits.",
                   "titles",
                 ),
-              disabled: isPending || currentPins.length === 0,
+              disabled: isPending || Boolean(activeAction) || currentPins.length === 0,
             }}
           />
 
@@ -1431,7 +1614,11 @@ function formatDateLabel(value: string) {
             title="Step 3 - Descriptions"
             countLabel={`${summary.descriptionsReady} ready`}
             actionLabel="Generate descriptions for selected pins"
-            disabled={isPending || selectedPins.length === 0 || !integrationReady.canUseAiApiKey}
+            actionBusy={isGeneratingDescriptions}
+            actionBusyLabel="Generating descriptions..."
+            disabled={
+              isPending || Boolean(activeAction) || selectedPins.length === 0 || !integrationReady.canUseAiApiKey
+            }
             feedback={sectionFeedback.descriptions}
             onClick={() =>
               handleAction(
@@ -1882,11 +2069,15 @@ function SectionFeedback({
 
 function ToolbarButton({
   label,
+  busy,
+  busyLabel,
   onClick,
   disabled,
   tone = "secondary",
 }: {
   label: string;
+  busy?: boolean;
+  busyLabel?: string;
   onClick: () => void;
   disabled: boolean;
   tone?: "primary" | "secondary";
@@ -1902,7 +2093,12 @@ function ToolbarButton({
           : "rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] disabled:opacity-60"
       }
     >
-      {label}
+      <ActionButtonContent
+        busy={busy}
+        label={label}
+        busyLabel={busyLabel}
+        inverse={tone === "primary"}
+      />
     </button>
   );
 }
@@ -1912,11 +2108,15 @@ function StepCard(input: {
   title: string;
   countLabel: string;
   actionLabel: string;
+  actionBusy?: boolean;
+  actionBusyLabel?: string;
   disabled: boolean;
   onClick: () => void;
   feedback?: BannerState;
   secondaryAction?: {
     label: string;
+    busy?: boolean;
+    busyLabel?: string;
     onClick: () => void;
     disabled: boolean;
   };
@@ -1936,7 +2136,12 @@ function StepCard(input: {
           disabled={input.disabled}
           className="rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
         >
-          {input.actionLabel}
+          <ActionButtonContent
+            busy={input.actionBusy}
+            label={input.actionLabel}
+            busyLabel={input.actionBusyLabel}
+            inverse
+          />
         </button>
         {input.secondaryAction ? (
           <button
@@ -1945,7 +2150,11 @@ function StepCard(input: {
             disabled={input.secondaryAction.disabled}
             className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] disabled:opacity-60"
           >
-            {input.secondaryAction.label}
+            <ActionButtonContent
+              busy={input.secondaryAction.busy}
+              label={input.secondaryAction.label}
+              busyLabel={input.secondaryAction.busyLabel}
+            />
           </button>
         ) : null}
       </div>
@@ -1994,6 +2203,32 @@ function StatusChip({
           : "border-[var(--dashboard-line)] bg-[var(--dashboard-panel-alt)] text-[var(--dashboard-subtle)]";
 
   return <span className={`rounded-full border px-2 py-1 ${className}`}>{label}</span>;
+}
+
+function ActionButtonContent({
+  busy,
+  label,
+  busyLabel,
+  inverse = false,
+}: {
+  busy?: boolean;
+  label: string;
+  busyLabel?: string;
+  inverse?: boolean;
+}) {
+  return (
+    <span className="inline-flex items-center gap-2">
+      {busy ? (
+        <span
+          className={`h-4 w-4 animate-spin rounded-full border-2 ${
+            inverse ? "border-white/30 border-t-white" : "border-current/25 border-t-current"
+          }`}
+          aria-hidden="true"
+        />
+      ) : null}
+      <span>{busy ? busyLabel ?? label : label}</span>
+    </span>
+  );
 }
 
 function toneForStatus(status: string) {
@@ -2111,6 +2346,71 @@ function formatLabel(value: string) {
     .split("_")
     .map((part) => part.charAt(0) + part.slice(1).toLowerCase())
     .join(" ");
+}
+
+function parsePublishActionResponse(rawBody: string) {
+  if (!rawBody.trim()) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(rawBody) as Record<string, unknown>;
+  } catch {
+    return {
+      ok: false,
+      error: extractResponseErrorMessage(rawBody) ?? "Unexpected server response.",
+    };
+  }
+}
+
+function extractResponseErrorMessage(rawBody: string) {
+  const trimmed = rawBody.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  if (trimmed.startsWith("<")) {
+    const titleMatch = trimmed.match(/<title>(.*?)<\/title>/i);
+    return titleMatch?.[1]?.trim() || "The server returned an unexpected error page.";
+  }
+
+  return trimmed.length > 220 ? `${trimmed.slice(0, 217)}...` : trimmed;
+}
+
+function buildUploadProgress(uploadPins: PinItem[]) {
+  const total = uploadPins.length;
+  const uploaded = uploadPins.filter((pin) => pin.mediaStatus === "UPLOADED").length;
+  const failed = uploadPins.filter((pin) => pin.mediaStatus === "FAILED").length;
+  const uploading = uploadPins.filter((pin) => pin.mediaStatus === "UPLOADING").length;
+  const completed = uploaded + failed;
+
+  return {
+    total,
+    uploaded,
+    failed,
+    uploading,
+    completed,
+    percent: total > 0 ? Math.round((completed / total) * 100) : 0,
+  };
+}
+
+function buildUploadProgressMessage(input: ReturnType<typeof buildUploadProgress>) {
+  if (input.total === 0) {
+    return "Preparing the selected pins for upload.";
+  }
+
+  if (input.uploading > 0) {
+    return `${input.uploading} pin${input.uploading === 1 ? "" : "s"} uploading now.`;
+  }
+
+  if (input.completed >= input.total) {
+    return input.failed > 0
+      ? `${input.uploaded} uploaded, ${input.failed} failed.`
+      : "All selected pins finished uploading.";
+  }
+
+  const remaining = input.total - input.completed;
+  return `${remaining} pin${remaining === 1 ? "" : "s"} waiting to upload.`;
 }
 
 function formatDateTimeLocalValue(value: string) {
