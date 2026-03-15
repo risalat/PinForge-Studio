@@ -2,6 +2,7 @@
 
 import { AutoFitLineStack } from "@/components/AutoFitLineStack";
 import { AutoFitText } from "@/components/AutoFitText";
+import { compactHeroTwoSplitTextTitle } from "@/lib/templates/heroTwoSplitTextTitle";
 import { getSplitVerticalVisualPreset } from "@/lib/templates/visualPresets";
 import type { TemplateRenderProps } from "@/lib/templates/types";
 import type { CSSProperties } from "react";
@@ -51,33 +52,14 @@ export function TemplateHeroTwoSplitText({
   const bottomTileWidth = Math.round((canvasWidth - divider) / 2);
 
   const stripBackground = preset.palette.footer;
-  const highlightColor = pickBestContrastColor(stripBackground, [
-    preset.palette.divider,
-    preset.palette.number,
-    preset.palette.title,
-    preset.palette.canvas,
-    "#ffbf57",
-  ]);
-  const dividerColor = mixHex(stripBackground, highlightColor, 0.22);
-  const numberColor = highlightColor;
-  const titleColor = pickBestContrastColor(stripBackground, [
-    preset.palette.canvas,
-    preset.palette.band,
-    preset.palette.domain,
-    "#fff7e9",
-  ]);
-  const titleAccentColor = highlightColor;
-  const domainPillBackground = pickBestContrastColor(stripBackground, [
-    highlightColor,
-    preset.palette.divider,
-    preset.palette.title,
-    "#f26430",
-  ]);
-  const domainColor = pickBestContrastColor(domainPillBackground, [
-    preset.palette.canvas,
-    preset.palette.band,
-    "#fff9ef",
-  ]);
+  const {
+    dividerColor,
+    numberColor,
+    titleColor,
+    titleAccentColor,
+    domainPillBackground,
+    domainColor,
+  } = resolveHeroTwoSplitTextColors(stripBackground, preset.palette);
 
   const numberBlockLeft = 40;
   const numberBlockWidth = 324;
@@ -268,34 +250,7 @@ function splitTitleIntoThreeLines(title: string) {
 }
 
 function compactHeroTwoSplitTitle(title: string) {
-  const safeTitle = title.trim() || "Breathtaking Lake House Exterior Ideas";
-  const words = safeTitle.split(/\s+/).filter(Boolean);
-
-  if (words.length <= 5) {
-    return safeTitle;
-  }
-
-  const normalizedWords = words.map((word) => word.toLowerCase().replace(/[^a-z]/g, ""));
-  const twoWordSuffixes = [
-    ["exterior", "ideas"],
-    ["paint", "colors"],
-    ["wall", "ideas"],
-    ["color", "ideas"],
-    ["decor", "ideas"],
-  ] as const;
-  const oneWordSuffixes = new Set(["ideas", "colors", "decor", "styles", "looks"]);
-
-  for (const suffix of twoWordSuffixes) {
-    if (normalizedWords.at(-2) === suffix[0] && normalizedWords.at(-1) === suffix[1]) {
-      return [...words.slice(0, 3), ...words.slice(-2)].join(" ");
-    }
-  }
-
-  if (oneWordSuffixes.has(normalizedWords.at(-1) ?? "")) {
-    return [...words.slice(0, 4), words.at(-1)!].join(" ");
-  }
-
-  return words.slice(0, 5).join(" ");
+  return compactHeroTwoSplitTextTitle(title);
 }
 
 function toTitleCase(value: string) {
@@ -305,6 +260,116 @@ function toTitleCase(value: string) {
     .filter(Boolean)
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
     .join(" ");
+}
+
+function resolveHeroTwoSplitTextColors(
+  backgroundHex: string,
+  palette: {
+    canvas: string;
+    band: string;
+    divider: string;
+    title: string;
+    domain: string;
+    number: string;
+  },
+) {
+  const titleColor = pickReadableColor(backgroundHex, [
+    palette.domain,
+    palette.canvas,
+    palette.band,
+    "#fff7e9",
+    "#172033",
+  ]);
+
+  const titleAccentColor = pickReadableColor(
+    backgroundHex,
+    [
+      palette.divider,
+      palette.number,
+      palette.title,
+      "#f14902",
+      "#ff8a3d",
+      "#ffbf57",
+    ],
+    { minContrast: 3.6, distinctFrom: titleColor, minDistance: 80 },
+  );
+
+  const numberColor = titleAccentColor;
+  const dividerColor = mixHex(backgroundHex, titleAccentColor, 0.36);
+  const domainPillBackground = mixHex(titleColor, backgroundHex, 0.72);
+  const domainColor = pickReadableColor(domainPillBackground, [
+    titleColor,
+    titleAccentColor,
+    palette.canvas,
+    palette.band,
+    "#fff9ef",
+    "#172033",
+  ]);
+
+  return {
+    dividerColor,
+    numberColor,
+    titleColor,
+    titleAccentColor,
+    domainPillBackground,
+    domainColor,
+  };
+}
+
+function pickReadableColor(
+  backgroundHex: string,
+  candidates: string[],
+  options?: {
+    minContrast?: number;
+    distinctFrom?: string;
+    minDistance?: number;
+  },
+) {
+  const minContrast = options?.minContrast ?? 4.5;
+  const distinctFrom = options?.distinctFrom;
+  const minDistance = options?.minDistance ?? 0;
+  const variants = buildReadableVariants(backgroundHex, candidates);
+
+  if (!isHexColor(backgroundHex) || variants.length === 0) {
+    return candidates.find(isHexColor) ?? candidates[0] ?? backgroundHex;
+  }
+
+  return variants
+    .map(({ color, sourceIndex, variantIndex }) => {
+      const contrast = getContrastRatio(color, backgroundHex);
+      const distance = distinctFrom ? getColorDistance(color, distinctFrom) : minDistance;
+      const meetsContrast = contrast >= minContrast;
+      const meetsDistance = !distinctFrom || distance >= minDistance;
+      const score =
+        (meetsContrast ? 1000 : contrast * 140) +
+        (meetsDistance ? 220 : distance) -
+        sourceIndex * 6 -
+        variantIndex;
+
+      return { color, score };
+    })
+    .sort((left, right) => right.score - left.score)[0]?.color ?? candidates[0] ?? backgroundHex;
+}
+
+function buildReadableVariants(backgroundHex: string, candidates: string[]) {
+  const targetHex = getRelativeLuminance(backgroundHex) < 0.42 ? "#fffdf8" : "#111111";
+  const mixAmounts = [0, 0.16, 0.32, 0.48, 0.64];
+  const variants: Array<{ color: string; sourceIndex: number; variantIndex: number }> = [];
+  const seen = new Set<string>();
+
+  candidates.filter(isHexColor).forEach((candidate, sourceIndex) => {
+    mixAmounts.forEach((amount, variantIndex) => {
+      const color = amount === 0 ? candidate : mixHex(candidate, targetHex, amount);
+      if (seen.has(color)) {
+        return;
+      }
+
+      seen.add(color);
+      variants.push({ color, sourceIndex, variantIndex });
+    });
+  });
+
+  return variants;
 }
 
 function mixHex(fromHex: string, toHex: string, amount: number) {
@@ -335,17 +400,6 @@ function parseHex(value: string) {
   ];
 }
 
-function pickBestContrastColor(backgroundHex: string, candidates: string[]) {
-  const validCandidates = candidates.filter(isHexColor);
-  if (!isHexColor(backgroundHex) || validCandidates.length === 0) {
-    return candidates[0] ?? backgroundHex;
-  }
-
-  return validCandidates.reduce((best, candidate) =>
-    getContrastRatio(candidate, backgroundHex) > getContrastRatio(best, backgroundHex) ? candidate : best,
-  );
-}
-
 function getContrastRatio(foregroundHex: string, backgroundHex: string) {
   const foreground = getRelativeLuminance(foregroundHex);
   const background = getRelativeLuminance(backgroundHex);
@@ -364,6 +418,20 @@ function getRelativeLuminance(hex: string) {
     );
 
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+function getColorDistance(leftHex: string, rightHex: string) {
+  const left = parseHex(leftHex);
+  const right = parseHex(rightHex);
+  if (!left || !right) {
+    return 0;
+  }
+
+  return Math.sqrt(
+    Math.pow(left[0] - right[0], 2) +
+      Math.pow(left[1] - right[1], 2) +
+      Math.pow(left[2] - right[2], 2),
+  );
 }
 
 function isHexColor(value: string) {

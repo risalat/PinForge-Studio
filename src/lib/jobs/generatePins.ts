@@ -40,6 +40,10 @@ import { getIntegrationSettingsForUserId } from "@/lib/settings/integrationSetti
 import { getStorageProvider } from "@/lib/storage";
 import { buildStorageAssetUrl, resolveStoredAssetUrl } from "@/lib/storage/assetUrl";
 import {
+  compactHeroTwoSplitTextTitle,
+  isHeroTwoSplitTextTitleWithinLimit,
+} from "@/lib/templates/heroTwoSplitTextTitle";
+import {
   parsePlanRenderContext,
   serializePlanRenderContext,
   toPlanVisualPreset,
@@ -1679,6 +1683,7 @@ async function generateRenderCopyForPlan(
   }
 
   const shapedCopy = shapeRenderCopyForTemplate({
+    templateId: plan.templateId,
     title,
     subtitle,
     itemNumber,
@@ -1736,6 +1741,7 @@ function buildRenderCopyRequest(
   ): GeneratePinRenderCopyRequest {
     const titleRequest = buildTitleRequest(job, pin);
     const isNineImageGridTemplate = pin.templateId === "nine-image-grid-overlay-number-footer";
+    const isHeroTwoSplitTextTemplate = pin.templateId === "hero-two-split-text";
     return {
       ...titleRequest,
       locked_title: pin.lockedTitle?.trim() || undefined,
@@ -1750,8 +1756,8 @@ function buildRenderCopyRequest(
         ? "Create a clean Pinterest title + subtitle pairing for the artwork."
         : "Create one clean Pinterest artwork headline that reads well without a subtitle.",
       artwork_title_single_line: isNineImageGridTemplate,
-      artwork_title_max_chars: isNineImageGridTemplate ? 28 : undefined,
-      artwork_title_max_words: isNineImageGridTemplate ? 4 : undefined,
+      artwork_title_max_chars: isNineImageGridTemplate ? 28 : isHeroTwoSplitTextTemplate ? 36 : undefined,
+      artwork_title_max_words: isNineImageGridTemplate ? 4 : isHeroTwoSplitTextTemplate ? 5 : undefined,
     };
   }
 
@@ -1911,6 +1917,7 @@ function buildSubtitleFromTitle(title: string, articleTitle: string) {
 }
 
 function shapeRenderCopyForTemplate(input: {
+  templateId: string;
   title: string;
   subtitle?: string;
   itemNumber?: number;
@@ -1940,6 +1947,7 @@ function shapeRenderCopyForTemplate(input: {
   }
 
   title = collapseSingleFieldRenderTitle({
+    templateId: input.templateId,
     title,
     subtitle,
     itemNumber: input.itemNumber,
@@ -1953,6 +1961,7 @@ function shapeRenderCopyForTemplate(input: {
 }
 
 function collapseSingleFieldRenderTitle(input: {
+  templateId: string;
   title: string;
   subtitle?: string;
   itemNumber?: number;
@@ -1980,6 +1989,10 @@ function collapseSingleFieldRenderTitle(input: {
 
   if (headline.length > 80 && input.subtitle) {
     headline = headline.replace(/\s+/g, " ").split(/\s+/).slice(0, 10).join(" ");
+  }
+
+  if (input.templateId === "hero-two-split-text" && !isHeroTwoSplitTextTitleWithinLimit(headline)) {
+    headline = compactHeroTwoSplitTextTitle(headline);
   }
 
   return headline;

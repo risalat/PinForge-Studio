@@ -445,8 +445,18 @@ export class AIClient {
         JSON.stringify(renderPayload.images ?? [], null, 2),
         'Return JSON with this shape: {"items":[{"title":"...","subtitle":"..."}]}',
         "Rules: title <= 100 chars, subtitle <= 40 chars, subtitle <= 5 words, no hashtags, keep both specific and editorial. For subtitle templates, prefer artwork titles around 55 characters or less when possible.",
-        renderPayload.artwork_title_single_line
-          ? `Critical constraint for this template: the artwork title must fit on a single line. Keep it within ${renderPayload.artwork_title_max_words ?? 5} words and ${renderPayload.artwork_title_max_chars ?? 30} characters whenever possible. Rewrite for brevity instead of clipping or dropping random words.`
+        renderPayload.artwork_title_single_line ||
+        renderPayload.artwork_title_max_words ||
+        renderPayload.artwork_title_max_chars
+          ? [
+              "Critical constraint for this template:",
+              renderPayload.artwork_title_single_line ? "the artwork title must fit on a single line;" : "keep the artwork title very short;",
+              renderPayload.artwork_title_max_words ? `stay within ${renderPayload.artwork_title_max_words} words;` : undefined,
+              renderPayload.artwork_title_max_chars ? `stay within ${renderPayload.artwork_title_max_chars} characters whenever possible;` : undefined,
+              "rewrite for brevity instead of clipping or dropping random words.",
+            ]
+              .filter(Boolean)
+              .join(" ")
           : "Use the template shape normally.",
       ].join("\n");
     }
