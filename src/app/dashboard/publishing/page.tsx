@@ -31,9 +31,11 @@ export default async function DashboardPublishingPage() {
   const failed = jobs.filter(
     (job) => job.status === "FAILED" || job.scheduleRuns[0]?.status === "FAILED",
   );
+  const cycleMetaByJobId = buildCycleMetaByJobId(jobs);
   const publishingRows = [
     ...readyToPublish.map((job) => ({
       id: job.id,
+      postId: job.postId,
       title: job.articleTitleSnapshot,
       domain: job.domainSnapshot,
       createdAt: job.createdAt,
@@ -44,6 +46,7 @@ export default async function DashboardPublishingPage() {
     })),
     ...scheduled.map((job) => ({
       id: job.id,
+      postId: job.postId,
       title: job.articleTitleSnapshot,
       domain: job.domainSnapshot,
       createdAt: job.createdAt,
@@ -54,6 +57,7 @@ export default async function DashboardPublishingPage() {
     })),
     ...failed.map((job) => ({
       id: job.id,
+      postId: job.postId,
       title: job.articleTitleSnapshot,
       domain: job.domainSnapshot,
       createdAt: job.createdAt,
@@ -91,11 +95,12 @@ export default async function DashboardPublishingPage() {
                       <PublishingHead className="w-[34%]">Post</PublishingHead>
                       <PublishingHead className="w-[11%]">Domain</PublishingHead>
                       <PublishingHead className="w-[10%]">Created</PublishingHead>
+                      <PublishingHead className="w-[8%]">Cycle</PublishingHead>
                       <PublishingHead className="w-[8%]">Pins</PublishingHead>
                       <PublishingHead className="w-[10%]">Lane</PublishingHead>
-                      <PublishingHead className="w-[12%]">Job status</PublishingHead>
-                      <PublishingHead className="w-[12%]">Schedule</PublishingHead>
-                      <PublishingHead className="w-[13%]">Actions</PublishingHead>
+                      <PublishingHead className="w-[11%]">Job status</PublishingHead>
+                      <PublishingHead className="w-[11%]">Schedule</PublishingHead>
+                      <PublishingHead className="w-[12%]">Actions</PublishingHead>
                     </tr>
                   </thead>
                   <tbody>
@@ -118,6 +123,9 @@ export default async function DashboardPublishingPage() {
                           <p className="text-sm font-semibold text-[var(--dashboard-text)]">
                             {job.createdAt.toLocaleDateString()}
                           </p>
+                        </td>
+                        <td className="px-5 py-5 align-top">
+                          <CycleCell meta={cycleMetaByJobId.get(job.id)} />
                         </td>
                         <td className="px-5 py-5 align-top">
                           <p className="text-sm font-semibold text-[var(--dashboard-text)]">{job.generatedPins}</p>
@@ -177,6 +185,54 @@ function PublishingHead({ children, className = "" }: { children: string; classN
       {children}
     </th>
   );
+}
+
+function CycleCell({ meta }: { meta: { index: number; total: number; isLatest: boolean } | undefined }) {
+  if (!meta) {
+    return <p className="text-sm text-[var(--dashboard-subtle)]">1 / 1</p>;
+  }
+
+  return (
+    <div>
+      <p className="text-sm font-semibold text-[var(--dashboard-text)]">
+        {meta.index} / {meta.total}
+      </p>
+      <p className="mt-1 text-xs text-[var(--dashboard-subtle)]">{meta.isLatest ? "Latest" : "Earlier"}</p>
+    </div>
+  );
+}
+
+function buildCycleMetaByJobId(
+  jobs: Array<{
+    id: string;
+    postId: string;
+    createdAt: Date;
+  }>,
+) {
+  const grouped = new Map<string, typeof jobs>();
+
+  for (const job of jobs) {
+    const existing = grouped.get(job.postId) ?? [];
+    existing.push(job);
+    grouped.set(job.postId, existing);
+  }
+
+  const result = new Map<string, { index: number; total: number; isLatest: boolean }>();
+
+  for (const group of grouped.values()) {
+    const ordered = [...group].sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime());
+    const total = ordered.length;
+
+    ordered.forEach((job, index) => {
+      result.set(job.id, {
+        index: index + 1,
+        total,
+        isLatest: index === total - 1,
+      });
+    });
+  }
+
+  return result;
 }
 
 function LaneChip({ label }: { label: string }) {

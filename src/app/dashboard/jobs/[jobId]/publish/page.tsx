@@ -1,12 +1,13 @@
 import { notFound } from "next/navigation";
 import { JobPublishManager } from "@/app/dashboard/jobs/[jobId]/publish/JobPublishManager";
+import { StartNewCycleButton } from "@/app/dashboard/jobs/[jobId]/StartNewCycleButton";
 import { WorkspaceScopeMismatchCard } from "@/components/dashboard/WorkspaceScopeMismatchCard";
 import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
 import { requireAuthenticatedDashboardUser } from "@/lib/auth/dashboardSession";
 import { matchesAllowedDomain } from "@/lib/dashboard/domainScope";
 import { getDashboardWorkspaceScope } from "@/lib/dashboard/workspaceScope";
 import { isDatabaseConfigured } from "@/lib/env";
-import { getJobForUser } from "@/lib/jobs/generatePins";
+import { getJobForUser, listJobCyclesForPost } from "@/lib/jobs/generatePins";
 import { getPublishScheduleContextForPost } from "@/lib/jobs/publishScheduleContext";
 import {
   getIntegrationSettingsSummary,
@@ -65,7 +66,10 @@ export default async function DashboardJobPublishPage({ params }: PageProps) {
     getWorkspaceProfileForUserId(user.id, activeWorkspaceId),
     getWorkspaceAllowedDomainsForUserId(user.id, activeWorkspaceId),
   ]);
+  const cycleJobs = await listJobCyclesForPost(user.id, job.postId);
+  const cycleContext = buildCycleContext(cycleJobs, job.id);
   const isInActiveScope = matchesAllowedDomain(job.domainSnapshot, allowedDomains);
+  const isFailedCycle = job.status === "FAILED" || job.scheduleRuns[0]?.status === "FAILED";
 
   if (!isInActiveScope) {
     return (
@@ -102,9 +106,35 @@ export default async function DashboardJobPublishPage({ params }: PageProps) {
               label="Last run"
               value={job.scheduleRuns[0]?.status.replaceAll("_", " ").toLowerCase() ?? "not started"}
             />
+            <ContextTile label="Cycle" value={`${cycleContext.index} / ${cycleContext.total}`} />
+            <ContextTile label="Cycle state" value={cycleContext.isLatest ? "latest cycle" : "earlier cycle"} />
           </div>
         </div>
       </section>
+
+      {(cycleContext.previousJob || (!cycleContext.isLatest && cycleContext.latestJob) || isFailedCycle) ? (
+        <section className="rounded-[24px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-5 py-4 shadow-[var(--dashboard-shadow-sm)]">
+          <div className="flex flex-wrap gap-3">
+            {isFailedCycle ? <StartNewCycleButton jobId={job.id} /> : null}
+            {cycleContext.previousJob ? (
+              <a
+                href={`/dashboard/jobs/${cycleContext.previousJob.id}/publish`}
+                className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)]"
+              >
+                Open previous cycle
+              </a>
+            ) : null}
+            {!cycleContext.isLatest && cycleContext.latestJob ? (
+              <a
+                href={`/dashboard/jobs/${cycleContext.latestJob.id}/publish`}
+                className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)]"
+              >
+                Open latest cycle
+              </a>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
 
         <JobPublishManager
           jobId={job.id}
@@ -175,4 +205,23 @@ function ContextBadge({ label }: { label: string }) {
       {label}
     </span>
   );
+}
+
+function buildCycleContext(
+  jobs: Array<{ id: string; createdAt: Date; status: string }>,
+  currentJobId: string,
+) {
+  const ordered = [...jobs].sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime());
+  const currentIndex = Math.max(
+    0,
+    ordered.findIndex((job) => job.id === currentJobId),
+  );
+
+  return {
+    index: currentIndex + 1,
+    total: ordered.length,
+    isLatest: currentIndex === ordered.length - 1,
+    previousJob: currentIndex > 0 ? ordered[currentIndex - 1] : null,
+    latestJob: ordered.length > 0 ? ordered[ordered.length - 1] : null,
+  };
 }

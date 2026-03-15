@@ -2,13 +2,14 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import { JobReviewManager } from "@/app/dashboard/jobs/[jobId]/JobReviewManager";
+import { StartNewCycleButton } from "@/app/dashboard/jobs/[jobId]/StartNewCycleButton";
 import { WorkspaceScopeMismatchCard } from "@/components/dashboard/WorkspaceScopeMismatchCard";
 import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
 import { requireAuthenticatedDashboardUser } from "@/lib/auth/dashboardSession";
 import { matchesAllowedDomain } from "@/lib/dashboard/domainScope";
 import { getDashboardWorkspaceScope } from "@/lib/dashboard/workspaceScope";
 import { isDatabaseConfigured } from "@/lib/env";
-import { getJobForUser } from "@/lib/jobs/generatePins";
+import { getJobForUser, listJobCyclesForPost } from "@/lib/jobs/generatePins";
 import {
   getIntegrationSettingsSummary,
   getWorkspaceAllowedDomainsForUserId,
@@ -56,6 +57,8 @@ export default async function DashboardJobDetailsPage({ params }: PageProps) {
     getWorkspaceAllowedDomainsForUserId(user.id, activeWorkspaceId),
     getWorkspaceProfileForUserId(user.id, activeWorkspaceId),
   ]);
+  const cycleJobs = await listJobCyclesForPost(user.id, job.postId);
+  const cycleContext = buildCycleContext(cycleJobs, job.id);
   const isInActiveScope = matchesAllowedDomain(job.domainSnapshot, allowedDomains);
 
   if (!isInActiveScope) {
@@ -77,6 +80,7 @@ export default async function DashboardJobDetailsPage({ params }: PageProps) {
 
   const statusLabel = formatLabel(job.status);
   const milestoneCount = job.milestones.length;
+  const isFailedCycle = job.status === "FAILED" || job.scheduleRuns[0]?.status === "FAILED";
 
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
@@ -108,11 +112,14 @@ export default async function DashboardJobDetailsPage({ params }: PageProps) {
         </section>
 
         <section className="sticky top-[92px] z-10 rounded-[24px] border border-[var(--dashboard-line)] bg-[color:var(--dashboard-panel)]/95 px-3 py-3 shadow-[var(--dashboard-shadow-sm)] backdrop-blur-xl">
-          <div className="flex flex-wrap gap-2">
-            <SectionLink href="#review" label="Review" />
-            <SectionLink href="#plans" label="Plans" />
-            <SectionLink href="#generated-pins" label="Generated pins" />
-            <SectionLink href={`/dashboard/jobs/${job.id}/publish`} label="Publish" />
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="flex flex-wrap gap-2">
+              <SectionLink href="#review" label="Review" />
+              <SectionLink href="#plans" label="Plans" />
+              <SectionLink href="#generated-pins" label="Generated pins" />
+              <SectionLink href={`/dashboard/jobs/${job.id}/publish`} label="Publish" />
+            </div>
+            {isFailedCycle ? <StartNewCycleButton jobId={job.id} /> : null}
           </div>
         </section>
 
@@ -199,6 +206,29 @@ export default async function DashboardJobDetailsPage({ params }: PageProps) {
               label="Style"
               value={job.titleStyle || job.toneHint || "Not set"}
             />
+          </div>
+        </AsidePanel>
+
+        <AsidePanel title="Job cycle">
+          <div className="grid gap-3 text-sm">
+            <SummaryRow label="Cycle" value={`${cycleContext.index} of ${cycleContext.total}`} />
+            <SummaryRow label="Position" value={cycleContext.isLatest ? "Latest cycle" : "Earlier cycle"} />
+            {cycleContext.previousJob ? (
+              <Link
+                href={`/dashboard/jobs/${cycleContext.previousJob.id}`}
+                className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-center text-sm font-semibold text-[var(--dashboard-subtle)]"
+              >
+                Open previous cycle
+              </Link>
+            ) : null}
+            {!cycleContext.isLatest && cycleContext.latestJob ? (
+              <Link
+                href={`/dashboard/jobs/${cycleContext.latestJob.id}`}
+                className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-center text-sm font-semibold text-[var(--dashboard-subtle)]"
+              >
+                Open latest cycle
+              </Link>
+            ) : null}
           </div>
         </AsidePanel>
 
@@ -349,4 +379,23 @@ function toTitleStyle(value: string | null) {
   }
 
   return null;
+}
+
+function buildCycleContext(
+  jobs: Array<{ id: string; createdAt: Date; status: string }>,
+  currentJobId: string,
+) {
+  const ordered = [...jobs].sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime());
+  const currentIndex = Math.max(
+    0,
+    ordered.findIndex((job) => job.id === currentJobId),
+  );
+
+  return {
+    index: currentIndex + 1,
+    total: ordered.length,
+    isLatest: currentIndex === ordered.length - 1,
+    previousJob: currentIndex > 0 ? ordered[currentIndex - 1] : null,
+    latestJob: ordered.length > 0 ? ordered[ordered.length - 1] : null,
+  };
 }

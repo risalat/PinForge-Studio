@@ -70,9 +70,17 @@ Success:
   "ok": true,
   "jobId": "cm8...",
   "status": "RECEIVED",
-  "dashboardUrl": "https://pin-forge-studio.vercel.app/dashboard/jobs/cm8..."
+  "dashboardUrl": "https://pin-forge-studio.vercel.app/dashboard/jobs/cm8...",
+  "intakeAction": "created",
+  "message": "A new intake job was created."
 }
 ```
+
+Possible `intakeAction` values:
+
+- `created`
+- `reused_existing_job`
+- `created_fresh_intake`
 
 Failure:
 
@@ -89,6 +97,10 @@ Failure:
 - The API key owner becomes the owner of the intake job inside Studio.
 - The extension request stores article metadata and incoming image metadata only.
 - Pin generation, title generation, description generation, media upload, and scheduling now happen later from dashboard actions.
+- If the same URL is sent again while an unresolved Studio job already exists, Studio returns that
+  existing job instead of creating a duplicate.
+- If the latest cycle for that URL is already completed, Studio creates a new intake cycle for fresh
+  pins and reports `created_fresh_intake`.
 - When `R2_PUBLIC_BASE_URL` is configured, uploaded temp files and rendered pins return direct R2 public URLs.
 - The extension can use `POST /api/uploads/temp` with the same bearer key when direct image URLs are
   not sufficient.

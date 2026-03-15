@@ -58,6 +58,8 @@ export async function POST(request: Request) {
       jobId: result.jobId,
       status: result.status,
       dashboardUrl: result.dashboardUrl,
+      intakeAction: result.intakeAction,
+      message: result.message,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown generation error";

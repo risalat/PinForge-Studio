@@ -67,6 +67,19 @@ export type GeneratePinsInput = GenerateRequestPayload;
 
 type AssistedPresetStrategy = "recommended" | "random_all" | "random_bold";
 
+const intakeBlockingStatuses = [
+  GenerationJobStatus.RECEIVED,
+  GenerationJobStatus.REVIEWING,
+  GenerationJobStatus.READY_FOR_GENERATION,
+  GenerationJobStatus.PINS_GENERATED,
+  GenerationJobStatus.MEDIA_UPLOADED,
+  GenerationJobStatus.TITLES_GENERATED,
+  GenerationJobStatus.DESCRIPTIONS_GENERATED,
+  GenerationJobStatus.READY_TO_SCHEDULE,
+  GenerationJobStatus.SCHEDULED,
+  GenerationJobStatus.FAILED,
+] as const;
+
 const jobListInclude = {
   sourceImages: true,
   generatedPins: true,
@@ -155,6 +168,16 @@ export type WorkflowJob = Prisma.GenerationJobGetPayload<{
   include: typeof jobDetailInclude;
 }>;
 
+export type JobCycleListItem = Prisma.GenerationJobGetPayload<{
+  select: {
+    id: true;
+    postId: true;
+    articleTitleSnapshot: true;
+    status: true;
+    createdAt: true;
+  };
+}>;
+
 export type WorkflowStepResult = {
   processed: number;
   succeeded: number;
@@ -184,6 +207,44 @@ export async function createIntakeJob(input: {
       url: input.payload.postUrl,
       title: input.payload.title,
       domain,
+    },
+  });
+
+  const existingUnresolvedJob = await prisma.generationJob.findFirst({
+    where: {
+      userId: input.userId,
+      postId: post.id,
+      status: {
+        in: [...intakeBlockingStatuses],
+      },
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+  });
+
+  if (existingUnresolvedJob) {
+    return {
+      jobId: existingUnresolvedJob.id,
+      postId: post.id,
+      status: existingUnresolvedJob.status,
+      dashboardUrl: new URL(`/dashboard/jobs/${existingUnresolvedJob.id}`, env.appUrl).toString(),
+      intakeAction: "reused_existing_job" as const,
+      message: "An unresolved Studio job already exists for this URL. Reusing that job.",
+    };
+  }
+
+  const latestCompletedJob = await prisma.generationJob.findFirst({
+    where: {
+      userId: input.userId,
+      postId: post.id,
+      status: GenerationJobStatus.COMPLETED,
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+    select: {
+      id: true,
     },
   });
 
@@ -219,13 +280,23 @@ export async function createIntakeJob(input: {
     },
   });
 
-  await recordJobMilestone(job.id, GenerationJobStatus.RECEIVED, "Intake received from extension.");
+  await recordJobMilestone(
+    job.id,
+    GenerationJobStatus.RECEIVED,
+    latestCompletedJob
+      ? "Fresh-pin intake received from extension after a completed cycle."
+      : "Intake received from extension.",
+  );
 
   return {
     jobId: job.id,
     postId: post.id,
     status: job.status,
     dashboardUrl: new URL(`/dashboard/jobs/${job.id}`, env.appUrl).toString(),
+    intakeAction: latestCompletedJob ? ("created_fresh_intake" as const) : ("created" as const),
+    message: latestCompletedJob
+      ? "A completed cycle already existed for this URL. A new fresh-pin intake was created."
+      : "A new intake job was created.",
   };
 }
 
@@ -1602,6 +1673,25 @@ export async function getJobForUser(jobId: string, userId: string): Promise<Work
       userId,
     },
     include: jobDetailInclude,
+  });
+}
+
+export async function listJobCyclesForPost(userId: string, postId: string): Promise<JobCycleListItem[]> {
+  return prisma.generationJob.findMany({
+    where: {
+      userId,
+      postId,
+    },
+    orderBy: {
+      createdAt: "asc",
+    },
+    select: {
+      id: true,
+      postId: true,
+      articleTitleSnapshot: true,
+      status: true,
+      createdAt: true,
+    },
   });
 }
 

@@ -26,6 +26,7 @@ export default async function DashboardInboxPage() {
     : [];
   const jobs = filterByAllowedDomains(allJobs, (job) => job.domainSnapshot, allowedDomains);
   const inboxJobs = jobs.filter((job) => inboxStatuses.has(job.status));
+  const cycleMetaByJobId = buildCycleMetaByJobId(jobs);
 
   return (
     <div className="space-y-8 text-[var(--dashboard-text)]">
@@ -67,8 +68,9 @@ export default async function DashboardInboxPage() {
                       <InboxHead className="w-[38%]">Post</InboxHead>
                       <InboxHead className="w-[12%]">Domain</InboxHead>
                       <InboxHead className="w-[12%]">Created</InboxHead>
+                      <InboxHead className="w-[8%]">Cycle</InboxHead>
                       <InboxHead className="w-[10%]">Images</InboxHead>
-                      <InboxHead className="w-[13%]">Status</InboxHead>
+                      <InboxHead className="w-[12%]">Status</InboxHead>
                       <InboxHead className="w-[15%]">Actions</InboxHead>
                     </tr>
                   </thead>
@@ -99,6 +101,9 @@ export default async function DashboardInboxPage() {
                           <p className="mt-1 text-xs text-[var(--dashboard-subtle)]">
                             {new Date(job.createdAt).toLocaleTimeString()}
                           </p>
+                        </td>
+                        <td className="px-5 py-5 align-top">
+                          <CycleCell meta={cycleMetaByJobId.get(job.id)} />
                         </td>
                         <td className="px-5 py-5 align-top">
                           <p className="text-sm font-semibold text-[var(--dashboard-text)]">{job.sourceImages.length}</p>
@@ -187,5 +192,53 @@ function InboxHead({ children, className = "" }: { children: string; className?:
       {children}
     </th>
   );
+}
+
+function CycleCell({ meta }: { meta: { index: number; total: number; isLatest: boolean } | undefined }) {
+  if (!meta) {
+    return <p className="text-sm text-[var(--dashboard-subtle)]">1 / 1</p>;
+  }
+
+  return (
+    <div>
+      <p className="text-sm font-semibold text-[var(--dashboard-text)]">
+        {meta.index} / {meta.total}
+      </p>
+      <p className="mt-1 text-xs text-[var(--dashboard-subtle)]">{meta.isLatest ? "Latest" : "Earlier"}</p>
+    </div>
+  );
+}
+
+function buildCycleMetaByJobId(
+  jobs: Array<{
+    id: string;
+    postId: string;
+    createdAt: Date;
+  }>,
+) {
+  const grouped = new Map<string, typeof jobs>();
+
+  for (const job of jobs) {
+    const existing = grouped.get(job.postId) ?? [];
+    existing.push(job);
+    grouped.set(job.postId, existing);
+  }
+
+  const result = new Map<string, { index: number; total: number; isLatest: boolean }>();
+
+  for (const group of grouped.values()) {
+    const ordered = [...group].sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime());
+    const total = ordered.length;
+
+    ordered.forEach((job, index) => {
+      result.set(job.id, {
+        index: index + 1,
+        total,
+        isLatest: index === total - 1,
+      });
+    });
+  }
+
+  return result;
 }
 

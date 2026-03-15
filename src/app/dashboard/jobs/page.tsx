@@ -25,6 +25,7 @@ export default async function DashboardJobsPage() {
     ? await getWorkspaceAllowedDomainsForUserId(user.id, activeWorkspaceId)
     : [];
   const jobs = filterByAllowedDomains(allJobs, (job) => job.domainSnapshot, allowedDomains);
+  const cycleMetaByJobId = buildCycleMetaByJobId(jobs);
 
   const totals = {
     total: jobs.length,
@@ -68,16 +69,17 @@ export default async function DashboardJobsPage() {
                         <tr className="text-left">
                           <TableHead className="w-[34%]">Post</TableHead>
                           <TableHead className="w-[11%]">Domain</TableHead>
-                          <TableHead className="w-[12%]">Created</TableHead>
-                          <TableHead className="w-[8%]">Images</TableHead>
-                          <TableHead className="w-[8%]">Pins</TableHead>
-                          <TableHead className="w-[11%]">Job status</TableHead>
-                          <TableHead className="w-[11%]">Schedule</TableHead>
-                          <TableHead className="w-[15%]">Actions</TableHead>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {jobs.map((job, index) => (
+                        <TableHead className="w-[12%]">Created</TableHead>
+                        <TableHead className="w-[8%]">Cycle</TableHead>
+                        <TableHead className="w-[8%]">Images</TableHead>
+                        <TableHead className="w-[8%]">Pins</TableHead>
+                        <TableHead className="w-[10%]">Job status</TableHead>
+                        <TableHead className="w-[10%]">Schedule</TableHead>
+                        <TableHead className="w-[14%]">Actions</TableHead>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {jobs.map((job, index) => (
                           <tr
                             key={job.id}
                             className={index === jobs.length - 1 ? "" : "border-b border-[var(--dashboard-line)]"}
@@ -98,17 +100,20 @@ export default async function DashboardJobsPage() {
                             <td className="px-5 py-5 align-top">
                               <p className="text-sm font-semibold text-[var(--dashboard-text)]">{job.domainSnapshot}</p>
                             </td>
-                            <td className="px-5 py-5 align-top">
-                              <p className="text-sm font-semibold text-[var(--dashboard-text)]">
-                                {new Date(job.createdAt).toLocaleDateString()}
-                              </p>
-                              <p className="mt-1 text-xs text-[var(--dashboard-subtle)]">
-                                {new Date(job.createdAt).toLocaleTimeString()}
-                              </p>
-                            </td>
-                            <td className="px-5 py-5 align-top">
-                              <p className="text-sm font-semibold text-[var(--dashboard-text)]">
-                                {job.sourceImages.length}
+                        <td className="px-5 py-5 align-top">
+                          <p className="text-sm font-semibold text-[var(--dashboard-text)]">
+                            {new Date(job.createdAt).toLocaleDateString()}
+                          </p>
+                          <p className="mt-1 text-xs text-[var(--dashboard-subtle)]">
+                            {new Date(job.createdAt).toLocaleTimeString()}
+                          </p>
+                        </td>
+                        <td className="px-5 py-5 align-top">
+                          <CycleCell meta={cycleMetaByJobId.get(job.id)} />
+                        </td>
+                        <td className="px-5 py-5 align-top">
+                          <p className="text-sm font-semibold text-[var(--dashboard-text)]">
+                            {job.sourceImages.length}
                               </p>
                             </td>
                             <td className="px-5 py-5 align-top">
@@ -181,6 +186,54 @@ function StatusChip({ label, tone }: { label: string; tone: "neutral" | "good" |
       {label}
     </span>
   );
+}
+
+function CycleCell({ meta }: { meta: { index: number; total: number; isLatest: boolean } | undefined }) {
+  if (!meta) {
+    return <p className="text-sm text-[var(--dashboard-subtle)]">1 / 1</p>;
+  }
+
+  return (
+    <div>
+      <p className="text-sm font-semibold text-[var(--dashboard-text)]">
+        {meta.index} / {meta.total}
+      </p>
+      <p className="mt-1 text-xs text-[var(--dashboard-subtle)]">{meta.isLatest ? "Latest" : "Earlier"}</p>
+    </div>
+  );
+}
+
+function buildCycleMetaByJobId(
+  jobs: Array<{
+    id: string;
+    postId: string;
+    createdAt: Date;
+  }>,
+) {
+  const grouped = new Map<string, typeof jobs>();
+
+  for (const job of jobs) {
+    const existing = grouped.get(job.postId) ?? [];
+    existing.push(job);
+    grouped.set(job.postId, existing);
+  }
+
+  const result = new Map<string, { index: number; total: number; isLatest: boolean }>();
+
+  for (const group of grouped.values()) {
+    const ordered = [...group].sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime());
+    const total = ordered.length;
+
+    ordered.forEach((job, index) => {
+      result.set(job.id, {
+        index: index + 1,
+        total,
+        isLatest: index === total - 1,
+      });
+    });
+  }
+
+  return result;
 }
 
 function TableHead({ children, className = "" }: { children: string; className?: string }) {
