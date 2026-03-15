@@ -56,10 +56,7 @@ export function DashboardShell({
                   </p>
                   <div className="mt-3 space-y-1">
                     {group.items.map((item) => {
-                      const isActive =
-                        item.href === "/dashboard"
-                          ? pathname === item.href
-                          : pathname === item.href || pathname.startsWith(`${item.href}/`);
+                      const isActive = isNavItemActive(pathname, item.href);
 
                       return (
                         <Link
@@ -156,6 +153,29 @@ export function DashboardShell({
       </div>
     </div>
   );
+}
+
+function isNavItemActive(pathname: string, href: string) {
+  const isJobPublishWorkspace =
+    pathname.startsWith("/dashboard/jobs/") && pathname.endsWith("/publish");
+
+  if (href === "/dashboard") {
+    return pathname === href;
+  }
+
+  if (href === "/dashboard/publishing") {
+    return pathname === href || pathname.startsWith(`${href}/`) || isJobPublishWorkspace;
+  }
+
+  if (href === "/dashboard/jobs") {
+    if (isJobPublishWorkspace) {
+      return false;
+    }
+
+    return pathname === href || pathname.startsWith(`${href}/`);
+  }
+
+  return pathname === href || pathname.startsWith(`${href}/`);
 }
 
 function buildBreadcrumb(pathname: string) {

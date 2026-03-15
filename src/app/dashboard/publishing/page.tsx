@@ -1,4 +1,4 @@
-import { PublishingBoard } from "@/app/dashboard/publishing/PublishingBoard";
+import Link from "next/link";
 import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
 import { filterByAllowedDomains } from "@/lib/dashboard/domainScope";
 import { getDashboardWorkspaceScope } from "@/lib/dashboard/workspaceScope";
@@ -31,6 +31,38 @@ export default async function DashboardPublishingPage() {
   const failed = jobs.filter(
     (job) => job.status === "FAILED" || job.scheduleRuns[0]?.status === "FAILED",
   );
+  const publishingRows = [
+    ...readyToPublish.map((job) => ({
+      id: job.id,
+      title: job.articleTitleSnapshot,
+      domain: job.domainSnapshot,
+      createdAt: job.createdAt,
+      lane: "Ready",
+      jobStatus: formatLabel(job.status),
+      scheduleStatus: formatLabel(job.scheduleRuns[0]?.status ?? "NOT_STARTED"),
+      generatedPins: job.generatedPins.length,
+    })),
+    ...scheduled.map((job) => ({
+      id: job.id,
+      title: job.articleTitleSnapshot,
+      domain: job.domainSnapshot,
+      createdAt: job.createdAt,
+      lane: "Scheduled",
+      jobStatus: formatLabel(job.status),
+      scheduleStatus: formatLabel(job.scheduleRuns[0]?.status ?? "COMPLETED"),
+      generatedPins: job.generatedPins.length,
+    })),
+    ...failed.map((job) => ({
+      id: job.id,
+      title: job.articleTitleSnapshot,
+      domain: job.domainSnapshot,
+      createdAt: job.createdAt,
+      lane: "Failed",
+      jobStatus: formatLabel(job.status),
+      scheduleStatus: formatLabel(job.scheduleRuns[0]?.status ?? job.status),
+      generatedPins: job.generatedPins.length,
+    })),
+  ].sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime());
 
   return (
     <div className="space-y-6 text-[var(--dashboard-text)]">
@@ -45,40 +77,84 @@ export default async function DashboardPublishingPage() {
           `DATABASE_URL` is not configured yet. Publishing summaries will appear once the database is connected.
         </div>
       ) : (
-        <PublishingBoard
-          jobs={[
-            ...readyToPublish.map((job) => ({
-              id: job.id,
-              title: job.articleTitleSnapshot,
-              domain: job.domainSnapshot,
-              createdAt: job.createdAt.toISOString(),
-              lane: "ready" as const,
-              status: job.status,
-              href: `/dashboard/jobs/${job.id}/publish`,
-              generatedPins: job.generatedPins.length,
-            })),
-            ...scheduled.map((job) => ({
-              id: job.id,
-              title: job.articleTitleSnapshot,
-              domain: job.domainSnapshot,
-              createdAt: job.createdAt.toISOString(),
-              lane: "scheduled" as const,
-              status: job.scheduleRuns[0]?.status ?? "COMPLETED",
-              href: `/dashboard/jobs/${job.id}/publish`,
-              generatedPins: job.generatedPins.length,
-            })),
-            ...failed.map((job) => ({
-              id: job.id,
-              title: job.articleTitleSnapshot,
-              domain: job.domainSnapshot,
-              createdAt: job.createdAt.toISOString(),
-              lane: "failed" as const,
-              status: job.scheduleRuns[0]?.status ?? job.status,
-              href: `/dashboard/jobs/${job.id}/publish`,
-              generatedPins: job.generatedPins.length,
-            })),
-          ]}
-        />
+        <section className="space-y-4">
+          {publishingRows.length === 0 ? (
+            <div className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-6 text-sm text-[var(--dashboard-subtle)] shadow-[var(--dashboard-shadow-sm)]">
+              No publishing jobs yet.
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] shadow-[var(--dashboard-shadow-sm)]">
+              <div className="overflow-x-auto">
+                <table className="min-w-[980px] w-full table-fixed">
+                  <thead className="bg-[var(--dashboard-panel-alt)]">
+                    <tr className="text-left">
+                      <PublishingHead className="w-[34%]">Post</PublishingHead>
+                      <PublishingHead className="w-[11%]">Domain</PublishingHead>
+                      <PublishingHead className="w-[10%]">Created</PublishingHead>
+                      <PublishingHead className="w-[8%]">Pins</PublishingHead>
+                      <PublishingHead className="w-[10%]">Lane</PublishingHead>
+                      <PublishingHead className="w-[12%]">Job status</PublishingHead>
+                      <PublishingHead className="w-[12%]">Schedule</PublishingHead>
+                      <PublishingHead className="w-[13%]">Actions</PublishingHead>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {publishingRows.map((job, index) => (
+                      <tr
+                        key={`${job.id}-${job.lane}`}
+                        className={index === publishingRows.length - 1 ? "" : "border-b border-[var(--dashboard-line)]"}
+                      >
+                        <td className="px-5 py-5 align-top">
+                          <div className="min-w-0">
+                            <p className="line-clamp-2 text-base font-bold text-[var(--dashboard-text)]">
+                              {job.title}
+                            </p>
+                          </div>
+                        </td>
+                        <td className="px-5 py-5 align-top">
+                          <p className="text-sm font-semibold text-[var(--dashboard-text)]">{job.domain}</p>
+                        </td>
+                        <td className="px-5 py-5 align-top">
+                          <p className="text-sm font-semibold text-[var(--dashboard-text)]">
+                            {job.createdAt.toLocaleDateString()}
+                          </p>
+                        </td>
+                        <td className="px-5 py-5 align-top">
+                          <p className="text-sm font-semibold text-[var(--dashboard-text)]">{job.generatedPins}</p>
+                        </td>
+                        <td className="px-5 py-5 align-top">
+                          <LaneChip label={job.lane} />
+                        </td>
+                        <td className="px-5 py-5 align-top">
+                          <QueueStatus label={job.jobStatus} tone={toneForStatus(job.jobStatus)} />
+                        </td>
+                        <td className="px-5 py-5 align-top">
+                          <QueueStatus label={job.scheduleStatus} tone={toneForStatus(job.scheduleStatus)} />
+                        </td>
+                        <td className="px-5 py-5 align-top">
+                          <div className="flex flex-col gap-2">
+                            <Link
+                              href={`/dashboard/jobs/${job.id}/publish`}
+                              className="rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-center text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)]"
+                            >
+                              Open publishing
+                            </Link>
+                            <Link
+                              href={`/dashboard/jobs/${job.id}`}
+                              className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-center text-sm font-semibold text-[var(--dashboard-subtle)]"
+                            >
+                              Open job
+                            </Link>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </section>
       )}
     </div>
   );
@@ -91,4 +167,73 @@ function PublishingMetric({ label, value }: { label: string; value: string }) {
       <p className="mt-3 text-4xl font-black">{value}</p>
     </div>
   );
+}
+
+function PublishingHead({ children, className = "" }: { children: string; className?: string }) {
+  return (
+    <th
+      className={`px-5 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)] ${className}`}
+    >
+      {children}
+    </th>
+  );
+}
+
+function LaneChip({ label }: { label: string }) {
+  const className =
+    label === "Failed"
+      ? "border-[var(--dashboard-danger-border)] bg-[var(--dashboard-danger-soft)] text-[var(--dashboard-danger-ink)]"
+      : label === "Scheduled"
+        ? "border-[var(--dashboard-success-border)] bg-[var(--dashboard-success-soft)] text-[var(--dashboard-success-ink)]"
+        : "border-[var(--dashboard-warning-border)] bg-[var(--dashboard-warning-soft)] text-[var(--dashboard-warning-ink)]";
+
+  return (
+    <span className={`rounded-full border px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] ${className}`}>
+      {label}
+    </span>
+  );
+}
+
+function QueueStatus({
+  label,
+  tone,
+}: {
+  label: string;
+  tone: "neutral" | "good" | "warning" | "bad";
+}) {
+  const className =
+    tone === "good"
+      ? "border-[var(--dashboard-success-border)] bg-[var(--dashboard-success-soft)] text-[var(--dashboard-success-ink)]"
+      : tone === "warning"
+        ? "border-[var(--dashboard-warning-border)] bg-[var(--dashboard-warning-soft)] text-[var(--dashboard-warning-ink)]"
+        : tone === "bad"
+          ? "border-[var(--dashboard-danger-border)] bg-[var(--dashboard-danger-soft)] text-[var(--dashboard-danger-ink)]"
+          : "border-[var(--dashboard-line)] bg-[var(--dashboard-panel-alt)] text-[var(--dashboard-subtle)]";
+
+  return (
+    <span className={`rounded-full border px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] ${className}`}>
+      {label}
+    </span>
+  );
+}
+
+function formatLabel(value: string) {
+  return value
+    .split("_")
+    .map((part) => part.charAt(0) + part.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function toneForStatus(status: string) {
+  const normalized = status.toUpperCase().replaceAll(" ", "_");
+  if (["COMPLETED", "SCHEDULED", "MEDIA_UPLOADED", "READY_TO_SCHEDULE"].includes(normalized)) {
+    return "good" as const;
+  }
+  if (normalized === "FAILED") {
+    return "bad" as const;
+  }
+  if (["REVIEWING", "READY_FOR_GENERATION", "PINS_GENERATED", "TITLES_GENERATED", "DESCRIPTIONS_GENERATED", "NOT_STARTED"].includes(normalized)) {
+    return "warning" as const;
+  }
+  return "neutral" as const;
 }

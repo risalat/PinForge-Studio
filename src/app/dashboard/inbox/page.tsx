@@ -53,76 +53,74 @@ export default async function DashboardInboxPage() {
           `DATABASE_URL` is not configured yet.
         </div>
       ) : (
-        <section className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_360px]">
-          <div className="space-y-4">
-            {inboxJobs.length === 0 ? (
-              <div className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-6 text-[var(--dashboard-subtle)] shadow-[var(--dashboard-shadow-sm)]">
-                No intake jobs currently need review.
-              </div>
-            ) : (
-              inboxJobs.map((job) => (
-                <article
-                  key={job.id}
-                  className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-5 shadow-[var(--dashboard-shadow-sm)]"
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-4">
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
-                        {new Date(job.createdAt).toLocaleString()}
-                      </p>
-                      <Link
-                        href={`/dashboard/jobs/${job.id}`}
-                        className="mt-2 block text-xl font-bold text-[var(--dashboard-text)] underline decoration-[var(--dashboard-accent)] underline-offset-4"
+        <section className="space-y-4">
+          {inboxJobs.length === 0 ? (
+            <div className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-6 text-[var(--dashboard-subtle)] shadow-[var(--dashboard-shadow-sm)]">
+              No intake jobs currently need review.
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] shadow-[var(--dashboard-shadow-sm)]">
+              <div className="overflow-x-auto">
+                <table className="min-w-[980px] w-full table-fixed">
+                  <thead className="bg-[var(--dashboard-panel-alt)]">
+                    <tr className="text-left">
+                      <InboxHead className="w-[38%]">Post</InboxHead>
+                      <InboxHead className="w-[12%]">Domain</InboxHead>
+                      <InboxHead className="w-[12%]">Created</InboxHead>
+                      <InboxHead className="w-[10%]">Images</InboxHead>
+                      <InboxHead className="w-[13%]">Status</InboxHead>
+                      <InboxHead className="w-[15%]">Actions</InboxHead>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {inboxJobs.map((job, index) => (
+                      <tr
+                        key={job.id}
+                        className={index === inboxJobs.length - 1 ? "" : "border-b border-[var(--dashboard-line)]"}
                       >
-                        {job.articleTitleSnapshot}
-                      </Link>
-                      <p className="mt-2 break-all text-sm text-[var(--dashboard-subtle)]">{job.postUrlSnapshot}</p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <StatusBadge label={formatLabel(job.status)} tone={toneForStatus(job.status)} />
-                      <StatusBadge
-                        label={`${job.sourceImages.length} images`}
-                        tone="neutral"
-                      />
-                    </div>
-                  </div>
-                  <div className="mt-4 flex flex-wrap gap-3">
-                    <Link
-                      href={`/dashboard/jobs/${job.id}`}
-                      className="rounded-full dashboard-accent-action dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white"
-                    >
-                      Review job
-                    </Link>
-                  </div>
-                </article>
-              ))
-            )}
-          </div>
-
-          <aside className="space-y-4">
-            <div className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-5 shadow-[var(--dashboard-shadow-sm)]">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
-                Queue
-              </p>
-              <h2 className="mt-2 text-xl font-bold">Jobs waiting on review</h2>
-              <div className="mt-4 grid gap-3 text-sm">
-                <QueueRow label="New intake" value={String(inboxJobs.filter((job) => job.status === "RECEIVED").length)} />
-                <QueueRow label="Reviewing" value={String(inboxJobs.filter((job) => job.status === "REVIEWING").length)} />
-                <QueueRow label="Ready to generate" value={String(inboxJobs.filter((job) => job.status === "READY_FOR_GENERATION").length)} />
-                <QueueRow label="Failed" value={String(inboxJobs.filter((job) => job.status === "FAILED").length)} />
+                        <td className="px-5 py-5 align-top">
+                          <div className="min-w-0">
+                            <Link
+                              href={`/dashboard/jobs/${job.id}`}
+                              className="line-clamp-2 text-lg font-bold text-[var(--dashboard-text)] underline decoration-[var(--dashboard-accent)] underline-offset-4"
+                            >
+                              {job.articleTitleSnapshot}
+                            </Link>
+                            <p className="mt-2 break-all text-sm text-[var(--dashboard-subtle)]">{job.postUrlSnapshot}</p>
+                          </div>
+                        </td>
+                        <td className="px-5 py-5 align-top">
+                          <p className="text-sm font-semibold text-[var(--dashboard-text)]">{job.domainSnapshot}</p>
+                        </td>
+                        <td className="px-5 py-5 align-top">
+                          <p className="text-sm font-semibold text-[var(--dashboard-text)]">
+                            {new Date(job.createdAt).toLocaleDateString()}
+                          </p>
+                          <p className="mt-1 text-xs text-[var(--dashboard-subtle)]">
+                            {new Date(job.createdAt).toLocaleTimeString()}
+                          </p>
+                        </td>
+                        <td className="px-5 py-5 align-top">
+                          <p className="text-sm font-semibold text-[var(--dashboard-text)]">{job.sourceImages.length}</p>
+                        </td>
+                        <td className="px-5 py-5 align-top">
+                          <StatusBadge label={formatLabel(job.status)} tone={toneForStatus(job.status)} />
+                        </td>
+                        <td className="px-5 py-5 align-top">
+                          <Link
+                            href={`/dashboard/jobs/${job.id}`}
+                            className="inline-flex rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white"
+                          >
+                            Review job
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
-            <div className="rounded-[28px] bg-[linear-gradient(145deg,#0d5fff_0%,#2c7fff_100%)] p-5 text-white shadow-[var(--dashboard-shadow-accent)]">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/70">Jobs board</p>
-              <h2 className="mt-2 text-xl font-bold">See the full workflow</h2>
-              <Link
-                href="/dashboard/jobs"
-                className="mt-4 inline-flex rounded-full bg-white px-4 py-2 text-sm font-semibold text-[var(--dashboard-accent)]"
-              >
-                Open jobs board
-              </Link>
-            </div>
-          </aside>
+          )}
         </section>
       )}
     </div>
@@ -181,12 +179,13 @@ function toneForStatus(status: string) {
   return "neutral" as const;
 }
 
-function QueueRow({ label, value }: { label: string; value: string }) {
+function InboxHead({ children, className = "" }: { children: string; className?: string }) {
   return (
-    <div className="flex items-center justify-between gap-3 rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-alt)] px-3 py-3">
-      <span className="font-semibold text-[var(--dashboard-text)]">{label}</span>
-      <span className="text-[var(--dashboard-subtle)]">{value}</span>
-    </div>
+    <th
+      className={`px-5 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)] ${className}`}
+    >
+      {children}
+    </th>
   );
 }
 
