@@ -4,6 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { SignOutButton } from "@/app/dashboard/SignOutButton";
+import { DashboardNavigationProgress } from "@/components/dashboard/DashboardNavigationProgress";
+import { DashboardNotificationCenter } from "@/components/dashboard/DashboardNotificationCenter";
 import { DashboardWorkspaceSwitcher } from "@/components/dashboard/DashboardWorkspaceSwitcher";
 import { dashboardNavigation, getDashboardPageTitle } from "@/lib/dashboard/navigation";
 import type { WorkspaceProfileSummary } from "@/lib/types";
@@ -21,7 +23,8 @@ export function DashboardShell({
   const header = getDashboardPageTitle(pathname);
 
   return (
-    <div className="min-h-screen bg-[var(--dashboard-canvas)] text-[var(--dashboard-text)]">
+    <div className="dashboard-shell min-h-screen bg-[var(--dashboard-canvas)] text-[var(--dashboard-text)]">
+      <DashboardNavigationProgress />
       <div className="grid min-h-screen grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)]">
         <aside className="border-r border-[var(--dashboard-line)] bg-[var(--dashboard-sidebar)] px-5 py-6 lg:sticky lg:top-0 lg:h-screen">
           <div className="flex h-full flex-col">
@@ -122,6 +125,7 @@ export function DashboardShell({
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3">
+                  <DashboardNotificationCenter />
                   {header.secondaryActionHref && header.secondaryActionLabel ? (
                   <Link
                     href={header.secondaryActionHref}

@@ -10,6 +10,7 @@ import {
   discardGenerationPlansForJob,
   updateGenerationPlanRenderContext,
 } from "@/lib/jobs/generatePins";
+import { templateVisualPresetCategories } from "@/lib/templates/types";
 
 export const runtime = "nodejs";
 
@@ -19,6 +20,7 @@ const plansSchema = z.discriminatedUnion("mode", [
     pinCount: z.number().int().positive().max(20),
     templateIds: z.array(z.string().min(1)).optional(),
     presetStrategy: z.enum(["recommended", "random_all", "random_bold"]).optional(),
+    presetCategoryIds: z.array(z.enum(templateVisualPresetCategories)).optional(),
   }),
   z.object({
     mode: z.literal("manual"),
@@ -67,6 +69,7 @@ export async function POST(request: Request, { params }: RouteProps) {
         pinCount: payload.pinCount,
         templateIds: payload.templateIds,
         presetStrategy: payload.presetStrategy,
+        presetCategoryIds: payload.presetCategoryIds,
       });
     } else if (payload.mode === "manual") {
       await createManualGenerationPlan({

@@ -1,4 +1,5 @@
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
+import { AppFeedbackProvider } from "@/components/ui/AppFeedbackProvider";
 import { requireAuthenticatedDashboardUser } from "@/lib/auth/dashboardSession";
 import { getDashboardWorkspaceScope } from "@/lib/dashboard/workspaceScope";
 import { isDatabaseConfigured } from "@/lib/env";
@@ -26,8 +27,10 @@ export default async function DashboardLayout({
   }
 
   return (
-    <DashboardShell activeWorkspaceId={activeWorkspaceId} workspaceProfiles={workspaceProfiles}>
-      {children}
-    </DashboardShell>
+    <AppFeedbackProvider>
+      <DashboardShell activeWorkspaceId={activeWorkspaceId} workspaceProfiles={workspaceProfiles}>
+        {children}
+      </DashboardShell>
+    </AppFeedbackProvider>
   );
 }

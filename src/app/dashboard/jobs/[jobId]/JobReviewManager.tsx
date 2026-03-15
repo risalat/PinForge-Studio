@@ -5,6 +5,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
+import { useAppFeedback } from "@/components/ui/AppFeedbackProvider";
 
 type SourceImageItem = {
   id: string;
@@ -29,6 +30,14 @@ type TemplateOption = {
 type VisualPresetOption = {
   id: string;
   label: string;
+  categoryId: string;
+  categoryLabel: string;
+};
+
+type VisualPresetCategoryOption = {
+  id: string;
+  label: string;
+  description: string;
 };
 
 type PlanItem = {
@@ -64,6 +73,13 @@ type FeedbackState = {
   source?: "review" | "images";
 } | null;
 
+type RenderProgressState = {
+  active: boolean;
+  completed: number;
+  total: number;
+  currentLabel: string;
+};
+
 type PlanDraft = {
   planId: string;
   title: string;
@@ -82,6 +98,7 @@ type JobReviewManagerProps = {
   images: SourceImageItem[];
   templates: TemplateOption[];
   visualPresetOptions: VisualPresetOption[];
+  visualPresetCategories: VisualPresetCategoryOption[];
   plans: PlanItem[];
   generatedPins: GeneratedPinItem[];
 };
@@ -96,15 +113,18 @@ export function JobReviewManager({
   images: initialImages,
   templates,
   visualPresetOptions,
+  visualPresetCategories,
   plans,
   generatedPins,
 }: JobReviewManagerProps) {
   const initialSelectedImages = initialImages.filter((image) => image.isSelected);
   const initialManualTemplate = templates[0] ?? null;
   const router = useRouter();
+  const { notify, updateNotification, dismissNotification } = useAppFeedback();
   const [images, setImages] = useState(initialImages);
   const [pinCount, setPinCount] = useState(3);
   const [selectedTemplateIds, setSelectedTemplateIds] = useState(templates.map((item) => item.id));
+  const [selectedPresetCategoryIds, setSelectedPresetCategoryIds] = useState<string[]>([]);
   const [assistedPresetStrategy, setAssistedPresetStrategy] = useState<
     "recommended" | "random_all" | "random_bold"
   >("recommended");
@@ -154,6 +174,8 @@ export function JobReviewManager({
   const [previewPinIndex, setPreviewPinIndex] = useState<number | null>(null);
   const [previewSource, setPreviewSource] = useState<{ url: string; label: string } | null>(null);
   const [missingAssetPinIds, setMissingAssetPinIds] = useState<string[]>([]);
+  const [renderProgress, setRenderProgress] = useState<RenderProgressState | null>(null);
+  const [isRenderingPlans, setIsRenderingPlans] = useState(false);
 
   const selectedImages = images.filter((image) => image.isSelected);
   const manualTemplate = templates.find((item) => item.id === manualTemplateId) ?? null;
@@ -192,6 +214,14 @@ export function JobReviewManager({
       current.includes(templateId)
         ? current.filter((item) => item !== templateId)
         : [...current, templateId],
+    );
+  }
+
+  function togglePresetCategory(categoryId: string) {
+    setSelectedPresetCategoryIds((current) =>
+      current.includes(categoryId)
+        ? current.filter((item) => item !== categoryId)
+        : [...current, categoryId],
     );
   }
 
@@ -284,13 +314,25 @@ export function JobReviewManager({
           message: "Review inputs and image selections saved.",
           source,
         });
+        notify({
+          tone: "success",
+          title: "Review state saved",
+          message: "Images, keywords, and generation inputs were updated.",
+        });
         router.refresh();
       } catch (actionError) {
+        const message =
+          actionError instanceof Error ? actionError.message : "Unable to save review state.";
         setReviewFeedback({
           tone: "error",
-          message:
-            actionError instanceof Error ? actionError.message : "Unable to save review state.",
+          message,
           source,
+        });
+        notify({
+          tone: "error",
+          title: "Review save failed",
+          message,
+          sticky: true,
         });
       }
     });
@@ -305,22 +347,36 @@ export function JobReviewManager({
           pinCount,
           templateIds: selectedTemplateIds,
           presetStrategy: assistedPresetStrategy,
+          presetCategoryIds: selectedPresetCategoryIds,
         });
+        const message =
+          assistedPresetStrategy === "recommended"
+            ? "Assisted plans created with image-aware preset recommendation."
+            : assistedPresetStrategy === "random_bold"
+              ? "Assisted plans created with random bold presets."
+              : "Assisted plans created with random presets.";
         setPlansFeedback({
           tone: "success",
-          message:
-            assistedPresetStrategy === "recommended"
-              ? "Assisted plans created with image-aware preset recommendation."
-              : assistedPresetStrategy === "random_bold"
-                ? "Assisted plans created with random bold presets."
-                : "Assisted plans created with random presets.",
+          message,
+        });
+        notify({
+          tone: "success",
+          title: "Plans created",
+          message,
         });
         router.refresh();
       } catch (actionError) {
+        const message =
+          actionError instanceof Error ? actionError.message : "Unable to create assisted plans.";
         setPlansFeedback({
           tone: "error",
-          message:
-            actionError instanceof Error ? actionError.message : "Unable to create assisted plans.",
+          message,
+        });
+        notify({
+          tone: "error",
+          title: "Plan creation failed",
+          message,
+          sticky: true,
         });
       }
     });
@@ -339,59 +395,146 @@ export function JobReviewManager({
           tone: "success",
           message: "Manual plan added.",
         });
+        notify({
+          tone: "success",
+          title: "Manual plan added",
+          message: "The selected template and image slots were saved to the queue.",
+        });
         router.refresh();
       } catch (actionError) {
+        const message =
+          actionError instanceof Error ? actionError.message : "Unable to create manual plan.";
         setPlansFeedback({
           tone: "error",
-          message:
-            actionError instanceof Error ? actionError.message : "Unable to create manual plan.",
+          message,
+        });
+        notify({
+          tone: "error",
+          title: "Manual plan failed",
+          message,
+          sticky: true,
         });
       }
     });
   }
 
-  function handleGeneratePins(targetPlanIds?: string[]) {
-    startTransition(async () => {
-      try {
-        setGenerationFeedback(null);
-        const effectivePlanIds =
-          targetPlanIds && targetPlanIds.length > 0
-            ? targetPlanIds
-            : selectedRenderablePlans.length > 0
-              ? selectedRenderablePlans.map((plan) => plan.id)
-              : selectedPlan
-                ? [selectedPlan.id]
-                : [];
-        const targetPlans = plans.filter((plan) => effectivePlanIds.includes(plan.id));
-        const targetRenderablePlans = targetPlans.filter((plan) =>
-          ["READY", "DRAFT", "FAILED"].includes(plan.status),
-        );
-        let generatedPinCount = 0;
+  async function handleGeneratePins(targetPlanIds?: string[]) {
+    if (isRenderingPlans) {
+      return;
+    }
 
-        for (const plan of targetRenderablePlans) {
-          const result = await runAction(`/api/dashboard/jobs/${jobId}/generate`, {
-            planIds: [plan.id],
-          });
-          generatedPinCount += result.generatedPinCount ?? 0;
-        }
+    let progressToastId: string | null = null;
 
-        const rerenderedCount = targetRenderablePlans.length;
-        const alreadyUpToDateCount = Math.max(0, targetPlans.length - rerenderedCount);
-        setGenerationFeedback({
-          tone: "success",
-          message:
-            alreadyUpToDateCount > 0
-              ? `${generatedPinCount || rerenderedCount} pin${(generatedPinCount || rerenderedCount) === 1 ? "" : "s"} rendered from the selected plans. ${alreadyUpToDateCount} plan${alreadyUpToDateCount === 1 ? " was" : "s were"} already up to date and skipped.`
-              : `${generatedPinCount} pin${generatedPinCount === 1 ? "" : "s"} rendered from the selected plans.`,
+    try {
+      setGenerationFeedback(null);
+      const effectivePlanIds =
+        targetPlanIds && targetPlanIds.length > 0
+          ? targetPlanIds
+          : selectedRenderablePlans.length > 0
+            ? selectedRenderablePlans.map((plan) => plan.id)
+            : selectedPlan
+              ? [selectedPlan.id]
+              : [];
+      const targetPlans = plans.filter((plan) => effectivePlanIds.includes(plan.id));
+      const targetRenderablePlans = targetPlans.filter((plan) =>
+        ["READY", "DRAFT", "FAILED"].includes(plan.status),
+      );
+
+      if (targetRenderablePlans.length === 0) {
+        return;
+      }
+
+      setIsRenderingPlans(true);
+      setRenderProgress({
+        active: true,
+        completed: 0,
+        total: targetRenderablePlans.length,
+        currentLabel: targetRenderablePlans[0]?.templateId ?? "Preparing",
+      });
+      progressToastId = notify({
+        tone: "progress",
+        title: `Rendering 0 of ${targetRenderablePlans.length} pins`,
+        message: "Preparing the first plan in the queue.",
+        sticky: true,
+      });
+
+      let generatedPinCount = 0;
+
+      for (const [index, plan] of targetRenderablePlans.entries()) {
+        setRenderProgress({
+          active: true,
+          completed: index,
+          total: targetRenderablePlans.length,
+          currentLabel: plan.templateId,
         });
-        router.refresh();
-      } catch (actionError) {
-        setGenerationFeedback({
-          tone: "error",
-          message: actionError instanceof Error ? actionError.message : "Unable to generate pins.",
+        updateNotification(progressToastId, {
+          tone: "progress",
+          title: `Rendering ${index + 1} of ${targetRenderablePlans.length} pins`,
+          message: `Working on ${plan.templateId}.`,
+          sticky: true,
+        });
+
+        const result = await runAction(`/api/dashboard/jobs/${jobId}/generate`, {
+          planIds: [plan.id],
+        });
+        generatedPinCount += result.generatedPinCount ?? 0;
+
+        setRenderProgress({
+          active: true,
+          completed: index + 1,
+          total: targetRenderablePlans.length,
+          currentLabel:
+            index + 1 < targetRenderablePlans.length
+              ? targetRenderablePlans[index + 1].templateId
+              : "Wrapping up",
         });
       }
-    });
+
+      if (progressToastId) {
+        dismissNotification(progressToastId);
+      }
+      const rerenderedCount = targetRenderablePlans.length;
+      const alreadyUpToDateCount = Math.max(0, targetPlans.length - rerenderedCount);
+      const message =
+        alreadyUpToDateCount > 0
+          ? `${generatedPinCount || rerenderedCount} pin${(generatedPinCount || rerenderedCount) === 1 ? "" : "s"} rendered. ${alreadyUpToDateCount} plan${alreadyUpToDateCount === 1 ? " was" : "s were"} already up to date.`
+          : `${generatedPinCount} pin${generatedPinCount === 1 ? "" : "s"} rendered from the selected plans.`;
+      setGenerationFeedback({
+        tone: "success",
+        message,
+      });
+      notify({
+        tone: "success",
+        title: "Rendering complete",
+        message,
+      });
+      setRenderProgress({
+        active: false,
+        completed: targetRenderablePlans.length,
+        total: targetRenderablePlans.length,
+        currentLabel: "Complete",
+      });
+      startTransition(() => {
+        router.refresh();
+      });
+    } catch (actionError) {
+      if (progressToastId) {
+        dismissNotification(progressToastId);
+      }
+      const message = actionError instanceof Error ? actionError.message : "Unable to generate pins.";
+      setGenerationFeedback({
+        tone: "error",
+        message,
+      });
+      notify({
+        tone: "error",
+        title: "Rendering failed",
+        message,
+        sticky: true,
+      });
+    } finally {
+      setIsRenderingPlans(false);
+    }
   }
 
   function handleDiscardPlans(targetPlanIds?: string[]) {
@@ -428,12 +571,24 @@ export function JobReviewManager({
           tone: "success",
           message: `${result.discardedPlanCount ?? plansToDiscard.length} plan${(result.discardedPlanCount ?? plansToDiscard.length) === 1 ? "" : "s"} discarded.`,
         });
+        notify({
+          tone: "success",
+          title: "Plans discarded",
+          message: `${result.discardedPlanCount ?? plansToDiscard.length} plan${(result.discardedPlanCount ?? plansToDiscard.length) === 1 ? "" : "s"} removed from the queue.`,
+        });
         router.refresh();
       } catch (actionError) {
+        const message =
+          actionError instanceof Error ? actionError.message : "Unable to discard plans.";
         setPlansFeedback({
           tone: "error",
-          message:
-            actionError instanceof Error ? actionError.message : "Unable to discard plans.",
+          message,
+        });
+        notify({
+          tone: "error",
+          title: "Discard failed",
+          message,
+          sticky: true,
         });
       }
     });
@@ -471,14 +626,26 @@ export function JobReviewManager({
           tone: "success",
           message: `${discardedCount} generated pin${discardedCount === 1 ? "" : "s"} discarded. The affected plan${discardedCount === 1 ? " is" : "s are"} ready for rerendering. Clear saved title or subtitle overrides if you want AI to generate new copy again.`,
         });
+        notify({
+          tone: "success",
+          title: "Generated pins discarded",
+          message: `${discardedCount} rendered output${discardedCount === 1 ? " was" : "s were"} removed and reset for rerendering.`,
+        });
         router.refresh();
       } catch (actionError) {
+        const message =
+          actionError instanceof Error
+            ? actionError.message
+            : "Unable to discard generated pins.";
         setGenerationFeedback({
           tone: "error",
-          message:
-            actionError instanceof Error
-              ? actionError.message
-              : "Unable to discard generated pins.",
+          message,
+        });
+        notify({
+          tone: "error",
+          title: "Discard failed",
+          message,
+          sticky: true,
         });
       }
     });
@@ -505,12 +672,24 @@ export function JobReviewManager({
           tone: "success",
           message: "Plan render settings saved.",
         });
+        notify({
+          tone: "success",
+          title: "Plan overrides saved",
+          message: "Render title, subtitle, numbering, and preset overrides were updated.",
+        });
         router.refresh();
       } catch (actionError) {
+        const message =
+          actionError instanceof Error ? actionError.message : "Unable to save plan settings.";
         setPlansFeedback({
           tone: "error",
-          message:
-            actionError instanceof Error ? actionError.message : "Unable to save plan settings.",
+          message,
+        });
+        notify({
+          tone: "error",
+          title: "Override save failed",
+          message,
+          sticky: true,
         });
       }
     });
@@ -765,6 +944,53 @@ export function JobReviewManager({
                 </div>
               </div>
             </div>
+
+            <div className="mt-4 rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm font-bold text-[var(--dashboard-text)]">Preset bundles</p>
+                  <p className="mt-1 text-sm text-[var(--dashboard-subtle)]">
+                    Narrow assisted generation to specific color families. Leave all bundles off to use the full preset catalog.
+                  </p>
+                </div>
+                <span className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-muted)]">
+                  {selectedPresetCategoryIds.length === 0 ? "All bundles" : `${selectedPresetCategoryIds.length} selected`}
+                </span>
+              </div>
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                {visualPresetCategories.map((category) => {
+                  const active = selectedPresetCategoryIds.includes(category.id);
+                  return (
+                    <button
+                      key={category.id}
+                      type="button"
+                      onClick={() => togglePresetCategory(category.id)}
+                      className={`rounded-2xl border px-4 py-4 text-left ${
+                        active
+                          ? "border-[var(--dashboard-accent)] bg-[var(--dashboard-accent-soft-strong)] shadow-[0_12px_28px_rgba(30,94,255,0.12)]"
+                          : "border-[var(--dashboard-line)] bg-[var(--dashboard-panel)]"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-bold text-[var(--dashboard-text)]">{category.label}</p>
+                        <span
+                          className={`rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] ${
+                            active
+                              ? "bg-[var(--dashboard-accent)] text-white"
+                              : "bg-[var(--dashboard-panel-alt)] text-[var(--dashboard-muted)]"
+                          }`}
+                        >
+                          {active ? "On" : "Off"}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-sm leading-6 text-[var(--dashboard-subtle)]">
+                        {category.description}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
 
           <div className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-4">
@@ -860,7 +1086,7 @@ export function JobReviewManager({
             <button
               type="button"
               onClick={() => handleDiscardPlans()}
-              disabled={isPending || selectedActionPlans.length === 0}
+              disabled={isPending || isRenderingPlans || selectedActionPlans.length === 0}
               className="rounded-full border border-[var(--dashboard-danger-border)] bg-[var(--dashboard-danger-soft)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-danger-ink)] disabled:opacity-50"
             >
               Discard selected plans
@@ -868,7 +1094,7 @@ export function JobReviewManager({
             <button
               type="button"
               onClick={() => handleDiscardGeneratedPins()}
-              disabled={isPending || generatedPins.length === 0}
+              disabled={isPending || isRenderingPlans || generatedPins.length === 0}
               className="rounded-full border border-[var(--dashboard-danger-border)] bg-[var(--dashboard-danger-soft)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-danger-ink)] disabled:opacity-50"
             >
               Discard generated pins
@@ -876,16 +1102,52 @@ export function JobReviewManager({
             <button
               type="button"
               onClick={() => handleGeneratePins()}
-              disabled={isPending || selectedRenderablePlans.length === 0}
+              disabled={isPending || isRenderingPlans || selectedRenderablePlans.length === 0}
               className="rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
             >
-              Generate selected plans
+              {isRenderingPlans ? "Rendering queue" : "Generate selected plans"}
             </button>
           </div>
         </div>
         {generationFeedback ? <InlineFeedback feedback={generationFeedback} /> : null}
 
         {plansFeedback ? <InlineFeedback feedback={plansFeedback} /> : null}
+
+        {renderProgress ? (
+          <div className="overflow-hidden rounded-[28px] border border-[var(--dashboard-accent-border)] bg-[linear-gradient(135deg,#ffffff_0%,#eef4ff_100%)] p-5 shadow-[0_18px_40px_rgba(30,94,255,0.12)]">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-accent-strong)]">
+                  Render progress
+                </p>
+                <h3 className="mt-2 text-xl font-black tracking-[-0.03em] text-[var(--dashboard-text)]">
+                  {renderProgress.completed} of {renderProgress.total} pins generated
+                </h3>
+                <p className="mt-2 text-sm text-[var(--dashboard-subtle)]">
+                  {renderProgress.active
+                    ? `Rendering ${renderProgress.currentLabel}.`
+                    : "Queue finished. Refreshing the workspace."}
+                </p>
+              </div>
+              <span className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-[var(--dashboard-accent-strong)] shadow-[0_12px_24px_rgba(30,94,255,0.14)]">
+                {Math.max(0, Math.round((renderProgress.completed / Math.max(renderProgress.total, 1)) * 100))}%
+              </span>
+            </div>
+            <div className="mt-4 h-3 overflow-hidden rounded-full bg-white/80">
+              <div
+                className={`h-full rounded-full bg-[linear-gradient(90deg,#0d5fff_0%,#3fd0ff_100%)] ${
+                  renderProgress.active ? "app-toast-progress" : ""
+                }`}
+                style={{
+                  width: `${Math.max(
+                    8,
+                    Math.round((renderProgress.completed / Math.max(renderProgress.total, 1)) * 100),
+                  )}%`,
+                }}
+              />
+            </div>
+          </div>
+        ) : null}
 
         {plans.length === 0 ? (
           <p className="text-sm text-[var(--dashboard-subtle)]">No plans saved yet.</p>
@@ -995,7 +1257,7 @@ export function JobReviewManager({
                       <button
                         type="button"
                         onClick={() => handleGeneratePins([selectedPlan.id])}
-                        disabled={isPending || !["READY", "DRAFT", "FAILED"].includes(selectedPlan.status)}
+                        disabled={isPending || isRenderingPlans || !["READY", "DRAFT", "FAILED"].includes(selectedPlan.status)}
                         className="rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
                       >
                         Generate this plan
@@ -1003,7 +1265,7 @@ export function JobReviewManager({
                       <button
                         type="button"
                         onClick={() => handleDiscardPlans([selectedPlan.id])}
-                        disabled={isPending}
+                        disabled={isPending || isRenderingPlans}
                         className="rounded-full border border-[var(--dashboard-danger-border)] bg-[var(--dashboard-danger-soft)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-danger-ink)] disabled:opacity-60"
                       >
                         Discard this plan
@@ -1017,7 +1279,7 @@ export function JobReviewManager({
                       <button
                         type="button"
                         onClick={() => handleSavePlanSettings(selectedPlan.id)}
-                        disabled={isPending}
+                        disabled={isPending || isRenderingPlans}
                         className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] disabled:opacity-60"
                       >
                         Save overrides
@@ -1065,10 +1327,16 @@ export function JobReviewManager({
                         className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-3 py-2"
                       >
                         <option value="">Use recommended preset</option>
-                        {visualPresetOptions.map((preset) => (
-                          <option key={preset.id} value={preset.id}>
-                            {preset.label}
-                          </option>
+                        {visualPresetCategories.map((category) => (
+                          <optgroup key={category.id} label={category.label}>
+                            {visualPresetOptions
+                              .filter((preset) => preset.categoryId === category.id)
+                              .map((preset) => (
+                                <option key={preset.id} value={preset.id}>
+                                  {preset.label}
+                                </option>
+                              ))}
+                          </optgroup>
                         ))}
                       </select>
                     </label>

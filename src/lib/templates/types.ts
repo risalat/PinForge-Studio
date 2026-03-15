@@ -10,9 +10,24 @@ export const templateVisualPresets = [
   "cobalt-coral",
   "emerald-sun",
   "berry-citrus",
+  "obsidian-punch",
+  "ink-lime",
+  "jade-paprika",
+  "scarlet-cream",
+  "teal-flare",
+  "sunset-punch",
+] as const;
+
+export const templateVisualPresetCategories = [
+  "editorial-soft",
+  "earthy-warm",
+  "dark-drama",
+  "graphic-pop",
+  "fresh-vivid",
 ] as const;
 
 export type TemplateVisualPresetId = (typeof templateVisualPresets)[number];
+export type TemplateVisualPresetCategoryId = (typeof templateVisualPresetCategories)[number];
 export type TemplateColorPreset = TemplateVisualPresetId;
 export type TemplateNumberTreatment = "none" | "badge" | "hero";
 

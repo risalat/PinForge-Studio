@@ -1,8 +1,10 @@
 import { analyzeImageToneSignals, type ImageToneSignals } from "@/lib/templates/imageAnalysis";
-import type {
-  TemplateRenderProps,
-  TemplateVisualPreset,
-  TemplateVisualPresetId,
+import {
+  templateVisualPresets,
+  type TemplateRenderProps,
+  type TemplateVisualPreset,
+  type TemplateVisualPresetCategoryId,
+  type TemplateVisualPresetId,
 } from "@/lib/templates/types";
 
 const FONT_STACKS = {
@@ -621,6 +623,414 @@ export const SPLIT_VERTICAL_VISUAL_PRESETS: Record<
     },
     recommendationTags: ["vibrant", "playful", "berry", "citrus", "maximalist"],
   },
+  "obsidian-punch": {
+    id: "obsidian-punch",
+    label: "Obsidian Punch",
+    description: "Near-black base with electric warmth for aggressive feed contrast.",
+    palette: {
+      canvas: "#e7e4dd",
+      band: "#23262d",
+      footer: "#14161c",
+      divider: "#ff7a33",
+      title: "#f6ead6",
+      subtitle: "#ffb067",
+      domain: "#fff7ef",
+      number: "#f6ead6",
+    },
+    typography: {
+      title: {
+        fontFamily: FONT_STACKS.editorial,
+        fontWeight: 700,
+        letterSpacing: "-0.01em",
+        lineHeight: 1.18,
+      },
+      subtitle: {
+        fontFamily: FONT_STACKS.sans,
+        fontWeight: 700,
+        letterSpacing: "0.18em",
+        lineHeight: 1.06,
+        textTransform: "uppercase",
+      },
+      number: {
+        fontFamily: FONT_STACKS.display,
+        fontWeight: 700,
+        letterSpacing: "-0.03em",
+        lineHeight: 1,
+      },
+      domain: {
+        fontFamily: FONT_STACKS.sans,
+        fontWeight: 700,
+        letterSpacing: "0.08em",
+        lineHeight: 1.04,
+        textTransform: "uppercase",
+      },
+    },
+    layout: {
+      bandPaddingX: 92,
+      bandHeightWithSubtitle: 434,
+      bandHeightWithoutSubtitle: 368,
+      titleBlockHeightWithSubtitle: 198,
+      titleBlockHeightWithoutSubtitle: 272,
+      titleMinSizeWithSubtitle: 62,
+      titleMaxSizeWithSubtitle: 94,
+      titleMinSizeWithoutSubtitle: 70,
+      titleMaxSizeWithoutSubtitle: 108,
+      titleMaxLinesWithSubtitle: 2,
+      titleMaxLinesWithoutSubtitle: 3,
+      titleTopGapWithSubtitle: 22,
+      subtitleMinSize: 28,
+      subtitleMaxSize: 36,
+      subtitleMaxLines: 1,
+      dividerWidth: 188,
+      dividerHeight: 3,
+      dividerGapTop: 16,
+      footerHeight: 122,
+      footerPaddingX: 54,
+      footerMinSize: 24,
+      footerMaxSize: 30,
+    },
+    recommendationTags: ["black", "dramatic", "modern", "luxury", "bold"],
+  },
+  "ink-lime": {
+    id: "ink-lime",
+    label: "Ink Lime",
+    description: "Dark ink with sharp lime contrast for crisp contemporary pins.",
+    palette: {
+      canvas: "#e8ece6",
+      band: "#1d2327",
+      footer: "#13191d",
+      divider: "#b8ff48",
+      title: "#eefad8",
+      subtitle: "#d6ff8d",
+      domain: "#f7ffe8",
+      number: "#eefad8",
+    },
+    typography: {
+      title: {
+        fontFamily: FONT_STACKS.display,
+        fontWeight: 600,
+        letterSpacing: "-0.008em",
+        lineHeight: 1.18,
+      },
+      subtitle: {
+        fontFamily: FONT_STACKS.sans,
+        fontWeight: 700,
+        letterSpacing: "0.17em",
+        lineHeight: 1.06,
+        textTransform: "uppercase",
+      },
+      number: {
+        fontFamily: FONT_STACKS.display,
+        fontWeight: 700,
+        letterSpacing: "-0.03em",
+        lineHeight: 1,
+      },
+      domain: {
+        fontFamily: FONT_STACKS.sans,
+        fontWeight: 700,
+        letterSpacing: "0.08em",
+        lineHeight: 1.04,
+        textTransform: "uppercase",
+      },
+    },
+    layout: {
+      bandPaddingX: 92,
+      bandHeightWithSubtitle: 432,
+      bandHeightWithoutSubtitle: 368,
+      titleBlockHeightWithSubtitle: 198,
+      titleBlockHeightWithoutSubtitle: 272,
+      titleMinSizeWithSubtitle: 62,
+      titleMaxSizeWithSubtitle: 94,
+      titleMinSizeWithoutSubtitle: 70,
+      titleMaxSizeWithoutSubtitle: 108,
+      titleMaxLinesWithSubtitle: 2,
+      titleMaxLinesWithoutSubtitle: 3,
+      titleTopGapWithSubtitle: 22,
+      subtitleMinSize: 28,
+      subtitleMaxSize: 36,
+      subtitleMaxLines: 1,
+      dividerWidth: 188,
+      dividerHeight: 3,
+      dividerGapTop: 16,
+      footerHeight: 122,
+      footerPaddingX: 54,
+      footerMinSize: 24,
+      footerMaxSize: 30,
+    },
+    recommendationTags: ["graphic", "neon", "dark", "modern", "vivid"],
+  },
+  "jade-paprika": {
+    id: "jade-paprika",
+    label: "Jade Paprika",
+    description: "Dense green with warm paprika accents for punchy earthy pins.",
+    palette: {
+      canvas: "#edf1e7",
+      band: "#eff5ea",
+      footer: "#1f6f58",
+      divider: "#f16c3d",
+      title: "#f6f0e8",
+      subtitle: "#ffc18f",
+      domain: "#fff8ee",
+      number: "#f6f0e8",
+    },
+    typography: {
+      title: {
+        fontFamily: FONT_STACKS.editorial,
+        fontWeight: 700,
+        letterSpacing: "-0.008em",
+        lineHeight: 1.18,
+      },
+      subtitle: {
+        fontFamily: FONT_STACKS.sans,
+        fontWeight: 700,
+        letterSpacing: "0.16em",
+        lineHeight: 1.06,
+        textTransform: "uppercase",
+      },
+      number: {
+        fontFamily: FONT_STACKS.display,
+        fontWeight: 700,
+        letterSpacing: "-0.03em",
+        lineHeight: 1,
+      },
+      domain: {
+        fontFamily: FONT_STACKS.sans,
+        fontWeight: 700,
+        letterSpacing: "0.08em",
+        lineHeight: 1.04,
+        textTransform: "uppercase",
+      },
+    },
+    layout: {
+      bandPaddingX: 94,
+      bandHeightWithSubtitle: 434,
+      bandHeightWithoutSubtitle: 368,
+      titleBlockHeightWithSubtitle: 200,
+      titleBlockHeightWithoutSubtitle: 272,
+      titleMinSizeWithSubtitle: 62,
+      titleMaxSizeWithSubtitle: 94,
+      titleMinSizeWithoutSubtitle: 70,
+      titleMaxSizeWithoutSubtitle: 108,
+      titleMaxLinesWithSubtitle: 2,
+      titleMaxLinesWithoutSubtitle: 3,
+      titleTopGapWithSubtitle: 22,
+      subtitleMinSize: 28,
+      subtitleMaxSize: 36,
+      subtitleMaxLines: 1,
+      dividerWidth: 188,
+      dividerHeight: 3,
+      dividerGapTop: 16,
+      footerHeight: 122,
+      footerPaddingX: 54,
+      footerMinSize: 24,
+      footerMaxSize: 30,
+    },
+    recommendationTags: ["earthy", "green", "warm", "rich", "organic"],
+  },
+  "scarlet-cream": {
+    id: "scarlet-cream",
+    label: "Scarlet Cream",
+    description: "Rich scarlet and cream for loud, unmistakable Pinterest contrast.",
+    palette: {
+      canvas: "#f3e6de",
+      band: "#fff7f0",
+      footer: "#c22d37",
+      divider: "#ffd166",
+      title: "#fff5ea",
+      subtitle: "#ffe0a1",
+      domain: "#fff9ef",
+      number: "#fff5ea",
+    },
+    typography: {
+      title: {
+        fontFamily: FONT_STACKS.editorial,
+        fontWeight: 700,
+        letterSpacing: "-0.01em",
+        lineHeight: 1.18,
+      },
+      subtitle: {
+        fontFamily: FONT_STACKS.sans,
+        fontWeight: 700,
+        letterSpacing: "0.17em",
+        lineHeight: 1.06,
+        textTransform: "uppercase",
+      },
+      number: {
+        fontFamily: FONT_STACKS.display,
+        fontWeight: 700,
+        letterSpacing: "-0.02em",
+        lineHeight: 1,
+      },
+      domain: {
+        fontFamily: FONT_STACKS.sans,
+        fontWeight: 700,
+        letterSpacing: "0.08em",
+        lineHeight: 1.04,
+        textTransform: "uppercase",
+      },
+    },
+    layout: {
+      bandPaddingX: 92,
+      bandHeightWithSubtitle: 434,
+      bandHeightWithoutSubtitle: 368,
+      titleBlockHeightWithSubtitle: 198,
+      titleBlockHeightWithoutSubtitle: 272,
+      titleMinSizeWithSubtitle: 62,
+      titleMaxSizeWithSubtitle: 94,
+      titleMinSizeWithoutSubtitle: 70,
+      titleMaxSizeWithoutSubtitle: 108,
+      titleMaxLinesWithSubtitle: 2,
+      titleMaxLinesWithoutSubtitle: 3,
+      titleTopGapWithSubtitle: 22,
+      subtitleMinSize: 28,
+      subtitleMaxSize: 36,
+      subtitleMaxLines: 1,
+      dividerWidth: 188,
+      dividerHeight: 3,
+      dividerGapTop: 16,
+      footerHeight: 122,
+      footerPaddingX: 54,
+      footerMinSize: 24,
+      footerMaxSize: 30,
+    },
+    recommendationTags: ["red", "high-contrast", "statement", "warm", "editorial"],
+  },
+  "teal-flare": {
+    id: "teal-flare",
+    label: "Teal Flare",
+    description: "Cool teal base with mango flare for crisp, modern brightness.",
+    palette: {
+      canvas: "#ebf1ef",
+      band: "#f5fbfa",
+      footer: "#0d7b88",
+      divider: "#ff9a3d",
+      title: "#effdf9",
+      subtitle: "#ffd0a0",
+      domain: "#fbfffb",
+      number: "#effdf9",
+    },
+    typography: {
+      title: {
+        fontFamily: FONT_STACKS.display,
+        fontWeight: 600,
+        letterSpacing: "-0.008em",
+        lineHeight: 1.18,
+      },
+      subtitle: {
+        fontFamily: FONT_STACKS.sans,
+        fontWeight: 700,
+        letterSpacing: "0.16em",
+        lineHeight: 1.08,
+        textTransform: "uppercase",
+      },
+      number: {
+        fontFamily: FONT_STACKS.display,
+        fontWeight: 700,
+        letterSpacing: "-0.03em",
+        lineHeight: 1,
+      },
+      domain: {
+        fontFamily: FONT_STACKS.sans,
+        fontWeight: 700,
+        letterSpacing: "0.08em",
+        lineHeight: 1.04,
+        textTransform: "uppercase",
+      },
+    },
+    layout: {
+      bandPaddingX: 92,
+      bandHeightWithSubtitle: 432,
+      bandHeightWithoutSubtitle: 368,
+      titleBlockHeightWithSubtitle: 198,
+      titleBlockHeightWithoutSubtitle: 272,
+      titleMinSizeWithSubtitle: 62,
+      titleMaxSizeWithSubtitle: 94,
+      titleMinSizeWithoutSubtitle: 70,
+      titleMaxSizeWithoutSubtitle: 108,
+      titleMaxLinesWithSubtitle: 2,
+      titleMaxLinesWithoutSubtitle: 3,
+      titleTopGapWithSubtitle: 22,
+      subtitleMinSize: 28,
+      subtitleMaxSize: 36,
+      subtitleMaxLines: 1,
+      dividerWidth: 188,
+      dividerHeight: 3,
+      dividerGapTop: 16,
+      footerHeight: 122,
+      footerPaddingX: 54,
+      footerMinSize: 24,
+      footerMaxSize: 30,
+    },
+    recommendationTags: ["teal", "graphic", "modern", "fresh", "bright"],
+  },
+  "sunset-punch": {
+    id: "sunset-punch",
+    label: "Sunset Punch",
+    description: "Sunset orange with pink heat for maximal visual separation in-feed.",
+    palette: {
+      canvas: "#f6e5da",
+      band: "#fff5ef",
+      footer: "#f05a24",
+      divider: "#ffca5f",
+      title: "#fff8ef",
+      subtitle: "#ffdba5",
+      domain: "#fffaf2",
+      number: "#fff8ef",
+    },
+    typography: {
+      title: {
+        fontFamily: FONT_STACKS.editorial,
+        fontWeight: 700,
+        letterSpacing: "-0.008em",
+        lineHeight: 1.18,
+      },
+      subtitle: {
+        fontFamily: FONT_STACKS.sans,
+        fontWeight: 700,
+        letterSpacing: "0.16em",
+        lineHeight: 1.08,
+        textTransform: "uppercase",
+      },
+      number: {
+        fontFamily: FONT_STACKS.display,
+        fontWeight: 700,
+        letterSpacing: "-0.02em",
+        lineHeight: 1,
+      },
+      domain: {
+        fontFamily: FONT_STACKS.sans,
+        fontWeight: 700,
+        letterSpacing: "0.08em",
+        lineHeight: 1.04,
+        textTransform: "uppercase",
+      },
+    },
+    layout: {
+      bandPaddingX: 92,
+      bandHeightWithSubtitle: 434,
+      bandHeightWithoutSubtitle: 368,
+      titleBlockHeightWithSubtitle: 198,
+      titleBlockHeightWithoutSubtitle: 272,
+      titleMinSizeWithSubtitle: 62,
+      titleMaxSizeWithSubtitle: 94,
+      titleMinSizeWithoutSubtitle: 70,
+      titleMaxSizeWithoutSubtitle: 108,
+      titleMaxLinesWithSubtitle: 2,
+      titleMaxLinesWithoutSubtitle: 3,
+      titleTopGapWithSubtitle: 22,
+      subtitleMinSize: 28,
+      subtitleMaxSize: 36,
+      subtitleMaxLines: 1,
+      dividerWidth: 188,
+      dividerHeight: 3,
+      dividerGapTop: 16,
+      footerHeight: 122,
+      footerPaddingX: 54,
+      footerMinSize: 24,
+      footerMaxSize: 30,
+    },
+    recommendationTags: ["orange", "warm", "vibrant", "playful", "feed-first"],
+  },
 };
 
 export const splitVerticalBoldPresetIds: TemplateVisualPresetId[] = [
@@ -629,7 +1039,86 @@ export const splitVerticalBoldPresetIds: TemplateVisualPresetId[] = [
   "cobalt-coral",
   "emerald-sun",
   "berry-citrus",
+  "obsidian-punch",
+  "ink-lime",
+  "jade-paprika",
+  "scarlet-cream",
+  "teal-flare",
+  "sunset-punch",
 ];
+
+export const TEMPLATE_VISUAL_PRESET_CATEGORY_META: Record<
+  TemplateVisualPresetCategoryId,
+  {
+    id: TemplateVisualPresetCategoryId;
+    label: string;
+    description: string;
+  }
+> = {
+  "editorial-soft": {
+    id: "editorial-soft",
+    label: "Editorial Soft",
+    description: "Refined neutrals and calmer palettes for understated pins.",
+  },
+  "earthy-warm": {
+    id: "earthy-warm",
+    label: "Earthy Warm",
+    description: "Clay, terracotta, green, and warm tones with more punch.",
+  },
+  "dark-drama": {
+    id: "dark-drama",
+    label: "Dark Drama",
+    description: "Moody high-contrast palettes for aggressive feed presence.",
+  },
+  "graphic-pop": {
+    id: "graphic-pop",
+    label: "Graphic Pop",
+    description: "Bold, graphic, clearly differentiated color systems.",
+  },
+  "fresh-vivid": {
+    id: "fresh-vivid",
+    label: "Fresh Vivid",
+    description: "Bright, high-energy palettes with clean modern contrast.",
+  },
+};
+
+export const TEMPLATE_VISUAL_PRESET_CATEGORY_MAP: Record<
+  TemplateVisualPresetId,
+  TemplateVisualPresetCategoryId
+> = {
+  "plum-sand": "editorial-soft",
+  "sage-cream": "editorial-soft",
+  "cocoa-blush": "editorial-soft",
+  "midnight-gold": "dark-drama",
+  "terracotta-ink": "earthy-warm",
+  "olive-linen": "editorial-soft",
+  "cobalt-coral": "graphic-pop",
+  "emerald-sun": "fresh-vivid",
+  "berry-citrus": "graphic-pop",
+  "obsidian-punch": "dark-drama",
+  "ink-lime": "dark-drama",
+  "jade-paprika": "earthy-warm",
+  "scarlet-cream": "graphic-pop",
+  "teal-flare": "fresh-vivid",
+  "sunset-punch": "graphic-pop",
+};
+
+export function getTemplateVisualPresetCategory(presetId: TemplateVisualPresetId) {
+  return TEMPLATE_VISUAL_PRESET_CATEGORY_MAP[presetId];
+}
+
+export function getTemplateVisualPresetCategoryMeta(categoryId: TemplateVisualPresetCategoryId) {
+  return TEMPLATE_VISUAL_PRESET_CATEGORY_META[categoryId];
+}
+
+export function getPresetIdsForCategories(categoryIds?: TemplateVisualPresetCategoryId[]) {
+  if (!categoryIds?.length) {
+    return [...templateVisualPresets];
+  }
+
+  const allowed = new Set(categoryIds);
+  return templateVisualPresets.filter((presetId) => allowed.has(TEMPLATE_VISUAL_PRESET_CATEGORY_MAP[presetId]));
+}
 
 export function getSplitVerticalVisualPreset(
   presetId?: TemplateRenderProps["visualPreset"] | TemplateRenderProps["colorPreset"],
@@ -780,18 +1269,66 @@ function recommendPresetFromContext(
     "maximalist",
     "happy",
   ], 2);
+  addKeywordScore(scores, context, "obsidian-punch", [
+    "statement",
+    "sleek",
+    "luxury",
+    "black",
+    "modern",
+    "editorial",
+  ], 2);
+  addKeywordScore(scores, context, "ink-lime", [
+    "graphic",
+    "modern",
+    "clean",
+    "sharp",
+    "contemporary",
+  ], 2);
+  addKeywordScore(scores, context, "jade-paprika", [
+    "green",
+    "earthy",
+    "organic",
+    "wood",
+    "natural",
+  ], 2);
+  addKeywordScore(scores, context, "scarlet-cream", [
+    "red",
+    "bold",
+    "statement",
+    "classic",
+    "dramatic",
+  ], 2);
+  addKeywordScore(scores, context, "teal-flare", [
+    "teal",
+    "aqua",
+    "coastal",
+    "fresh",
+    "crisp",
+  ], 2);
+  addKeywordScore(scores, context, "sunset-punch", [
+    "sunset",
+    "orange",
+    "warm",
+    "bright",
+    "playful",
+  ], 2);
 
   if (pixelSignals) {
     if (pixelSignals.brightness < 0.42 || pixelSignals.contrast > 0.24) {
       incrementScore(scores, "midnight-gold", 4);
+      incrementScore(scores, "obsidian-punch", 3);
+      incrementScore(scores, "ink-lime", 2);
     }
 
     if (pixelSignals.warmth > 0.06 && pixelSignals.saturation > 0.18) {
       incrementScore(scores, "terracotta-ink", 3);
+      incrementScore(scores, "sunset-punch", 2);
+      incrementScore(scores, "scarlet-cream", 2);
     }
 
     if (pixelSignals.warmth < -0.01 && pixelSignals.brightness > 0.48) {
       incrementScore(scores, "sage-cream", 3);
+      incrementScore(scores, "teal-flare", 2);
     }
 
     if (pixelSignals.saturation < 0.14 && pixelSignals.brightness > 0.62) {
@@ -804,11 +1341,14 @@ function recommendPresetFromContext(
       pixelSignals.saturation < 0.2
     ) {
       incrementScore(scores, "cocoa-blush", 2);
+      incrementScore(scores, "jade-paprika", 1);
     }
 
     if (pixelSignals.saturation > 0.24 && pixelSignals.brightness > 0.56) {
       incrementScore(scores, "berry-citrus", 3);
       incrementScore(scores, "emerald-sun", 2);
+      incrementScore(scores, "sunset-punch", 2);
+      incrementScore(scores, "teal-flare", 2);
     }
 
     if (
@@ -817,6 +1357,8 @@ function recommendPresetFromContext(
       pixelSignals.warmth < 0.02
     ) {
       incrementScore(scores, "cobalt-coral", 3);
+      incrementScore(scores, "ink-lime", 2);
+      incrementScore(scores, "obsidian-punch", 1);
     }
 
     if (
@@ -825,6 +1367,8 @@ function recommendPresetFromContext(
       pixelSignals.warmth > 0.04
     ) {
       incrementScore(scores, "emerald-sun", 3);
+      incrementScore(scores, "jade-paprika", 2);
+      incrementScore(scores, "scarlet-cream", 1);
     }
   }
 
@@ -872,9 +1416,16 @@ function fallbackPresetFromText(text: string): TemplateVisualPresetId {
     "sage-cream",
     "cocoa-blush",
     "olive-linen",
+    "jade-paprika",
+    "midnight-gold",
     "cobalt-coral",
     "emerald-sun",
     "berry-citrus",
+    "obsidian-punch",
+    "ink-lime",
+    "scarlet-cream",
+    "teal-flare",
+    "sunset-punch",
   ];
   const hash = [...text].reduce((sum, character) => sum + character.charCodeAt(0), 0);
   return presetOrder[hash % presetOrder.length];

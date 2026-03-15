@@ -17,7 +17,12 @@ import {
 import { resolveStoredAssetUrl } from "@/lib/storage/assetUrl";
 import { getTemplateLibraryEntries } from "@/lib/templates/library";
 import { parsePlanRenderContext } from "@/lib/templates/planRenderContext";
-import { templateVisualPresets } from "@/lib/templates/types";
+import {
+  getTemplateVisualPresetCategory,
+  getTemplateVisualPresetCategoryMeta,
+  SPLIT_VERTICAL_VISUAL_PRESETS,
+} from "@/lib/templates/visualPresets";
+import { templateVisualPresetCategories, templateVisualPresets } from "@/lib/templates/types";
 
 type PageProps = {
   params: Promise<{
@@ -133,8 +138,18 @@ export default async function DashboardJobDetailsPage({ params }: PageProps) {
           templates={templates}
           visualPresetOptions={templateVisualPresets.map((presetId) => ({
             id: presetId,
-            label: formatLabel(presetId),
+            label: SPLIT_VERTICAL_VISUAL_PRESETS[presetId].label,
+            categoryId: getTemplateVisualPresetCategory(presetId),
+            categoryLabel: getTemplateVisualPresetCategoryMeta(getTemplateVisualPresetCategory(presetId)).label,
           }))}
+          visualPresetCategories={templateVisualPresetCategories.map((categoryId) => {
+            const categoryMeta = getTemplateVisualPresetCategoryMeta(categoryId);
+            return {
+              id: categoryId,
+              label: categoryMeta.label,
+              description: categoryMeta.description,
+            };
+          })}
           plans={job.generationPlans.map((plan) => ({
             ...parsePlanRenderContext(plan.notes),
             id: plan.id,

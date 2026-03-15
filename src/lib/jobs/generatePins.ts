@@ -50,11 +50,13 @@ import {
 } from "@/lib/templates/planRenderContext";
 import { getTemplateConfig, TEMPLATE_CONFIGS } from "@/lib/templates/registry";
 import {
+  getPresetIdsForCategories,
   recommendSplitVerticalVisualPresetWithImageAwareness,
   splitVerticalBoldPresetIds,
 } from "@/lib/templates/visualPresets";
 import {
   templateVisualPresets,
+  type TemplateVisualPresetCategoryId,
   type TemplateNumberTreatment,
   type TemplateVisualPresetId,
 } from "@/lib/templates/types";
@@ -367,6 +369,7 @@ export async function createAssistedGenerationPlans(input: {
   pinCount: number;
   templateIds?: string[];
   presetStrategy?: AssistedPresetStrategy;
+  presetCategoryIds?: TemplateVisualPresetCategoryId[];
 }) {
   const job = await getOwnedJobOrThrow(input.jobId, input.userId);
 
@@ -384,26 +387,45 @@ export async function createAssistedGenerationPlans(input: {
 
   const baseSortOrder = job.generationPlans.length;
   const preferredImages = selectedImages.filter((image) => image.isPreferred);
-  const imagePool = preferredImages.length > 0 ? [...preferredImages, ...selectedImages] : selectedImages;
+  const selectedImagePool = shuffleBySeed(selectedImages, `${job.id}:selected-images`);
+  const preferredImagePool = shuffleBySeed(preferredImages, `${job.id}:preferred-images`);
+  const templateSequence = buildBalancedSequence(
+    eligibleTemplateIds,
+    input.pinCount,
+    `${job.id}:template-sequence`,
+  );
+  const presetPool = getPresetPoolForAssistedPlans(input.presetStrategy, input.presetCategoryIds);
+  const presetSequence = buildBalancedSequence(
+    presetPool,
+    input.pinCount,
+    `${job.id}:preset-sequence:${input.presetStrategy ?? "recommended"}`,
+  );
   const preparedPlans = await Promise.all(
     Array.from({ length: input.pinCount }).map(async (_, index) => {
-      const templateId =
-        eligibleTemplateIds[Math.floor(Math.random() * eligibleTemplateIds.length)];
+      const templateId = templateSequence[index] ?? eligibleTemplateIds[index % eligibleTemplateIds.length];
       const template = getTemplateConfig(templateId);
 
       if (!template) {
         return null;
       }
 
-      const assignedImages = Array.from({ length: template.imageSlotCount }).map(
-        (_, slotIndex) => imagePool[(index + slotIndex) % imagePool.length],
-      );
+      const assignedImages = buildAssistedImageAssignments({
+        selectedImages: selectedImagePool,
+        preferredImages: preferredImagePool,
+        slotCount: template.imageSlotCount,
+        planIndex: index,
+        templateId,
+      });
       const renderContext = await buildSeedPlanRenderContext(
         job,
         assignedImages.map((sourceImage) => ({
           sourceImage,
         })),
         input.presetStrategy,
+        {
+          allowedPresetPool: presetPool,
+          fallbackPreset: presetSequence[index],
+        },
       );
 
       return {
@@ -1610,18 +1632,28 @@ async function buildSeedPlanRenderContext(
     };
   }>,
   presetStrategy: AssistedPresetStrategy = "recommended",
+  options?: {
+    allowedPresetPool?: TemplateVisualPresetId[];
+    fallbackPreset?: TemplateVisualPresetId;
+  },
 ) {
-  const visualPreset =
-    presetStrategy === "random_all"
-      ? pickRandomPreset()
-      : presetStrategy === "random_bold"
-        ? pickRandomPreset(splitVerticalBoldPresetIds)
-        : await recommendSplitVerticalVisualPresetWithImageAwareness({
-            articleTitle: job.articleTitleSnapshot,
-            pinTitle: job.articleTitleSnapshot,
-            domain: job.domainSnapshot,
-            imageSignals: assignments.map((assignment) => assignment.sourceImage),
-          });
+  let visualPreset: TemplateVisualPresetId;
+
+  if (presetStrategy === "random_all" || presetStrategy === "random_bold") {
+    visualPreset = options?.fallbackPreset ?? pickRandomPreset(options?.allowedPresetPool);
+  } else {
+    const recommendedPreset = await recommendSplitVerticalVisualPresetWithImageAwareness({
+      articleTitle: job.articleTitleSnapshot,
+      pinTitle: job.articleTitleSnapshot,
+      domain: job.domainSnapshot,
+      imageSignals: assignments.map((assignment) => assignment.sourceImage),
+    });
+
+    visualPreset =
+      options?.allowedPresetPool?.length && !options.allowedPresetPool.includes(recommendedPreset)
+        ? options.fallbackPreset ?? options.allowedPresetPool[0] ?? recommendedPreset
+        : recommendedPreset;
+  }
 
   return {
     itemNumber: job.sourceImages.length,
@@ -1632,6 +1664,141 @@ async function buildSeedPlanRenderContext(
 function pickRandomPreset(pool?: readonly TemplateVisualPresetId[]): TemplateVisualPresetId {
   const source = pool?.length ? pool : templateVisualPresets;
   return source[Math.floor(Math.random() * source.length)];
+}
+
+function getPresetPoolForAssistedPlans(
+  presetStrategy: AssistedPresetStrategy | undefined,
+  presetCategoryIds?: TemplateVisualPresetCategoryId[],
+) {
+  const categoryFilteredPool = getPresetIdsForCategories(presetCategoryIds);
+  const strategyPool =
+    presetStrategy === "random_bold"
+      ? categoryFilteredPool.filter((presetId) => splitVerticalBoldPresetIds.includes(presetId))
+      : categoryFilteredPool;
+
+  return strategyPool.length > 0 ? strategyPool : presetStrategy === "random_bold" ? splitVerticalBoldPresetIds : [...templateVisualPresets];
+}
+
+function buildBalancedSequence<T>(values: readonly T[], count: number, seed: string) {
+  if (values.length === 0 || count <= 0) {
+    return [] as T[];
+  }
+
+  const sequence: T[] = [];
+  let cycle = 0;
+
+  while (sequence.length < count) {
+    sequence.push(...shuffleBySeed(values, `${seed}:${cycle}`));
+    cycle += 1;
+  }
+
+  return sequence.slice(0, count);
+}
+
+function shuffleBySeed<T>(values: readonly T[], seed: string) {
+  const result = [...values];
+  let state = Math.max(1, hashString(seed));
+
+  for (let index = result.length - 1; index > 0; index -= 1) {
+    state = (state * 1664525 + 1013904223) % 4294967296;
+    const swapIndex = state % (index + 1);
+    [result[index], result[swapIndex]] = [result[swapIndex], result[index]];
+  }
+
+  return result;
+}
+
+function buildAssistedImageAssignments(input: {
+  selectedImages: WorkflowJob["sourceImages"];
+  preferredImages: WorkflowJob["sourceImages"];
+  slotCount: number;
+  planIndex: number;
+  templateId: string;
+}) {
+  const { selectedImages, preferredImages, slotCount, planIndex, templateId } = input;
+  if (selectedImages.length === 0) {
+    return [];
+  }
+
+  const templateHash = hashString(templateId);
+  const assignments: typeof selectedImages = [];
+  const usedImageIds = new Set<string>();
+  const primaryStep = pickCoprimeStep(selectedImages.length, (templateHash % 7) + 1);
+  const secondaryStep = pickCoprimeStep(selectedImages.length, (planIndex % 5) + 2);
+  const preferredHero =
+    preferredImages.length > 0
+      ? preferredImages[(planIndex + templateHash) % preferredImages.length]
+      : undefined;
+
+  for (let slotIndex = 0; slotIndex < slotCount; slotIndex += 1) {
+    const candidate =
+      slotIndex === 0 && preferredHero
+        ? preferredHero
+        : findDistributedImage({
+            images: selectedImages,
+            usedImageIds,
+            startIndex: (planIndex * primaryStep + slotIndex * secondaryStep + templateHash) % selectedImages.length,
+          });
+
+    assignments.push(candidate);
+    if (selectedImages.length >= slotCount) {
+      usedImageIds.add(candidate.id);
+    }
+  }
+
+  return assignments;
+}
+
+function findDistributedImage(input: {
+  images: WorkflowJob["sourceImages"];
+  usedImageIds: Set<string>;
+  startIndex: number;
+}) {
+  const { images, usedImageIds, startIndex } = input;
+  for (let offset = 0; offset < images.length; offset += 1) {
+    const candidate = images[(startIndex + offset) % images.length];
+    if (!usedImageIds.has(candidate.id)) {
+      return candidate;
+    }
+  }
+
+  return images[startIndex % images.length];
+}
+
+function pickCoprimeStep(length: number, preferredStep: number) {
+  if (length <= 1) {
+    return 1;
+  }
+
+  let step = Math.max(1, preferredStep % length);
+  while (greatestCommonDivisor(step, length) !== 1) {
+    step = (step + 1) % length || 1;
+  }
+
+  return step;
+}
+
+function greatestCommonDivisor(left: number, right: number): number {
+  let a = Math.abs(left);
+  let b = Math.abs(right);
+
+  while (b !== 0) {
+    const next = a % b;
+    a = b;
+    b = next;
+  }
+
+  return a || 1;
+}
+
+function hashString(value: string) {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+
+  return Math.abs(hash);
 }
 
 async function generateRenderCopyForPlan(
