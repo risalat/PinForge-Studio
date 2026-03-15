@@ -1126,11 +1126,13 @@ export async function generateTitlesForJobPins(input: {
         where: { generatedPinId: pin.id },
         update: {
           title,
+          titleOptions: titleCandidates,
           titleStatus: PinCopyFieldStatus.GENERATED,
         },
         create: {
           generatedPinId: pin.id,
           title,
+          titleOptions: titleCandidates,
           titleStatus: PinCopyFieldStatus.GENERATED,
         },
       });
@@ -1410,6 +1412,7 @@ export async function scheduleJobPins(input: {
     postId?: string;
     error?: string;
   }> = [];
+  const successfullyScheduledPinIds: string[] = [];
   const boardAssignments = buildBoardAssignments({
     pinIds: selectedPins.map((pin) => pin.id),
     boardIds: selectedBoardIds,
@@ -1516,6 +1519,7 @@ export async function scheduleJobPins(input: {
         status: "scheduled",
         postId: outcome?.postId,
       });
+      successfullyScheduledPinIds.push(pin.id);
       if (assetKey) {
         scheduledAssetKeys.add(assetKey);
       }
@@ -1558,6 +1562,19 @@ export async function scheduleJobPins(input: {
       completedAt: new Date(),
     },
   });
+
+  if (successfullyScheduledPinIds.length > 0) {
+    await prisma.pinCopy.updateMany({
+      where: {
+        generatedPinId: {
+          in: successfullyScheduledPinIds,
+        },
+      },
+      data: {
+        titleOptions: [],
+      },
+    });
+  }
 
   await finalizeStepOutcome(job.id, result, {
     successSync: true,

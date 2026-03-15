@@ -1,0 +1,2 @@
+ALTER TABLE "PinCopy"
+ADD COLUMN "titleOptions" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];

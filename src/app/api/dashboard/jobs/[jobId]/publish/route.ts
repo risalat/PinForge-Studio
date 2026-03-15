@@ -182,6 +182,7 @@ function serializePin(pin: Awaited<ReturnType<typeof getJobForUser>>["generatedP
     mediaId: pin.publerMedia?.mediaId ?? null,
     mediaError: pin.publerMedia?.errorMessage ?? null,
     title: pin.pinCopy?.title ?? "",
+    titleOptions: pin.pinCopy?.titleOptions ?? [],
     description: pin.pinCopy?.description ?? "",
     titleStatus: pin.pinCopy?.titleStatus ?? "EMPTY",
     descriptionStatus: pin.pinCopy?.descriptionStatus ?? "EMPTY",

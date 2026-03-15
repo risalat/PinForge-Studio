@@ -17,6 +17,7 @@ type PinItem = {
   mediaId: string | null;
   mediaError: string | null;
   title: string;
+  titleOptions: string[];
   description: string;
   titleStatus: string;
   descriptionStatus: string;
@@ -151,7 +152,9 @@ export function JobPublishManager({
       description: pin.description,
     })),
   );
-  const [titleCandidatesByPinId, setTitleCandidatesByPinId] = useState<Record<string, string[]>>({});
+  const [titleCandidatesByPinId, setTitleCandidatesByPinId] = useState<Record<string, string[]>>(
+    () => buildTitleCandidatesByPinId(pins),
+  );
   const [selectedPinIds, setSelectedPinIds] = useState<string[]>(pins.map((pin) => pin.id));
   const [firstPublishAt, setFirstPublishAt] = useState("");
   const [intervalDays, setIntervalDays] = useState(25);
@@ -190,6 +193,7 @@ export function JobPublishManager({
   const [hasLoadedSavedDestination, setHasLoadedSavedDestination] = useState(false);
   const [isPending, startTransition] = useTransition();
   const uploadProgressToastIdRef = useRef<string | null>(null);
+  const copyProgressToastIdRef = useRef<string | null>(null);
   const hasInitializedOptionsRef = useRef(false);
   const currentPins = livePins;
   const isUploadingMedia = activeAction === "upload_media";
@@ -222,6 +226,7 @@ export function JobPublishManager({
     setLivePins(pins);
     setLiveLatestScheduleRun(latestScheduleRun);
     setCopyState((current) => mergeCopyStateWithPins(current, pins));
+    setTitleCandidatesByPinId(buildTitleCandidatesByPinId(pins));
   }, [latestScheduleRun, pins]);
 
   useEffect(() => {
@@ -407,6 +412,9 @@ export function JobPublishManager({
 
   const aiRuntimeState = useMemo(() => resolveAiRuntimeState(integrationReady), [integrationReady]);
 
+  // `loadPublerOptions` is intentionally invoked once here after local state hydration.
+  // Subsequent workspace/account changes call it directly from event handlers.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const savedSelection = readPersistedPublishSelection(jobId);
     if (savedSelection) {
@@ -444,9 +452,6 @@ export function JobPublishManager({
     workspaceId,
   ]);
 
-  // `loadPublerOptions` is intentionally invoked once here after local state hydration.
-  // Subsequent workspace/account changes call it directly from event handlers.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!integrationReady.canUsePublerApiKey) {
       return;
@@ -781,6 +786,7 @@ export function JobPublishManager({
   }) {
     startTransition(async () => {
       const result = createEmptyPublishResult(input.fallbackMessage);
+      let progressToastId: string | null = null;
 
       try {
         setSectionFeedback((current) => ({
@@ -805,9 +811,46 @@ export function JobPublishManager({
                 : pin,
             ),
           );
+        } else {
+          const title =
+            input.action === "generate_titles"
+              ? `0 of ${input.generatedPinIds.length} titles generated`
+              : `0 of ${input.generatedPinIds.length} descriptions generated`;
+          const message =
+            input.action === "generate_titles"
+              ? "Preparing title generation."
+              : "Preparing description generation.";
+          progressToastId = notify({
+            tone: "progress",
+            title,
+            message,
+            sticky: true,
+          });
+          copyProgressToastIdRef.current = progressToastId;
         }
 
-        for (const pinId of input.generatedPinIds) {
+        for (const [index, pinId] of input.generatedPinIds.entries()) {
+          if (progressToastId) {
+            updateNotification(progressToastId, {
+              tone: "progress",
+              title:
+                input.action === "generate_titles"
+                  ? `${index} of ${input.generatedPinIds.length} titles generated`
+                  : `${index} of ${input.generatedPinIds.length} descriptions generated`,
+              message: buildCopyProgressMessage({
+                action:
+                  input.action === "generate_titles"
+                    ? "generate_titles"
+                    : "generate_descriptions",
+                completed: index,
+                total: input.generatedPinIds.length,
+                pinId,
+                pins: currentPins,
+              }),
+              sticky: true,
+            });
+          }
+
           try {
             const nextResult = await runAction({
               action: input.action,
@@ -853,6 +896,11 @@ export function JobPublishManager({
             : input.action === "generate_descriptions"
               ? `Generated descriptions for ${result.succeeded} pin${result.succeeded === 1 ? "" : "s"}.`
               : `Uploaded ${result.succeeded} pin${result.succeeded === 1 ? "" : "s"}.`;
+
+        if (progressToastId) {
+          dismissNotification(progressToastId);
+          copyProgressToastIdRef.current = null;
+        }
 
         const pins = await refreshPublishSnapshot().catch(() => null);
         if (input.action === "upload_media") {
@@ -914,8 +962,24 @@ export function JobPublishManager({
           }));
         }
 
-        router.refresh();
+        if (input.action === "generate_titles" || input.action === "generate_descriptions") {
+          notify({
+            tone: result.failed > 0 ? "info" : "success",
+            title:
+              input.action === "generate_titles"
+                ? "Title generation complete"
+                : "Description generation complete",
+            message:
+              result.failed > 0
+                ? `${result.succeeded} completed, ${result.failed} failed.`
+                : result.message,
+          });
+        }
       } catch (error) {
+        if (progressToastId) {
+          dismissNotification(progressToastId);
+          copyProgressToastIdRef.current = null;
+        }
         setSectionFeedback((current) => ({
           ...current,
           [input.section]: {
@@ -945,6 +1009,10 @@ export function JobPublishManager({
               : null,
           );
         }
+        if (copyProgressToastIdRef.current) {
+          dismissNotification(copyProgressToastIdRef.current);
+          copyProgressToastIdRef.current = null;
+        }
         setActiveAction(null);
       }
     });
@@ -965,6 +1033,7 @@ export function JobPublishManager({
     if (data.pins) {
       setLivePins(data.pins);
       setCopyState((current) => mergeCopyStateWithPins(current, data.pins ?? []));
+      setTitleCandidatesByPinId(buildTitleCandidatesByPinId(data.pins));
     }
 
     return data.pins ?? null;
@@ -2603,6 +2672,35 @@ function buildUploadRecoveryMessage(input: {
   return `${input.uploadedCount} uploaded. ${input.remainingCount} pin${
     input.remainingCount === 1 ? "" : "s"
   } still need attention and are selected${detail}.`;
+}
+
+function buildCopyProgressMessage(input: {
+  action: "generate_titles" | "generate_descriptions";
+  completed: number;
+  total: number;
+  pinId: string;
+  pins: PinItem[];
+}) {
+  const pin = input.pins.find((candidate) => candidate.id === input.pinId);
+  const label = pin?.templateId ?? "selected pin";
+
+  if (input.action === "generate_titles") {
+    return input.completed === 0
+      ? `Starting title generation for ${label}.`
+      : `Working on ${label}.`;
+  }
+
+  return input.completed === 0
+    ? `Starting description generation for ${label}.`
+    : `Working on ${label}.`;
+}
+
+function buildTitleCandidatesByPinId(pins: PinItem[]) {
+  return Object.fromEntries(
+    pins
+      .filter((pin) => pin.titleOptions.length > 0)
+      .map((pin) => [pin.id, pin.titleOptions]),
+  );
 }
 
 function getPublishSelectionStorageKey(jobId: string) {

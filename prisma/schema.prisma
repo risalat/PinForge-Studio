@@ -276,6 +276,7 @@ model PinCopy {
   id                String             @id @default(cuid())
   generatedPinId    String             @unique
   title             String?
+  titleOptions      String[]           @default([])
   description       String?
   titleStatus       PinCopyFieldStatus @default(EMPTY)
   descriptionStatus PinCopyFieldStatus @default(EMPTY)
