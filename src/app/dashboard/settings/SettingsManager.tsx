@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { BusyActionLabel } from "@/components/ui/BusyActionLabel";
 import type { AIProvider } from "@/lib/ai";
 import type {
-  DashboardAiModelsResponse,
+  AiCredentialSummary,
   DashboardPublerOptionsResponse,
   IntegrationSettingsSummary,
   WorkspaceProfileSummary,
@@ -31,6 +31,20 @@ type WorkspaceProfileDraft = {
   defaultBoardId: string;
 };
 
+type AiCredentialDraft = {
+  id: string;
+  label: string;
+  provider: AIProvider;
+  apiKeyInput: string;
+  model: string;
+  customEndpoint: string;
+  isDefault: boolean;
+  hasStoredKey: boolean;
+  canUseStoredKey: boolean;
+  credentialState: "missing" | "ready" | "unavailable";
+  credentialMessage: string;
+};
+
 export function SettingsManager({
   initialSettings,
 }: {
@@ -47,35 +61,21 @@ export function SettingsManager({
   const [publerBoardsByWorkspaceAccount, setPublerBoardsByWorkspaceAccount] = useState<
     Record<string, PinterestBoard[]>
   >({});
-  const [aiProvider, setAiProvider] = useState<AIProvider>(initialSettings.aiProvider);
-  const [storedAiProvider, setStoredAiProvider] = useState<AIProvider>(initialSettings.aiProvider);
-  const [aiApiKey, setAiApiKey] = useState("");
-  const [aiModel, setAiModel] = useState(initialSettings.aiModel);
-  const [aiCustomEndpoint, setAiCustomEndpoint] = useState(initialSettings.aiCustomEndpoint);
-  const [aiModels, setAiModels] = useState<string[]>([]);
+  const [aiCredentials, setAiCredentials] = useState<AiCredentialDraft[]>(
+    initialSettings.aiCredentials.map(toAiCredentialDraft),
+  );
   const [hasStoredPublerKey, setHasStoredPublerKey] = useState(initialSettings.hasPublerApiKey);
-  const [hasStoredAiKey, setHasStoredAiKey] = useState(initialSettings.hasAiApiKey);
   const [canUseStoredPublerKey, setCanUseStoredPublerKey] = useState(initialSettings.canUsePublerApiKey);
-  const [canUseStoredAiKey, setCanUseStoredAiKey] = useState(initialSettings.canUseAiApiKey);
   const [publerCredentialMessage, setPublerCredentialMessage] = useState(
     initialSettings.publerCredentialMessage,
-  );
-  const [aiCredentialMessage, setAiCredentialMessage] = useState(
-    initialSettings.aiCredentialMessage,
   );
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingPublerWorkspaces, setIsLoadingPublerWorkspaces] = useState(false);
-  const [isLoadingAiModels, setIsLoadingAiModels] = useState(false);
   const [loadingWorkspaceProfileIndex, setLoadingWorkspaceProfileIndex] = useState<number | null>(
     null,
   );
-
-  const canLoadAiModels =
-    aiProvider === "custom_endpoint"
-      ? aiCustomEndpoint.trim() !== ""
-      : aiApiKey.trim() !== "" || (canUseStoredAiKey && aiProvider === storedAiProvider);
 
   const canLoadPublerWorkspaces = publerApiKey.trim() !== "" || canUseStoredPublerKey;
 
@@ -252,6 +252,64 @@ export function SettingsManager({
     });
   }
 
+  function addAiCredential() {
+    setAiCredentials((current) => [
+      ...current,
+      {
+        id: "",
+        label: "",
+        provider: "gemini",
+        apiKeyInput: "",
+        model: "",
+        customEndpoint: "",
+        isDefault: current.length === 0,
+        hasStoredKey: false,
+        canUseStoredKey: false,
+        credentialState: "missing",
+        credentialMessage: "",
+      },
+    ]);
+  }
+
+  function updateAiCredential<K extends keyof AiCredentialDraft>(
+    index: number,
+    key: K,
+    value: AiCredentialDraft[K],
+  ) {
+    setAiCredentials((current) =>
+      current.map((credential, currentIndex) =>
+        currentIndex === index
+          ? {
+              ...credential,
+              [key]: value,
+            }
+          : credential,
+      ),
+    );
+  }
+
+  function setDefaultAiCredential(index: number) {
+    setAiCredentials((current) =>
+      current.map((credential, currentIndex) => ({
+        ...credential,
+        isDefault: currentIndex === index,
+      })),
+    );
+  }
+
+  function removeAiCredential(index: number) {
+    setAiCredentials((current) => {
+      const nextCredentials = current.filter((_, currentIndex) => currentIndex !== index);
+      if (nextCredentials.length > 0 && !nextCredentials.some((credential) => credential.isDefault)) {
+        nextCredentials[0] = {
+          ...nextCredentials[0],
+          isDefault: true,
+        };
+      }
+      return nextCredentials;
+    });
+  }
+
   async function loadPublerWorkspaces(options?: { silent?: boolean }) {
     if (!canLoadPublerWorkspaces) {
       return;
@@ -300,60 +358,6 @@ export function SettingsManager({
     }
   }
 
-  async function loadAiModels(options?: { silent?: boolean }) {
-    if (!canLoadAiModels) {
-      return;
-    }
-
-    if (aiProvider === "custom_endpoint") {
-      setAiModels([]);
-      if (!options?.silent) {
-        setSuccess("Custom endpoints use a manual model ID.");
-      }
-      return;
-    }
-
-    setIsLoadingAiModels(true);
-    if (!options?.silent) {
-      setError(null);
-      setSuccess(null);
-    }
-
-    try {
-      const response = await fetch("/api/dashboard/settings/ai-models", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          provider: aiProvider,
-          apiKey: aiApiKey || undefined,
-          model: aiModel || undefined,
-          customEndpoint: aiCustomEndpoint || undefined,
-        }),
-      });
-      const json = (await response.json()) as DashboardAiModelsResponse;
-
-      if (!json.ok) {
-        throw new Error(json.error ?? "Unable to load AI models.");
-      }
-
-      const models = json.models ?? [];
-      const nextModel = models.includes(aiModel) ? aiModel : models[0] ?? "";
-      setAiModels(models);
-      setAiModel(nextModel);
-
-      if (!options?.silent) {
-        setSuccess(`Loaded ${models.length} model(s) for ${getAiProviderLabel(aiProvider)}.`);
-      }
-    } catch (loadError) {
-      const message = loadError instanceof Error ? loadError.message : "Unable to load AI models.";
-      setError(message);
-    } finally {
-      setIsLoadingAiModels(false);
-    }
-  }
-
   async function handleSave() {
     setIsSaving(true);
     setError(null);
@@ -375,10 +379,15 @@ export function SettingsManager({
             defaultBoardId: profile.defaultBoardId,
             isDefault: profile.isDefault,
           })),
-          aiProvider,
-          aiApiKey,
-          aiModel,
-          aiCustomEndpoint,
+          aiCredentials: aiCredentials.map((credential) => ({
+            id: credential.id || undefined,
+            label: credential.label,
+            provider: credential.provider,
+            apiKey: credential.apiKeyInput || undefined,
+            model: credential.model,
+            customEndpoint: credential.customEndpoint,
+            isDefault: credential.isDefault,
+          })),
         }),
       });
       const json = (await response.json()) as {
@@ -392,15 +401,11 @@ export function SettingsManager({
       }
 
       setHasStoredPublerKey(json.settings.hasPublerApiKey);
-      setHasStoredAiKey(json.settings.hasAiApiKey);
       setCanUseStoredPublerKey(json.settings.canUsePublerApiKey);
-      setCanUseStoredAiKey(json.settings.canUseAiApiKey);
       setWorkspaceProfiles(json.settings.workspaceProfiles.map(toWorkspaceProfileDraft));
-      setStoredAiProvider(json.settings.aiProvider);
+      setAiCredentials(json.settings.aiCredentials.map(toAiCredentialDraft));
       setPublerCredentialMessage(json.settings.publerCredentialMessage);
-      setAiCredentialMessage(json.settings.aiCredentialMessage);
       setPublerApiKey("");
-      setAiApiKey("");
       setSuccess("Settings saved.");
     } catch (saveError) {
       const message = saveError instanceof Error ? saveError.message : "Unable to save settings.";
@@ -409,23 +414,6 @@ export function SettingsManager({
       setIsSaving(false);
     }
   }
-
-  useEffect(() => {
-    if (!canLoadAiModels) {
-      if (aiProvider === "custom_endpoint") {
-        setAiModels([]);
-      }
-      return;
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      void loadAiModels({ silent: true });
-    }, 350);
-
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, [aiProvider, aiApiKey, aiCustomEndpoint, canUseStoredAiKey, storedAiProvider]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!canLoadPublerWorkspaces) {
@@ -462,286 +450,328 @@ export function SettingsManager({
 
   return (
     <div className="space-y-6">
-      <section className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-6 shadow-[var(--dashboard-shadow-sm)]">
-        <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
-            Publer
-          </p>
-          <h2 className="mt-2 text-2xl font-black tracking-[-0.04em]">
-            Publishing access
-          </h2>
-        </div>
-
-        <div className="mt-5">
-          <label className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
-            Publer API key
-          </label>
-          <input
-            type="password"
-            value={publerApiKey}
-            onChange={(event) => setPublerApiKey(event.target.value)}
-            placeholder={
-              hasStoredPublerKey
-                ? "Stored key present. Re-enter only to replace it."
-                : "Paste Publer API key"
-            }
-            className="mt-3 w-full rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 outline-none"
-          />
-          {hasStoredPublerKey && !canUseStoredPublerKey ? (
-            <p className="mt-3 rounded-2xl border border-[var(--dashboard-warning-border)] bg-[var(--dashboard-warning-soft)] px-4 py-3 text-sm text-[var(--dashboard-warning-ink)]">
-              Stored Publer key is not usable in the current environment. {publerCredentialMessage}
-            </p>
-          ) : null}
-        </div>
-
-        <div className="mt-5 rounded-[24px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-4">
+      <section className="overflow-hidden rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] shadow-[var(--dashboard-shadow-sm)]">
+        <div className="border-b border-[var(--dashboard-line)] bg-[var(--dashboard-panel-alt)] px-5 py-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <label className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
-              Workspace profiles
-            </label>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
+                Publer
+              </p>
+              <h2 className="mt-1 text-xl font-black tracking-[-0.03em]">Publishing access</h2>
+            </div>
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={() => void loadPublerWorkspaces()}
                 disabled={isLoadingPublerWorkspaces || !canLoadPublerWorkspaces}
-                className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] disabled:opacity-60"
+                className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] disabled:opacity-60"
               >
                 <BusyActionLabel
                   busy={isLoadingPublerWorkspaces}
                   label="Load workspaces"
-                  busyLabel="Loading workspaces..."
+                  busyLabel="Loading..."
                 />
               </button>
               <button
                 type="button"
                 onClick={addWorkspaceProfile}
                 disabled={publerWorkspaces.length === 0}
-                className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] disabled:opacity-60"
+                className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] disabled:opacity-60"
               >
                 Add profile
               </button>
             </div>
           </div>
+        </div>
 
-          <div className="mt-4 space-y-3">
-            {workspaceProfiles.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-4 py-4 text-sm text-[var(--dashboard-muted)]">
-                No workspace profiles yet.
-              </div>
-            ) : (
-              workspaceProfiles.map((profile, index) => {
-                const accounts = publerAccountsByWorkspace[profile.workspaceId] ?? [];
-                const boards =
-                  publerBoardsByWorkspaceAccount[
-                    getWorkspaceBoardCacheKey(profile.workspaceId, profile.defaultAccountId)
-                  ] ?? [];
+        <div className="px-5 py-5">
+          <div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)] lg:items-center">
+            <FieldLabel>Publer API key</FieldLabel>
+            <div className="space-y-3">
+              <input
+                type="password"
+                value={publerApiKey}
+                onChange={(event) => setPublerApiKey(event.target.value)}
+                placeholder={
+                  hasStoredPublerKey
+                    ? "Stored key present. Re-enter only to replace it."
+                    : "Paste Publer API key"
+                }
+                className="w-full rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 outline-none"
+              />
+              {hasStoredPublerKey && !canUseStoredPublerKey ? (
+                <p className="rounded-2xl border border-[var(--dashboard-warning-border)] bg-[var(--dashboard-warning-soft)] px-4 py-3 text-sm text-[var(--dashboard-warning-ink)]">
+                  Stored Publer key is not usable in the current environment. {publerCredentialMessage}
+                </p>
+              ) : null}
+            </div>
+          </div>
 
-                return (
-                  <div
-                    key={`${profile.workspaceId || "new"}-${index}`}
-                    className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-4"
-                  >
-                  {loadingWorkspaceProfileIndex === index ? (
-                    <p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--dashboard-muted)]">
-                      <BusyActionLabel
-                        busy
-                        label="Profile ready"
-                        busyLabel="Loading accounts and boards..."
-                      />
-                    </p>
-                  ) : null}
-                  <div className="grid gap-3 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_auto_auto]">
-                    <select
-                      value={profile.workspaceId}
-                      onChange={(event) => handleWorkspaceSelection(index, event.target.value)}
-                      disabled={loadingWorkspaceProfileIndex === index}
-                      className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 outline-none"
-                    >
-                      <option value="">Select workspace</option>
-                      {publerWorkspaces.map((workspace) => (
-                        <option key={workspace.id} value={workspace.id}>
-                          {workspace.name}
-                        </option>
-                      ))}
-                    </select>
-                    <input
-                      value={profile.allowedDomainsInput}
-                      onChange={(event) =>
-                        updateWorkspaceProfile(index, "allowedDomainsInput", event.target.value)
-                      }
-                      placeholder="mightypaint.com, anotherdomain.com"
-                      className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 outline-none"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setDefaultWorkspaceProfile(index)}
-                      disabled={loadingWorkspaceProfileIndex === index}
-                      className={`rounded-full border px-4 py-2 text-sm font-semibold ${
-                        profile.isDefault
-                          ? "border-[var(--dashboard-accent-border)] bg-[var(--dashboard-accent-soft-strong)] text-[var(--dashboard-accent-strong)]"
-                          : "border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] text-[var(--dashboard-subtle)]"
-                      } disabled:opacity-60`}
-                    >
-                      Default
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => removeWorkspaceProfile(index)}
-                      disabled={loadingWorkspaceProfileIndex === index}
-                      className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] disabled:opacity-60"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                    <div className="mt-3 grid gap-3 md:grid-cols-2">
-                      <select
-                        value={profile.defaultAccountId}
-                        onChange={(event) => handleWorkspaceAccountSelection(index, event.target.value)}
-                        disabled={loadingWorkspaceProfileIndex === index}
-                        className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 outline-none"
+          <div className="mt-5 overflow-hidden rounded-[22px] border border-[var(--dashboard-line)]">
+            <div className="overflow-x-auto">
+              <table className="min-w-[1040px] w-full table-fixed">
+                <thead className="bg-[var(--dashboard-panel-alt)]">
+                  <tr className="text-left">
+                    <SettingsHead className="w-[23%]">Workspace</SettingsHead>
+                    <SettingsHead className="w-[22%]">Domains</SettingsHead>
+                    <SettingsHead className="w-[22%]">Account</SettingsHead>
+                    <SettingsHead className="w-[22%]">Board</SettingsHead>
+                    <SettingsHead className="w-[11%]">Actions</SettingsHead>
+                  </tr>
+                </thead>
+                <tbody>
+                  {workspaceProfiles.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={5}
+                        className="px-5 py-5 text-sm text-[var(--dashboard-subtle)]"
                       >
-                        <option value="">Default account</option>
-                        {accounts.map((account) => (
-                          <option key={String(account.id)} value={String(account.id)}>
-                            {account.name ?? `${account.provider} ${account.id}`}
-                          </option>
-                        ))}
-                      </select>
-                      <select
-                        value={profile.defaultBoardId}
-                        onChange={(event) => updateWorkspaceProfile(index, "defaultBoardId", event.target.value)}
-                        disabled={loadingWorkspaceProfileIndex === index}
-                        className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 outline-none"
-                      >
-                        <option value="">Default board</option>
-                        {boards.map((board) => (
-                          <option key={board.id} value={board.id}>
-                            {board.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                );
-              })
-            )}
+                        No workspace profiles yet.
+                      </td>
+                    </tr>
+                  ) : (
+                    workspaceProfiles.map((profile, index) => {
+                      const accounts = publerAccountsByWorkspace[profile.workspaceId] ?? [];
+                      const boards =
+                        publerBoardsByWorkspaceAccount[
+                          getWorkspaceBoardCacheKey(profile.workspaceId, profile.defaultAccountId)
+                        ] ?? [];
+
+                      return (
+                        <tr
+                          key={`${profile.workspaceId || "new"}-${index}`}
+                          className={index === workspaceProfiles.length - 1 ? "" : "border-b border-[var(--dashboard-line)]"}
+                        >
+                          <td className="px-5 py-4 align-top">
+                            <div className="space-y-2">
+                              <select
+                                value={profile.workspaceId}
+                                onChange={(event) => handleWorkspaceSelection(index, event.target.value)}
+                                disabled={loadingWorkspaceProfileIndex === index}
+                                className="w-full rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 outline-none"
+                              >
+                                <option value="">Select workspace</option>
+                                {publerWorkspaces.map((workspace) => (
+                                  <option key={workspace.id} value={workspace.id}>
+                                    {workspace.name}
+                                  </option>
+                                ))}
+                              </select>
+                              {loadingWorkspaceProfileIndex === index ? (
+                                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--dashboard-muted)]">
+                                  <BusyActionLabel busy label="Ready" busyLabel="Loading..." />
+                                </p>
+                              ) : null}
+                            </div>
+                          </td>
+                          <td className="px-5 py-4 align-top">
+                            <input
+                              value={profile.allowedDomainsInput}
+                              onChange={(event) =>
+                                updateWorkspaceProfile(index, "allowedDomainsInput", event.target.value)
+                              }
+                              placeholder="mightypaint.com, anotherdomain.com"
+                              className="w-full rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 outline-none"
+                            />
+                          </td>
+                          <td className="px-5 py-4 align-top">
+                            <select
+                              value={profile.defaultAccountId}
+                              onChange={(event) => handleWorkspaceAccountSelection(index, event.target.value)}
+                              disabled={loadingWorkspaceProfileIndex === index}
+                              className="w-full rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 outline-none"
+                            >
+                              <option value="">Default account</option>
+                              {accounts.map((account) => (
+                                <option key={String(account.id)} value={String(account.id)}>
+                                  {account.name ?? `${account.provider} ${account.id}`}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                          <td className="px-5 py-4 align-top">
+                            <select
+                              value={profile.defaultBoardId}
+                              onChange={(event) => updateWorkspaceProfile(index, "defaultBoardId", event.target.value)}
+                              disabled={loadingWorkspaceProfileIndex === index}
+                              className="w-full rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 outline-none"
+                            >
+                              <option value="">Default board</option>
+                              {boards.map((board) => (
+                                <option key={board.id} value={board.id}>
+                                  {board.name}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                          <td className="px-5 py-4 align-top">
+                            <div className="flex flex-col gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setDefaultWorkspaceProfile(index)}
+                                disabled={loadingWorkspaceProfileIndex === index}
+                                className={`rounded-full border px-4 py-2 text-sm font-semibold ${
+                                  profile.isDefault
+                                    ? "border-[var(--dashboard-accent-border)] bg-[var(--dashboard-accent-soft-strong)] text-[var(--dashboard-accent-strong)]"
+                                    : "border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] text-[var(--dashboard-subtle)]"
+                                } disabled:opacity-60`}
+                              >
+                                {profile.isDefault ? "Default" : "Make default"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => removeWorkspaceProfile(index)}
+                                disabled={loadingWorkspaceProfileIndex === index}
+                                className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] disabled:opacity-60"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </section>
 
-      <section className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-6 shadow-[var(--dashboard-shadow-sm)]">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
-              AI
-            </p>
-            <h2 className="mt-2 text-2xl font-black tracking-[-0.04em]">
-              Copy generation settings
-            </h2>
+      <section className="overflow-hidden rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] shadow-[var(--dashboard-shadow-sm)]">
+        <div className="border-b border-[var(--dashboard-line)] bg-[var(--dashboard-panel-alt)] px-5 py-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
+                AI
+              </p>
+              <h2 className="mt-1 text-xl font-black tracking-[-0.03em]">Copy generation keys</h2>
+            </div>
+            <button
+              type="button"
+              onClick={addAiCredential}
+              className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] disabled:opacity-60"
+            >
+              Add key
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={() => void loadAiModels()}
-            disabled={isLoadingAiModels || !canLoadAiModels || aiProvider === "custom_endpoint"}
-            className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-5 py-3 text-sm font-semibold text-[var(--dashboard-subtle)] disabled:opacity-60"
-          >
-            <BusyActionLabel
-              busy={isLoadingAiModels}
-              label="Refresh models"
-              busyLabel="Refreshing models..."
-            />
-          </button>
         </div>
 
-        <div className="mt-5 grid gap-4 md:grid-cols-2">
-          <div>
-            <label className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
-              Provider
-            </label>
-            <select
-              value={aiProvider}
-              onChange={(event) => {
-                const nextProvider = event.target.value as AIProvider;
-                setAiProvider(nextProvider);
-                setAiModel("");
-                setAiModels([]);
-              }}
-              className="mt-3 w-full rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 outline-none"
-            >
-              {aiProviderOptions.map((provider) => (
-                <option key={provider.value} value={provider.value}>
-                  {provider.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
-              API key
-            </label>
-            <input
-              type="password"
-              value={aiApiKey}
-              onChange={(event) => setAiApiKey(event.target.value)}
-              onBlur={() => void loadAiModels()}
-              placeholder={
-                hasStoredAiKey
-                  ? "Stored key present. Re-enter only to replace it."
-                  : "Paste AI provider API key"
-              }
-              className="mt-3 w-full rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 outline-none"
-            />
-            {hasStoredAiKey && !canUseStoredAiKey ? (
-              <p className="mt-3 rounded-2xl border border-[var(--dashboard-warning-border)] bg-[var(--dashboard-warning-soft)] px-4 py-3 text-sm text-[var(--dashboard-warning-ink)]">
-                Stored AI key is not usable in the current environment. {aiCredentialMessage}
-              </p>
-            ) : null}
-          </div>
-
-          {aiProvider === "custom_endpoint" ? (
-            <div className="md:col-span-2">
-              <label className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
-                Custom endpoint
-              </label>
-              <input
-                value={aiCustomEndpoint}
-                onChange={(event) => setAiCustomEndpoint(event.target.value)}
-                className="mt-3 w-full rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 outline-none"
-              />
-            </div>
-          ) : null}
-
-          <div>
-            <label className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
-              Model list
-            </label>
-            <select
-              value={aiModel}
-              onChange={(event) => setAiModel(event.target.value)}
-              className="mt-3 w-full rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 outline-none"
-            >
-              <option value="">Select model</option>
-              {aiModels.map((model) => (
-                <option key={model} value={model}>
-                  {model}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
-              Model ID
-            </label>
-            <input
-              value={aiModel}
-              onChange={(event) => setAiModel(event.target.value)}
-              placeholder={
-                aiProvider === "custom_endpoint" ? "Type model id" : "Select above or type model id"
-              }
-              className="mt-3 w-full rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 outline-none"
-            />
+        <div className="overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="min-w-[1080px] w-full table-fixed">
+              <thead className="bg-[var(--dashboard-panel-alt)]">
+                <tr className="text-left">
+                  <SettingsHead className="w-[18%]">Label</SettingsHead>
+                  <SettingsHead className="w-[16%]">Provider</SettingsHead>
+                  <SettingsHead className="w-[24%]">API key</SettingsHead>
+                  <SettingsHead className="w-[18%]">Model</SettingsHead>
+                  <SettingsHead className="w-[14%]">Endpoint</SettingsHead>
+                  <SettingsHead className="w-[10%]">Actions</SettingsHead>
+                </tr>
+              </thead>
+              <tbody>
+                {aiCredentials.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-5 py-5 text-sm text-[var(--dashboard-subtle)]">
+                      No AI keys saved yet.
+                    </td>
+                  </tr>
+                ) : (
+                  aiCredentials.map((credential, index) => (
+                    <tr
+                      key={`${credential.id || "new"}-${index}`}
+                      className={index === aiCredentials.length - 1 ? "" : "border-b border-[var(--dashboard-line)]"}
+                    >
+                      <td className="px-5 py-4 align-top">
+                        <input
+                          value={credential.label}
+                          onChange={(event) => updateAiCredential(index, "label", event.target.value)}
+                          placeholder="Primary Gemini"
+                          className="w-full rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 outline-none"
+                        />
+                      </td>
+                      <td className="px-5 py-4 align-top">
+                        <select
+                          value={credential.provider}
+                          onChange={(event) =>
+                            updateAiCredential(index, "provider", event.target.value as AIProvider)
+                          }
+                          className="w-full rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 outline-none"
+                        >
+                          {aiProviderOptions.map((provider) => (
+                            <option key={provider.value} value={provider.value}>
+                              {provider.label}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="px-5 py-4 align-top">
+                        <div className="space-y-2">
+                          <input
+                            type="password"
+                            value={credential.apiKeyInput}
+                            onChange={(event) => updateAiCredential(index, "apiKeyInput", event.target.value)}
+                            placeholder={
+                              credential.hasStoredKey
+                                ? "Stored key present. Re-enter only to replace it."
+                                : "Paste API key"
+                            }
+                            className="w-full rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 outline-none"
+                          />
+                          {credential.credentialState === "unavailable" ? (
+                            <p className="text-sm text-[var(--dashboard-warning-ink)]">
+                              {credential.credentialMessage}
+                            </p>
+                          ) : null}
+                        </div>
+                      </td>
+                      <td className="px-5 py-4 align-top">
+                        <input
+                          value={credential.model}
+                          onChange={(event) => updateAiCredential(index, "model", event.target.value)}
+                          placeholder="gemini-2.5-flash"
+                          className="w-full rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 outline-none"
+                        />
+                      </td>
+                      <td className="px-5 py-4 align-top">
+                        <input
+                          value={credential.customEndpoint}
+                          onChange={(event) =>
+                            updateAiCredential(index, "customEndpoint", event.target.value)
+                          }
+                          placeholder={credential.provider === "custom_endpoint" ? "https://..." : "Optional"}
+                          className="w-full rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 outline-none"
+                        />
+                      </td>
+                      <td className="px-5 py-4 align-top">
+                        <div className="flex flex-col gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setDefaultAiCredential(index)}
+                            className={`rounded-full border px-4 py-2 text-sm font-semibold ${
+                              credential.isDefault
+                                ? "border-[var(--dashboard-accent-border)] bg-[var(--dashboard-accent-soft-strong)] text-[var(--dashboard-accent-strong)]"
+                                : "border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] text-[var(--dashboard-subtle)]"
+                            }`}
+                          >
+                            {credential.isDefault ? "Default" : "Make default"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => removeAiCredential(index)}
+                            className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)]"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       </section>
@@ -772,6 +802,41 @@ export function SettingsManager({
   );
 }
 
+function FieldLabel({ children }: { children: string }) {
+  return (
+    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
+      {children}
+    </p>
+  );
+}
+
+function SettingsHead({ children, className = "" }: { children: string; className?: string }) {
+  return (
+    <th
+      className={`px-5 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)] ${className}`}
+    >
+      {children}
+    </th>
+  );
+}
+
+function SettingsRow({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <tr className="border-b border-[var(--dashboard-line)] last:border-b-0">
+      <td className="w-[220px] px-5 py-4 align-top">
+        <FieldLabel>{label}</FieldLabel>
+      </td>
+      <td className="px-5 py-4">{children}</td>
+    </tr>
+  );
+}
+
 function parseAllowedDomains(input: string) {
   return input
     .split(",")
@@ -787,6 +852,22 @@ function toWorkspaceProfileDraft(profile: WorkspaceProfileSummary): WorkspacePro
     isDefault: profile.isDefault,
     defaultAccountId: profile.defaultAccountId,
     defaultBoardId: profile.defaultBoardId,
+  };
+}
+
+function toAiCredentialDraft(credential: AiCredentialSummary): AiCredentialDraft {
+  return {
+    id: credential.id,
+    label: credential.label,
+    provider: credential.provider,
+    apiKeyInput: "",
+    model: credential.model,
+    customEndpoint: credential.customEndpoint,
+    isDefault: credential.isDefault,
+    hasStoredKey: credential.hasApiKey,
+    canUseStoredKey: credential.canUseApiKey,
+    credentialState: credential.credentialState,
+    credentialMessage: credential.credentialMessage,
   };
 }
 
@@ -810,19 +891,5 @@ function resolveWorkspaceName(
 
 function getWorkspaceBoardCacheKey(workspaceId: string, accountId: string) {
   return `${workspaceId}:${accountId || ""}`;
-}
-
-function getAiProviderLabel(provider: AIProvider) {
-  switch (provider) {
-    case "openai":
-      return "OpenAI";
-    case "gemini":
-      return "Gemini";
-    case "openrouter":
-      return "OpenRouter";
-    case "custom_endpoint":
-    default:
-      return "custom endpoint";
-  }
 }
 

@@ -7,7 +7,11 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useAppFeedback } from "@/components/ui/AppFeedbackProvider";
 import { buildSchedulePreview } from "@/lib/jobs/schedulePreview";
-import type { PublishScheduleContext, WorkspaceProfileSummary } from "@/lib/types";
+import type {
+  AiCredentialSummary,
+  PublishScheduleContext,
+  WorkspaceProfileSummary,
+} from "@/lib/types";
 
 type PinItem = {
   id: string;
@@ -46,6 +50,8 @@ type PublerBoard = {
 type JobPublishManagerProps = {
   jobId: string;
   workspaceProfiles: WorkspaceProfileSummary[];
+  aiCredentials: AiCredentialSummary[];
+  defaultAiCredentialId: string;
   initialScheduleContext: PublishScheduleContext;
   pins: PinItem[];
   defaults: {
@@ -135,6 +141,8 @@ type PersistedPublishSelection = {
 export function JobPublishManager({
   jobId,
   workspaceProfiles,
+  aiCredentials,
+  defaultAiCredentialId,
   initialScheduleContext,
   pins,
   defaults,
@@ -173,6 +181,9 @@ export function JobPublishManager({
   const [accounts, setAccounts] = useState<PublerAccount[]>([]);
   const [boards, setBoards] = useState<PublerBoard[]>([]);
   const [profileCatalog, setProfileCatalog] = useState(workspaceProfiles);
+  const [selectedAiCredentialId, setSelectedAiCredentialId] = useState(
+    defaultAiCredentialId || aiCredentials[0]?.id || "",
+  );
   const [scheduleContext, setScheduleContext] = useState(initialScheduleContext);
   const [optionsError, setOptionsError] = useState<string | null>(null);
   const [sectionFeedback, setSectionFeedback] = useState<Record<PublishSectionKey, BannerState>>({
@@ -234,6 +245,21 @@ export function JobPublishManager({
   }, [workspaceProfiles]);
 
   useEffect(() => {
+    if (!selectedAiCredentialId && (defaultAiCredentialId || aiCredentials[0]?.id)) {
+      setSelectedAiCredentialId(defaultAiCredentialId || aiCredentials[0]?.id || "");
+      return;
+    }
+
+    if (
+      selectedAiCredentialId &&
+      aiCredentials.length > 0 &&
+      !aiCredentials.some((credential) => credential.id === selectedAiCredentialId)
+    ) {
+      setSelectedAiCredentialId(defaultAiCredentialId || aiCredentials[0]?.id || "");
+    }
+  }, [aiCredentials, defaultAiCredentialId, selectedAiCredentialId]);
+
+  useEffect(() => {
     setScheduleContext(initialScheduleContext);
   }, [initialScheduleContext]);
 
@@ -252,6 +278,10 @@ export function JobPublishManager({
   const currentWorkspaceProfile = useMemo(
     () => profileCatalog.find((profile) => profile.workspaceId === workspaceId) ?? null,
     [profileCatalog, workspaceId],
+  );
+  const selectedAiCredential = useMemo(
+    () => aiCredentials.find((credential) => credential.id === selectedAiCredentialId) ?? null,
+    [aiCredentials, selectedAiCredentialId],
   );
   const currentWorkspaceName = useMemo(
     () =>
@@ -411,6 +441,9 @@ export function JobPublishManager({
   );
 
   const aiRuntimeState = useMemo(() => resolveAiRuntimeState(integrationReady), [integrationReady]);
+  const canUseSelectedAiCredential = Boolean(
+    selectedAiCredential && selectedAiCredential.canUseApiKey,
+  );
 
   // `loadPublerOptions` is intentionally invoked once here after local state hydration.
   // Subsequent workspace/account changes call it directly from event handlers.
@@ -781,6 +814,7 @@ export function JobPublishManager({
     action: "upload_media" | "generate_titles" | "generate_descriptions";
     generatedPinIds: string[];
     workspaceId?: string;
+    aiCredentialId?: string;
     fallbackMessage: string;
     section: PublishSectionKey;
   }) {
@@ -855,6 +889,9 @@ export function JobPublishManager({
             const nextResult = await runAction({
               action: input.action,
               generatedPinIds: [pinId],
+              ...(input.action !== "upload_media" && input.aiCredentialId
+                ? { aiCredentialId: input.aiCredentialId }
+                : {}),
               ...(input.action === "upload_media" && input.workspaceId
                 ? { workspaceId: input.workspaceId }
                 : {}),
@@ -1339,6 +1376,7 @@ function formatDateLabel(value: string) {
     void handlePinBatchAction({
       action: "generate_titles",
       generatedPinIds: selectedPinIds,
+      aiCredentialId: selectedAiCredentialId,
       fallbackMessage: "Unable to generate titles.",
       section: "titles",
     });
@@ -1348,6 +1386,7 @@ function formatDateLabel(value: string) {
     void handlePinBatchAction({
       action: "generate_descriptions",
       generatedPinIds: selectedPinIds,
+      aiCredentialId: selectedAiCredentialId,
       fallbackMessage: "Unable to generate descriptions.",
       section: "descriptions",
     });
@@ -1963,6 +2002,36 @@ function formatDateLabel(value: string) {
             </div>
           </section>
 
+          <section className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-5 shadow-[var(--dashboard-shadow-sm)]">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-bold">AI credential</h2>
+                <p className="mt-1 text-sm text-[var(--dashboard-subtle)]">
+                  Titles and descriptions use the selected saved key.
+                </p>
+              </div>
+              <div className="min-w-[280px]">
+                <select
+                  value={selectedAiCredentialId}
+                  onChange={(event) => setSelectedAiCredentialId(event.target.value)}
+                  className="w-full rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 outline-none"
+                >
+                  {aiCredentials.map((credential) => (
+                    <option key={credential.id} value={credential.id}>
+                      {credential.label}
+                      {credential.isDefault ? " (Default)" : ""}
+                    </option>
+                  ))}
+                </select>
+                {selectedAiCredential && !selectedAiCredential.canUseApiKey ? (
+                  <p className="mt-2 text-sm text-[var(--dashboard-warning-ink)]">
+                    {selectedAiCredential.credentialMessage}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          </section>
+
           <StepCard
             id="publish-titles"
             title="Step 2 - Titles"
@@ -1971,13 +2040,19 @@ function formatDateLabel(value: string) {
             actionBusy={isGeneratingTitles}
             actionBusyLabel="Generating titles..."
             disabled={
-              isPending || Boolean(activeAction) || selectedPins.length === 0 || !integrationReady.canUseAiApiKey
+              isPending ||
+              Boolean(activeAction) ||
+              selectedPins.length === 0 ||
+              !integrationReady.canUseAiApiKey ||
+              !selectedAiCredentialId ||
+              !canUseSelectedAiCredential
             }
             feedback={sectionFeedback.titles}
             onClick={() =>
               void handlePinBatchAction({
                 action: "generate_titles",
                 generatedPinIds: selectedPinIds,
+                aiCredentialId: selectedAiCredentialId,
                 fallbackMessage: "Unable to generate titles.",
                 section: "titles",
               })
@@ -2004,13 +2079,19 @@ function formatDateLabel(value: string) {
             actionBusy={isGeneratingDescriptions}
             actionBusyLabel="Generating descriptions..."
             disabled={
-              isPending || Boolean(activeAction) || selectedPins.length === 0 || !integrationReady.canUseAiApiKey
+              isPending ||
+              Boolean(activeAction) ||
+              selectedPins.length === 0 ||
+              !integrationReady.canUseAiApiKey ||
+              !selectedAiCredentialId ||
+              !canUseSelectedAiCredential
             }
             feedback={sectionFeedback.descriptions}
             onClick={() =>
               void handlePinBatchAction({
                 action: "generate_descriptions",
                 generatedPinIds: selectedPinIds,
+                aiCredentialId: selectedAiCredentialId,
                 fallbackMessage: "Unable to generate descriptions.",
                 section: "descriptions",
               })

@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { BusyActionLabel } from "@/components/ui/BusyActionLabel";
 import { useAppFeedback } from "@/components/ui/AppFeedbackProvider";
+import type { AiCredentialSummary } from "@/lib/types";
 
 type SourceImageItem = {
   id: string;
@@ -105,6 +106,8 @@ type JobReviewManagerProps = {
   toneHint: string | null;
   listCountHint: number | null;
   titleVariationCount: number | null;
+  aiCredentials: AiCredentialSummary[];
+  defaultAiCredentialId: string;
   images: SourceImageItem[];
   templates: TemplateOption[];
   visualPresetOptions: VisualPresetOption[];
@@ -120,6 +123,8 @@ export function JobReviewManager({
   toneHint,
   listCountHint,
   titleVariationCount,
+  aiCredentials,
+  defaultAiCredentialId,
   images: initialImages,
   templates,
   visualPresetOptions,
@@ -157,6 +162,9 @@ export function JobReviewManager({
   );
   const [titleVariationCountValue, setTitleVariationCountValue] = useState(
     titleVariationCount ? String(titleVariationCount) : "3",
+  );
+  const [aiCredentialId, setAiCredentialId] = useState(
+    defaultAiCredentialId || aiCredentials[0]?.id || "",
   );
   const [planDrafts, setPlanDrafts] = useState<PlanDraft[]>(
     plans.map((plan) => ({
@@ -203,6 +211,8 @@ export function JobReviewManager({
   const selectedPlanGeneratedPins = selectedPlan
     ? generatedPins.filter((pin) => pin.planId === selectedPlan.id)
     : [];
+  const selectedAiCredential =
+    aiCredentials.find((credential) => credential.id === aiCredentialId) ?? null;
   const orderedGeneratedPins = selectedPlan
     ? [
         ...selectedPlanGeneratedPins,
@@ -504,6 +514,7 @@ export function JobReviewManager({
 
         const result = await runAction(`/api/dashboard/jobs/${jobId}/generate`, {
           planIds: [plan.id],
+          aiCredentialId,
         });
         generatedPinCount += result.generatedPinCount ?? 0;
 
@@ -1150,7 +1161,24 @@ export function JobReviewManager({
               <span>{generatedPins.length} outputs</span>
             </div>
           </div>
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <select
+              value={aiCredentialId}
+              onChange={(event) => setAiCredentialId(event.target.value)}
+              className="min-w-[220px] rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)]"
+            >
+              {aiCredentials.map((credential) => (
+                <option key={credential.id} value={credential.id}>
+                  {credential.label}
+                  {credential.isDefault ? " (Default)" : ""}
+                </option>
+              ))}
+            </select>
+            {selectedAiCredential && !selectedAiCredential.canUseApiKey ? (
+              <p className="text-sm text-[var(--dashboard-warning-ink)]">
+                {selectedAiCredential.credentialMessage}
+              </p>
+            ) : null}
             <button
               type="button"
               onClick={() => handleDiscardPlans()}
@@ -1178,7 +1206,13 @@ export function JobReviewManager({
             <button
               type="button"
               onClick={() => handleGeneratePins()}
-              disabled={Boolean(activeAction) || isRenderingPlans || selectedRenderablePlans.length === 0}
+              disabled={
+                Boolean(activeAction) ||
+                isRenderingPlans ||
+                selectedRenderablePlans.length === 0 ||
+                aiCredentials.length === 0 ||
+                !selectedAiCredential?.canUseApiKey
+              }
               className="rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
             >
               <BusyActionLabel
@@ -1341,7 +1375,9 @@ export function JobReviewManager({
                         disabled={
                           Boolean(activeAction) ||
                           isRenderingPlans ||
-                          !["READY", "DRAFT", "FAILED"].includes(selectedPlan.status)
+                          !["READY", "DRAFT", "FAILED"].includes(selectedPlan.status) ||
+                          aiCredentials.length === 0 ||
+                          !selectedAiCredential?.canUseApiKey
                         }
                         className="rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
                       >

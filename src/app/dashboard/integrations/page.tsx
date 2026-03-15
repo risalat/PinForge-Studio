@@ -11,6 +11,8 @@ export default async function DashboardIntegrationsPage() {
     publerAccountId: "",
     publerBoardId: "",
     workspaceProfiles: [],
+    aiCredentials: [],
+    defaultAiCredentialId: "",
     aiProvider: "gemini" as const,
     aiModel: "",
     aiCustomEndpoint: "",
@@ -47,12 +49,12 @@ export default async function DashboardIntegrationsPage() {
           tone={settings.publerCredentialState === "missing" ? "warning" : settings.publerCredentialState === "ready" ? "good" : "warning"}
         />
         <IntegrationStat
-          label="AI provider"
+          label="AI keys"
           value={
-            settings.aiCredentialState === "ready"
-              ? settings.aiProvider
+            settings.aiCredentials.length > 0
+              ? String(settings.aiCredentials.length)
               : settings.aiCredentialState === "unavailable"
-                ? `${settings.aiProvider} unavailable`
+                ? "Saved but unavailable"
                 : "Missing key"
           }
           tone={settings.aiCredentialState === "missing" ? "warning" : settings.aiCredentialState === "ready" ? "good" : "warning"}

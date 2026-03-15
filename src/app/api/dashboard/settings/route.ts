@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireAuthenticatedDashboardApiUser } from "@/lib/auth/dashboardSession";
 import { isDatabaseConfigured } from "@/lib/env";
 import {
+  type AiCredentialInput,
   getIntegrationSettingsSummary,
   type WorkspaceProfileInput,
   saveIntegrationSettings,
@@ -30,6 +31,19 @@ const settingsSchema = z.object({
   aiApiKey: z.string().optional(),
   aiModel: z.string().optional(),
   aiCustomEndpoint: z.string().optional(),
+  aiCredentials: z
+    .array(
+      z.object({
+        id: z.string().optional(),
+        label: z.string(),
+        provider: z.enum(["gemini", "openai", "openrouter", "custom_endpoint"]),
+        apiKey: z.string().optional(),
+        model: z.string().optional(),
+        customEndpoint: z.string().optional(),
+        isDefault: z.boolean().optional(),
+      }),
+    )
+    .optional(),
 });
 
 export async function GET() {
@@ -78,6 +92,7 @@ export async function POST(request: Request) {
     await saveIntegrationSettings({
       ...payload,
       workspaceProfiles: payload.workspaceProfiles as WorkspaceProfileInput[] | undefined,
+      aiCredentials: payload.aiCredentials as AiCredentialInput[] | undefined,
     });
     const settings = await getIntegrationSettingsSummary();
 

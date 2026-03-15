@@ -12,6 +12,7 @@ import {
   generatePinDescription,
   generatePinRenderCopy,
   generatePinTitle,
+  type AIProvider,
   type GeneratePinRenderCopyRequest,
   type GeneratePinDescriptionRequest,
   type GeneratePinTitleRequest,
@@ -36,7 +37,10 @@ import {
 } from "@/lib/publer/publerClient";
 import { buildSchedulePreview } from "@/lib/jobs/schedulePreview";
 import { renderPin } from "@/lib/renderer/renderPin";
-import { getIntegrationSettingsForUserId } from "@/lib/settings/integrationSettings";
+import {
+  getIntegrationSettingsForUserId,
+  resolveAiCredentialForUserId,
+} from "@/lib/settings/integrationSettings";
 import { getStorageProvider } from "@/lib/storage";
 import { buildStorageAssetUrl, resolveStoredAssetUrl } from "@/lib/storage/assetUrl";
 import {
@@ -735,9 +739,24 @@ export async function generatePinsForJob(input: {
   userId: string;
   jobId: string;
   planIds?: string[];
+  aiCredentialId?: string;
 }) {
   const job = await getOwnedJobOrThrow(input.jobId, input.userId);
-  const settings = await getIntegrationSettingsForUserId(input.userId);
+  const [settings, aiCredential] = await Promise.all([
+    getIntegrationSettingsForUserId(input.userId),
+    resolveAiCredentialForUserId({
+      userId: input.userId,
+      aiCredentialId: input.aiCredentialId,
+    }),
+  ]);
+  const aiConfig = aiCredential
+    ? {
+        aiProvider: aiCredential.provider,
+        aiApiKey: aiCredential.apiKey,
+        aiModel: aiCredential.model,
+        aiCustomEndpoint: aiCredential.customEndpoint,
+      }
+    : settings;
   const pendingPlanStatuses = new Set<GenerationPlanStatus>([
     GenerationPlanStatus.DRAFT,
     GenerationPlanStatus.READY,
@@ -783,7 +802,7 @@ export async function generatePinsForJob(input: {
       },
     });
 
-    const renderCopy = await generateRenderCopyForPlan(job, plan, settings);
+      const renderCopy = await generateRenderCopyForPlan(job, plan, aiConfig);
     const nextRenderContext = serializePlanRenderContext({
       ...parsePlanRenderContext(plan.notes),
       ...renderCopy,
@@ -1143,9 +1162,16 @@ export async function generateTitlesForJobPins(input: {
   userId: string;
   jobId: string;
   generatedPinIds?: string[];
+  aiCredentialId?: string;
 }) {
   const job = await getOwnedJobOrThrow(input.jobId, input.userId);
-  const settings = await getIntegrationSettingsForUserId(input.userId);
+  const aiCredential = await resolveAiCredentialForUserId({
+    userId: input.userId,
+    aiCredentialId: input.aiCredentialId,
+  });
+  if (!aiCredential) {
+    throw new Error("Save an AI credential in Integrations before generating titles.");
+  }
   const selectedPins = selectPinsForWorkflowAction(job, input.generatedPinIds);
   const result = createStepResultAccumulator();
   const generatedTitleOptions: Array<{
@@ -1167,7 +1193,7 @@ export async function generateTitlesForJobPins(input: {
     result.processed += 1;
 
     try {
-      const titleDrafts = await generatePinTitle(
+        const titleDrafts = await generatePinTitle(
         buildTitleRequest(job, {
           templateName: pin.template.name,
           templateSupportsSubtitle:
@@ -1180,13 +1206,13 @@ export async function generateTitlesForJobPins(input: {
             job.listCountHint ??
             job.sourceImages.length,
         }),
-        {
-          provider: settings.aiProvider,
-          apiKey: settings.aiApiKey,
-          model: settings.aiModel,
-          customEndpoint: settings.aiCustomEndpoint,
-        },
-      );
+          {
+            provider: aiCredential.provider,
+            apiKey: aiCredential.apiKey,
+            model: aiCredential.model,
+            customEndpoint: aiCredential.customEndpoint,
+          },
+        );
       const titleCandidates = normalizeGeneratedTitleCandidates(titleDrafts);
       const title = titleCandidates[0]?.trim();
       if (!title) {
@@ -1300,9 +1326,16 @@ export async function generateDescriptionsForJobPins(input: {
   userId: string;
   jobId: string;
   generatedPinIds?: string[];
+  aiCredentialId?: string;
 }) {
   const job = await getOwnedJobOrThrow(input.jobId, input.userId);
-  const settings = await getIntegrationSettingsForUserId(input.userId);
+  const aiCredential = await resolveAiCredentialForUserId({
+    userId: input.userId,
+    aiCredentialId: input.aiCredentialId,
+  });
+  if (!aiCredential) {
+    throw new Error("Save an AI credential in Integrations before generating descriptions.");
+  }
   const selectedPins = selectPinsForWorkflowAction(job, input.generatedPinIds);
   const result = createStepResultAccumulator();
 
@@ -1330,15 +1363,15 @@ export async function generateDescriptionsForJobPins(input: {
     result.processed += 1;
 
     try {
-      const descriptionDrafts = await generatePinDescription(
-        buildDescriptionRequest(job, finalizedTitle),
-        {
-          provider: settings.aiProvider,
-          apiKey: settings.aiApiKey,
-          model: settings.aiModel,
-          customEndpoint: settings.aiCustomEndpoint,
-        },
-      );
+        const descriptionDrafts = await generatePinDescription(
+          buildDescriptionRequest(job, finalizedTitle),
+          {
+            provider: aiCredential.provider,
+            apiKey: aiCredential.apiKey,
+            model: aiCredential.model,
+            customEndpoint: aiCredential.customEndpoint,
+          },
+        );
       const description = descriptionDrafts[0]?.description?.trim();
       if (!description) {
         throw new Error("AI description generation returned an empty description.");
@@ -1944,7 +1977,12 @@ function hashString(value: string) {
 async function generateRenderCopyForPlan(
   job: WorkflowJob,
   plan: WorkflowJob["generationPlans"][number],
-  settings: Awaited<ReturnType<typeof getIntegrationSettingsForUserId>>,
+  settings: {
+    aiProvider: AIProvider;
+    aiApiKey: string;
+    aiModel: string;
+    aiCustomEndpoint: string;
+  },
 ) {
   const templateConfig = getTemplateConfig(plan.templateId);
   if (!templateConfig) {

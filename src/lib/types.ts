@@ -43,6 +43,8 @@ export interface IntegrationSettingsSummary {
   publerAccountId: string;
   publerBoardId: string;
   workspaceProfiles: WorkspaceProfileSummary[];
+  aiCredentials: AiCredentialSummary[];
+  defaultAiCredentialId: string;
   aiProvider: AIProvider;
   aiModel: string;
   aiCustomEndpoint: string;
@@ -54,6 +56,19 @@ export interface IntegrationSettingsSummary {
   aiCredentialState: "missing" | "ready" | "unavailable";
   publerCredentialMessage: string;
   aiCredentialMessage: string;
+}
+
+export interface AiCredentialSummary {
+  id: string;
+  label: string;
+  provider: AIProvider;
+  model: string;
+  customEndpoint: string;
+  isDefault: boolean;
+  hasApiKey: boolean;
+  canUseApiKey: boolean;
+  credentialState: "missing" | "ready" | "unavailable";
+  credentialMessage: string;
 }
 
 export interface WorkspaceProfileSummary {

@@ -33,6 +33,7 @@ export async function POST(request: Request, { params }: RouteProps) {
       action?: "generate" | "discard_generated_pins";
       generatedPinIds?: string[];
       planIds?: string[];
+      aiCredentialId?: string;
     };
 
     if (body.action === "discard_generated_pins") {
@@ -52,6 +53,7 @@ export async function POST(request: Request, { params }: RouteProps) {
       userId: user.id,
       jobId,
       planIds: body.planIds,
+      aiCredentialId: body.aiCredentialId,
     });
 
     return NextResponse.json({

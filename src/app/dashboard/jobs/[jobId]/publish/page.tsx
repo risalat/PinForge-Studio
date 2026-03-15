@@ -43,6 +43,8 @@ export default async function DashboardJobPublishPage({ params }: PageProps) {
       publerAccountId: "",
       publerBoardId: "",
       workspaceProfiles: [],
+      aiCredentials: [],
+      defaultAiCredentialId: "",
       aiProvider: "gemini" as const,
       aiModel: "",
       aiCustomEndpoint: "",
@@ -139,6 +141,8 @@ export default async function DashboardJobPublishPage({ params }: PageProps) {
         <JobPublishManager
           jobId={job.id}
           workspaceProfiles={settings.workspaceProfiles}
+          aiCredentials={settings.aiCredentials}
+          defaultAiCredentialId={settings.defaultAiCredentialId}
           initialScheduleContext={initialScheduleContext}
           pins={job.generatedPins.map((pin) => ({
             id: pin.id,

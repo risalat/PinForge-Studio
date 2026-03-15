@@ -26,6 +26,7 @@ const publishSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("generate_titles"),
     generatedPinIds: z.array(z.string().min(1)).optional(),
+    aiCredentialId: z.string().optional(),
   }),
   z.object({
     action: z.literal("save_copy"),
@@ -40,6 +41,7 @@ const publishSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("generate_descriptions"),
     generatedPinIds: z.array(z.string().min(1)).optional(),
+    aiCredentialId: z.string().optional(),
   }),
   z.object({
     action: z.literal("schedule"),
@@ -131,6 +133,7 @@ export async function POST(request: Request, { params }: RouteProps) {
           userId: user.id,
           jobId,
           generatedPinIds: payload.generatedPinIds,
+          aiCredentialId: payload.aiCredentialId,
         });
         break;
       case "save_copy":
@@ -145,6 +148,7 @@ export async function POST(request: Request, { params }: RouteProps) {
           userId: user.id,
           jobId,
           generatedPinIds: payload.generatedPinIds,
+          aiCredentialId: payload.aiCredentialId,
         });
         break;
       case "schedule":

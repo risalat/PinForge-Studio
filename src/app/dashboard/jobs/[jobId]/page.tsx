@@ -131,6 +131,8 @@ export default async function DashboardJobDetailsPage({ params }: PageProps) {
           toneHint={job.toneHint}
           listCountHint={job.listCountHint}
           titleVariationCount={job.titleVariationCount}
+          aiCredentials={settings?.aiCredentials ?? []}
+          defaultAiCredentialId={settings?.defaultAiCredentialId ?? ""}
           images={job.sourceImages.map((image) => ({
             id: image.id,
             url: image.url,
