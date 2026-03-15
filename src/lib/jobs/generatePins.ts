@@ -1083,7 +1083,12 @@ export async function generateTitlesForJobPins(input: {
   }> = [];
 
   for (const pin of selectedPins) {
-    if (pin.pinCopy?.titleStatus === PinCopyFieldStatus.FINALIZED && pin.pinCopy.title?.trim()) {
+    const existingTitle = pin.pinCopy?.title?.trim();
+    if (
+      existingTitle &&
+      (pin.pinCopy?.titleStatus === PinCopyFieldStatus.FINALIZED ||
+        pin.pinCopy?.titleStatus === PinCopyFieldStatus.GENERATED)
+    ) {
       result.skipped += 1;
       continue;
     }
@@ -1239,9 +1244,11 @@ export async function generateDescriptionsForJobPins(input: {
       continue;
     }
 
+    const existingDescription = pin.pinCopy?.description?.trim();
     if (
-      pin.pinCopy?.descriptionStatus === PinCopyFieldStatus.FINALIZED &&
-      pin.pinCopy.description?.trim()
+      existingDescription &&
+      (pin.pinCopy?.descriptionStatus === PinCopyFieldStatus.FINALIZED ||
+        pin.pinCopy?.descriptionStatus === PinCopyFieldStatus.GENERATED)
     ) {
       result.skipped += 1;
       continue;

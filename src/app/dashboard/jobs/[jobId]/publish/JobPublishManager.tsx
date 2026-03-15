@@ -122,6 +122,15 @@ type UploadTrackingState = {
   pinIds: string[];
 };
 
+type PersistedPublishSelection = {
+  workspaceId: string;
+  accountId: string;
+  selectedBoardIds: string[];
+  boardDistributionMode: BoardDistributionMode;
+  primaryBoardId: string;
+  primaryBoardPercent: number;
+};
+
 export function JobPublishManager({
   jobId,
   workspaceProfiles,
@@ -178,8 +187,10 @@ export function JobPublishManager({
   const [activeAction, setActiveAction] = useState<string | null>(null);
   const [uploadTracking, setUploadTracking] = useState<UploadTrackingState | null>(null);
   const [hasEditedFirstPublishAt, setHasEditedFirstPublishAt] = useState(false);
+  const [hasLoadedSavedDestination, setHasLoadedSavedDestination] = useState(false);
   const [isPending, startTransition] = useTransition();
   const uploadProgressToastIdRef = useRef<string | null>(null);
+  const hasInitializedOptionsRef = useRef(false);
   const currentPins = livePins;
   const isUploadingMedia = activeAction === "upload_media";
   const isGeneratingTitles = activeAction === "generate_titles";
@@ -397,16 +408,68 @@ export function JobPublishManager({
   const aiRuntimeState = useMemo(() => resolveAiRuntimeState(integrationReady), [integrationReady]);
 
   useEffect(() => {
+    const savedSelection = readPersistedPublishSelection(jobId);
+    if (savedSelection) {
+      setWorkspaceId(savedSelection.workspaceId || defaults.workspaceId);
+      setAccountId(savedSelection.accountId || defaults.accountId);
+      setSelectedBoardIds(savedSelection.selectedBoardIds ?? []);
+      setBoardDistributionMode(savedSelection.boardDistributionMode ?? "round_robin");
+      setPrimaryBoardId(savedSelection.primaryBoardId ?? defaults.boardId);
+      setPrimaryBoardPercent(savedSelection.primaryBoardPercent ?? 60);
+    }
+    setHasLoadedSavedDestination(true);
+  }, [defaults.accountId, defaults.boardId, defaults.workspaceId, jobId]);
+
+  useEffect(() => {
+    if (!hasLoadedSavedDestination) {
+      return;
+    }
+
+    persistPublishSelection(jobId, {
+      workspaceId,
+      accountId,
+      selectedBoardIds,
+      boardDistributionMode,
+      primaryBoardId,
+      primaryBoardPercent,
+    });
+  }, [
+    accountId,
+    boardDistributionMode,
+    hasLoadedSavedDestination,
+    jobId,
+    primaryBoardId,
+    primaryBoardPercent,
+    selectedBoardIds,
+    workspaceId,
+  ]);
+
+  // `loadPublerOptions` is intentionally invoked once here after local state hydration.
+  // Subsequent workspace/account changes call it directly from event handlers.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
     if (!integrationReady.canUsePublerApiKey) {
       return;
     }
 
+    if (!hasLoadedSavedDestination || hasInitializedOptionsRef.current) {
+      return;
+    }
+
+    hasInitializedOptionsRef.current = true;
     void loadPublerOptions({
       preserveCurrentSelection: true,
-      nextWorkspaceId: defaults.workspaceId,
-      nextAccountId: defaults.accountId,
+      nextWorkspaceId: workspaceId || defaults.workspaceId,
+      nextAccountId: accountId || defaults.accountId,
     });
-  }, [defaults.accountId, defaults.workspaceId, integrationReady.canUsePublerApiKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [
+    accountId,
+    defaults.accountId,
+    defaults.workspaceId,
+    hasLoadedSavedDestination,
+    integrationReady.canUsePublerApiKey,
+    workspaceId,
+  ]);
 
   useEffect(() => {
     if (selectedBoardIds.length === 0) {
@@ -422,11 +485,11 @@ export function JobPublishManager({
   }, [primaryBoardId, selectedBoardIds]);
 
   useEffect(() => {
-    if (uploadTracking?.active) {
+    if (uploadTracking?.active || activeAction) {
       return;
     }
 
-    if (activeAction !== "upload_media" && !currentPins.some((pin) => pin.mediaStatus === "UPLOADING")) {
+    if (!currentPins.some((pin) => pin.mediaStatus === "UPLOADING")) {
       return;
     }
 
@@ -698,6 +761,215 @@ export function JobPublishManager({
     return data.result;
   }
 
+  function createEmptyPublishResult(message: string): PublishActionResult {
+    return {
+      processed: 0,
+      succeeded: 0,
+      failed: 0,
+      skipped: 0,
+      message,
+      failures: [],
+    };
+  }
+
+  async function handlePinBatchAction(input: {
+    action: "upload_media" | "generate_titles" | "generate_descriptions";
+    generatedPinIds: string[];
+    workspaceId?: string;
+    fallbackMessage: string;
+    section: PublishSectionKey;
+  }) {
+    startTransition(async () => {
+      const result = createEmptyPublishResult(input.fallbackMessage);
+
+      try {
+        setSectionFeedback((current) => ({
+          ...current,
+          [input.section]: null,
+        }));
+        setActiveAction(input.action);
+
+        if (input.action === "upload_media") {
+          setUploadTracking({
+            active: true,
+            pinIds: input.generatedPinIds,
+          });
+          setLivePins((current) =>
+            current.map((pin) =>
+              input.generatedPinIds.includes(pin.id) && pin.mediaStatus !== "UPLOADED"
+                ? {
+                    ...pin,
+                    mediaStatus: "UPLOADING",
+                    mediaError: null,
+                  }
+                : pin,
+            ),
+          );
+        }
+
+        for (const pinId of input.generatedPinIds) {
+          try {
+            const nextResult = await runAction({
+              action: input.action,
+              generatedPinIds: [pinId],
+              ...(input.action === "upload_media" && input.workspaceId
+                ? { workspaceId: input.workspaceId }
+                : {}),
+            });
+
+            result.processed += nextResult?.processed ?? 0;
+            result.succeeded += nextResult?.succeeded ?? 0;
+            result.failed += nextResult?.failed ?? 0;
+            result.skipped += nextResult?.skipped ?? 0;
+            result.failures.push(...(nextResult?.failures ?? []));
+            const generatedTitleOptions = nextResult?.generatedTitleOptions ?? [];
+            if (generatedTitleOptions.length > 0) {
+              result.generatedTitleOptions = [
+                ...(result.generatedTitleOptions ?? []),
+                ...generatedTitleOptions,
+              ];
+              setTitleCandidatesByPinId((current) => ({
+                ...current,
+                ...Object.fromEntries(
+                  generatedTitleOptions.map((item) => [item.pinId, item.titles]),
+                ),
+              }));
+            }
+          } catch (error) {
+            result.processed += 1;
+            result.failed += 1;
+            result.failures.push({
+              pinId,
+              reason: error instanceof Error ? error.message : input.fallbackMessage,
+            });
+          }
+
+          await refreshPublishSnapshot().catch(() => null);
+        }
+
+        result.message =
+          input.action === "generate_titles"
+            ? `Generated titles for ${result.succeeded} pin${result.succeeded === 1 ? "" : "s"}.`
+            : input.action === "generate_descriptions"
+              ? `Generated descriptions for ${result.succeeded} pin${result.succeeded === 1 ? "" : "s"}.`
+              : `Uploaded ${result.succeeded} pin${result.succeeded === 1 ? "" : "s"}.`;
+
+        const pins = await refreshPublishSnapshot().catch(() => null);
+        if (input.action === "upload_media") {
+          const evaluatedPins = pins ?? currentPins;
+          const remainingPinIds = evaluatedPins
+            .filter(
+              (pin) =>
+                input.generatedPinIds.includes(pin.id) && pin.mediaStatus !== "UPLOADED",
+            )
+            .map((pin) => pin.id);
+          const failedPinIds = evaluatedPins
+            .filter(
+              (pin) =>
+                input.generatedPinIds.includes(pin.id) && pin.mediaStatus === "FAILED",
+            )
+            .map((pin) => pin.id);
+
+          if (remainingPinIds.length > 0) {
+            setSelectedPinIds(remainingPinIds);
+          }
+
+          setSectionFeedback((current) => ({
+            ...current,
+            upload: {
+              tone: remainingPinIds.length > 0 ? "warning" : "success",
+              message:
+                remainingPinIds.length > 0
+                  ? buildUploadRecoveryMessage({
+                      uploadedCount: result.succeeded,
+                      remainingCount: remainingPinIds.length,
+                      failedCount: failedPinIds.length,
+                      pendingCount: Math.max(0, remainingPinIds.length - failedPinIds.length),
+                    })
+                  : `${result.succeeded} pin${result.succeeded === 1 ? "" : "s"} uploaded successfully.`,
+            },
+          }));
+
+          notify({
+            tone: remainingPinIds.length > 0 ? "info" : "success",
+            title:
+              remainingPinIds.length > 0
+                ? "Upload finished with remaining pins"
+                : "Media upload complete",
+            message:
+              remainingPinIds.length > 0
+                ? `${result.succeeded} uploaded. ${remainingPinIds.length} still need attention.`
+                : `${result.succeeded} pin${result.succeeded === 1 ? "" : "s"} uploaded to Publer.`,
+          });
+        } else {
+          setSectionFeedback((current) => ({
+            ...current,
+            [input.section]: {
+              tone: result.failed > 0 ? "warning" : "success",
+              message:
+                result.failed > 0
+                  ? `${result.succeeded} completed, ${result.failed} failed.`
+                  : result.message,
+            },
+          }));
+        }
+
+        router.refresh();
+      } catch (error) {
+        setSectionFeedback((current) => ({
+          ...current,
+          [input.section]: {
+            tone: "error",
+            message: error instanceof Error ? error.message : input.fallbackMessage,
+          },
+        }));
+        notify({
+          tone: "error",
+          title:
+            input.action === "upload_media"
+              ? "Media upload failed"
+              : input.action === "generate_titles"
+                ? "Title generation failed"
+                : "Description generation failed",
+          message: error instanceof Error ? error.message : input.fallbackMessage,
+          sticky: true,
+        });
+      } finally {
+        if (input.action === "upload_media") {
+          setUploadTracking((current) =>
+            current
+              ? {
+                  ...current,
+                  active: false,
+                }
+              : null,
+          );
+        }
+        setActiveAction(null);
+      }
+    });
+  }
+
+  async function refreshPublishSnapshot() {
+    const response = await fetch(`/api/dashboard/jobs/${jobId}/publish`, {
+      method: "GET",
+      cache: "no-store",
+    });
+    const data = (await response.json()) as PublishStatusResponse;
+
+    if (!response.ok || !data.ok) {
+      return null;
+    }
+
+    setLiveLatestScheduleRun(data.latestScheduleRun ?? null);
+    if (data.pins) {
+      setLivePins(data.pins);
+      setCopyState((current) => mergeCopyStateWithPins(current, data.pins ?? []));
+    }
+
+    return data.pins ?? null;
+  }
+
   function saveProfileDefaults() {
     if (!currentWorkspaceProfile || !workspaceId || !accountId) {
       return;
@@ -755,18 +1027,19 @@ export function JobPublishManager({
 
   function handleAction(payload: unknown, fallbackMessage: string, section?: PublishSectionKey) {
     startTransition(async () => {
+      const action = typeof payload === "object" && payload && "action" in payload
+        ? String((payload as { action?: string }).action ?? "")
+        : "";
+      const actionPinIds =
+        typeof payload === "object" &&
+        payload &&
+        "generatedPinIds" in payload &&
+        Array.isArray((payload as { generatedPinIds?: unknown }).generatedPinIds)
+          ? ((payload as { generatedPinIds: string[] }).generatedPinIds ?? [])
+          : [];
+      const feedbackSection = section ?? resolveSectionForAction(action);
+
       try {
-        const action = typeof payload === "object" && payload && "action" in payload
-          ? String((payload as { action?: string }).action ?? "")
-          : "";
-        const actionPinIds =
-          typeof payload === "object" &&
-          payload &&
-          "generatedPinIds" in payload &&
-          Array.isArray((payload as { generatedPinIds?: unknown }).generatedPinIds)
-            ? ((payload as { generatedPinIds: string[] }).generatedPinIds ?? [])
-            : [];
-        const feedbackSection = section ?? resolveSectionForAction(action);
         if (feedbackSection) {
           setSectionFeedback((current) => ({
             ...current,
@@ -824,49 +1097,34 @@ export function JobPublishManager({
           });
         }
         if (action) {
-          const response = await fetch(`/api/dashboard/jobs/${jobId}/publish`, {
-            method: "GET",
-            cache: "no-store",
-          });
-          const data = (await response.json()) as PublishStatusResponse;
-          if (response.ok && data.ok) {
-            setLiveLatestScheduleRun(data.latestScheduleRun ?? null);
-            if (data.pins) {
-              setLivePins(data.pins);
-              setCopyState((current) => mergeCopyStateWithPins(current, data.pins ?? []));
-              if (action === "upload_media") {
-                const failedPinIds = data.pins
-                  .filter((pin) => actionPinIds.includes(pin.id) && pin.mediaStatus === "FAILED")
-                  .map((pin) => pin.id);
+          const pins = await refreshPublishSnapshot();
+          if (pins && action === "upload_media") {
+            const failedPinIds = pins
+              .filter((pin) => actionPinIds.includes(pin.id) && pin.mediaStatus === "FAILED")
+              .map((pin) => pin.id);
 
-                if (failedPinIds.length > 0) {
-                  setSelectedPinIds(failedPinIds);
-                  setSectionFeedback((current) => ({
-                    ...current,
-                    upload: {
-                      tone: "warning",
-                      message: `${result?.succeeded ?? 0} uploaded, ${failedPinIds.length} failed. Failed pins are selected so you can retry them.`,
-                    },
-                  }));
-                } else if (actionPinIds.length > 0) {
-                  setSectionFeedback((current) => ({
-                    ...current,
-                    upload: {
-                      tone: "success",
-                      message: `${result?.succeeded ?? 0} pin${(result?.succeeded ?? 0) === 1 ? "" : "s"} uploaded successfully.`,
-                    },
-                  }));
-                }
-              }
+            if (failedPinIds.length > 0) {
+              setSelectedPinIds(failedPinIds);
+              setSectionFeedback((current) => ({
+                ...current,
+                upload: {
+                  tone: "warning",
+                  message: `${result?.succeeded ?? 0} uploaded, ${failedPinIds.length} failed. Failed pins are selected so you can retry them.`,
+                },
+              }));
+            } else if (actionPinIds.length > 0) {
+              setSectionFeedback((current) => ({
+                ...current,
+                upload: {
+                  tone: "success",
+                  message: `${result?.succeeded ?? 0} pin${(result?.succeeded ?? 0) === 1 ? "" : "s"} uploaded successfully.`,
+                },
+              }));
             }
           }
         }
         router.refresh();
       } catch (error) {
-        const action = typeof payload === "object" && payload && "action" in payload
-          ? String((payload as { action?: string }).action ?? "")
-          : "";
-        const feedbackSection = section ?? resolveSectionForAction(action);
         if (feedbackSection) {
           setSectionFeedback((current) => ({
             ...current,
@@ -877,6 +1135,41 @@ export function JobPublishManager({
           }));
         }
         if (action === "upload_media") {
+          const pins = await refreshPublishSnapshot().catch(() => null);
+          if (pins && actionPinIds.length > 0) {
+            const remainingPinIds = pins
+              .filter((pin) => actionPinIds.includes(pin.id) && pin.mediaStatus !== "UPLOADED")
+              .map((pin) => pin.id);
+            const uploadedCount = pins.filter(
+              (pin) => actionPinIds.includes(pin.id) && pin.mediaStatus === "UPLOADED",
+            ).length;
+            const failedCount = pins.filter(
+              (pin) => actionPinIds.includes(pin.id) && pin.mediaStatus === "FAILED",
+            ).length;
+            const pendingCount = remainingPinIds.length - failedCount;
+
+            if (remainingPinIds.length > 0) {
+              setSelectedPinIds(remainingPinIds);
+            }
+
+            setSectionFeedback((current) => ({
+              ...current,
+              upload: {
+                tone: remainingPinIds.length > 0 ? "warning" : "error",
+                message:
+                  remainingPinIds.length > 0
+                    ? buildUploadRecoveryMessage({
+                        uploadedCount,
+                        remainingCount: remainingPinIds.length,
+                        failedCount,
+                        pendingCount,
+                      })
+                    : error instanceof Error
+                      ? error.message
+                      : fallbackMessage,
+              },
+            }));
+          }
           notify({
             tone: "error",
             title: "Media upload failed",
@@ -964,31 +1257,31 @@ function formatDateLabel(value: string) {
 }
 
   function triggerUploadSelected() {
-    handleAction(
-      {
-        action: "upload_media",
-        generatedPinIds: selectedPinIds,
-        workspaceId,
-      },
-      "Unable to upload media.",
-      "upload",
-    );
+    void handlePinBatchAction({
+      action: "upload_media",
+      generatedPinIds: selectedPinIds,
+      workspaceId,
+      fallbackMessage: "Unable to upload media.",
+      section: "upload",
+    });
   }
 
   function triggerGenerateTitles() {
-    handleAction(
-      { action: "generate_titles", generatedPinIds: selectedPinIds },
-      "Unable to generate titles.",
-      "titles",
-    );
+    void handlePinBatchAction({
+      action: "generate_titles",
+      generatedPinIds: selectedPinIds,
+      fallbackMessage: "Unable to generate titles.",
+      section: "titles",
+    });
   }
 
   function triggerGenerateDescriptions() {
-    handleAction(
-      { action: "generate_descriptions", generatedPinIds: selectedPinIds },
-      "Unable to generate descriptions.",
-      "descriptions",
-    );
+    void handlePinBatchAction({
+      action: "generate_descriptions",
+      generatedPinIds: selectedPinIds,
+      fallbackMessage: "Unable to generate descriptions.",
+      section: "descriptions",
+    });
   }
 
   function triggerScheduleSelected() {
@@ -1159,7 +1452,14 @@ function formatDateLabel(value: string) {
                 type="button"
                 onClick={saveProfileDefaults}
                 disabled={!canSaveProfileDefaults || !hasUnsavedProfileDefaults || isSavingProfileDefaults}
-                className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] disabled:opacity-60"
+                aria-busy={isSavingProfileDefaults}
+                className={`rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] ${
+                  isSavingProfileDefaults
+                    ? "cursor-progress opacity-100"
+                    : !canSaveProfileDefaults || !hasUnsavedProfileDefaults
+                      ? "cursor-not-allowed opacity-60"
+                      : ""
+                }`}
               >
                 <ActionButtonContent
                   busy={isSavingProfileDefaults}
@@ -1178,7 +1478,14 @@ function formatDateLabel(value: string) {
                 })
               }
               disabled={isLoadingOptions || !integrationReady.canUsePublerApiKey}
-              className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] disabled:opacity-60"
+              aria-busy={isLoadingOptions}
+              className={`rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] ${
+                isLoadingOptions
+                  ? "cursor-progress opacity-100"
+                  : !integrationReady.canUsePublerApiKey
+                    ? "cursor-not-allowed opacity-60"
+                    : ""
+              }`}
             >
               <ActionButtonContent
                 busy={isLoadingOptions}
@@ -1448,17 +1755,7 @@ function formatDateLabel(value: string) {
             <div className="mt-4 flex flex-wrap gap-3">
               <button
                 type="button"
-                onClick={() =>
-                  handleAction(
-                    {
-                      action: "upload_media",
-                      generatedPinIds: selectedPinIds,
-                      workspaceId,
-                    },
-                    "Unable to upload media.",
-                    "upload",
-                  )
-                }
+                onClick={triggerUploadSelected}
                 disabled={
                   isPending ||
                   Boolean(activeAction) ||
@@ -1466,7 +1763,18 @@ function formatDateLabel(value: string) {
                   !integrationReady.canUsePublerApiKey ||
                   !workspaceId
                 }
-                className="rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
+                aria-busy={isUploadingMedia}
+                className={`rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] ${
+                  isUploadingMedia
+                    ? "cursor-progress opacity-100"
+                    : isPending ||
+                        Boolean(activeAction) ||
+                        selectedPins.length === 0 ||
+                        !integrationReady.canUsePublerApiKey ||
+                        !workspaceId
+                      ? "cursor-not-allowed opacity-60"
+                      : ""
+                }`}
               >
                 <ActionButtonContent
                   busy={isUploadingMedia}
@@ -1483,15 +1791,13 @@ function formatDateLabel(value: string) {
                     return;
                   }
                   setSelectedPinIds(failedPinIds);
-                  handleAction(
-                    {
-                      action: "upload_media",
-                      generatedPinIds: failedPinIds,
-                      workspaceId,
-                    },
-                    "Unable to retry failed uploads.",
-                    "upload",
-                  );
+                  void handlePinBatchAction({
+                    action: "upload_media",
+                    generatedPinIds: failedPinIds,
+                    workspaceId,
+                    fallbackMessage: "Unable to retry failed uploads.",
+                    section: "upload",
+                  });
                 }}
                 disabled={
                   isPending ||
@@ -1500,7 +1806,18 @@ function formatDateLabel(value: string) {
                   !integrationReady.canUsePublerApiKey ||
                   !workspaceId
                 }
-                className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] disabled:opacity-60"
+                aria-busy={isUploadingMedia}
+                className={`rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] ${
+                  isUploadingMedia
+                    ? "cursor-progress opacity-100"
+                    : isPending ||
+                        Boolean(activeAction) ||
+                        failedUploadPins.length === 0 ||
+                        !integrationReady.canUsePublerApiKey ||
+                        !workspaceId
+                      ? "cursor-not-allowed opacity-60"
+                      : ""
+                }`}
               >
                 <ActionButtonContent
                   busy={isUploadingMedia}
@@ -1589,11 +1906,12 @@ function formatDateLabel(value: string) {
             }
             feedback={sectionFeedback.titles}
             onClick={() =>
-              handleAction(
-                { action: "generate_titles", generatedPinIds: selectedPinIds },
-                "Unable to generate titles.",
-                "titles",
-              )
+              void handlePinBatchAction({
+                action: "generate_titles",
+                generatedPinIds: selectedPinIds,
+                fallbackMessage: "Unable to generate titles.",
+                section: "titles",
+              })
             }
             secondaryAction={{
               label: "Save copy edits",
@@ -1621,11 +1939,12 @@ function formatDateLabel(value: string) {
             }
             feedback={sectionFeedback.descriptions}
             onClick={() =>
-              handleAction(
-                { action: "generate_descriptions", generatedPinIds: selectedPinIds },
-                "Unable to generate descriptions.",
-                "descriptions",
-              )
+              void handlePinBatchAction({
+                action: "generate_descriptions",
+                generatedPinIds: selectedPinIds,
+                fallbackMessage: "Unable to generate descriptions.",
+                section: "descriptions",
+              })
             }
           />
 
@@ -2087,11 +2406,12 @@ function ToolbarButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={
-        tone === "primary"
-          ? "rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
-          : "rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] disabled:opacity-60"
-      }
+      aria-busy={busy}
+      className={getActionButtonClass({
+        tone,
+        busy,
+        disabled,
+      })}
     >
       <ActionButtonContent
         busy={busy}
@@ -2134,7 +2454,12 @@ function StepCard(input: {
           type="button"
           onClick={input.onClick}
           disabled={input.disabled}
-          className="rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
+          aria-busy={input.actionBusy}
+          className={getActionButtonClass({
+            tone: "primary",
+            busy: input.actionBusy,
+            disabled: input.disabled,
+          })}
         >
           <ActionButtonContent
             busy={input.actionBusy}
@@ -2148,7 +2473,12 @@ function StepCard(input: {
             type="button"
             onClick={input.secondaryAction.onClick}
             disabled={input.secondaryAction.disabled}
-            className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] disabled:opacity-60"
+            aria-busy={input.secondaryAction.busy}
+            className={getActionButtonClass({
+              tone: "secondary",
+              busy: input.secondaryAction.busy,
+              disabled: input.secondaryAction.disabled,
+            })}
           >
             <ActionButtonContent
               busy={input.secondaryAction.busy}
@@ -2229,6 +2559,101 @@ function ActionButtonContent({
       <span>{busy ? busyLabel ?? label : label}</span>
     </span>
   );
+}
+
+function getActionButtonClass(input: {
+  tone: "primary" | "secondary";
+  busy?: boolean;
+  disabled?: boolean;
+}) {
+  const baseClass =
+    input.tone === "primary"
+      ? "rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)]"
+      : "rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)]";
+
+  if (input.busy) {
+    return `${baseClass} cursor-progress opacity-100`;
+  }
+
+  if (input.disabled) {
+    return `${baseClass} cursor-not-allowed opacity-60`;
+  }
+
+  return baseClass;
+}
+
+function buildUploadRecoveryMessage(input: {
+  uploadedCount: number;
+  remainingCount: number;
+  failedCount: number;
+  pendingCount: number;
+}) {
+  const detailParts: string[] = [];
+
+  if (input.failedCount > 0) {
+    detailParts.push(`${input.failedCount} failed`);
+  }
+  if (input.pendingCount > 0) {
+    detailParts.push(`${input.pendingCount} still processing`);
+  }
+
+  const detail =
+    detailParts.length > 0 ? ` (${detailParts.join(", ")})` : "";
+
+  return `${input.uploadedCount} uploaded. ${input.remainingCount} pin${
+    input.remainingCount === 1 ? "" : "s"
+  } still need attention and are selected${detail}.`;
+}
+
+function getPublishSelectionStorageKey(jobId: string) {
+  return `pinforge:publish-selection:${jobId}`;
+}
+
+function readPersistedPublishSelection(jobId: string): PersistedPublishSelection | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(getPublishSelectionStorageKey(jobId));
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = JSON.parse(raw) as Partial<PersistedPublishSelection>;
+    return {
+      workspaceId: typeof parsed.workspaceId === "string" ? parsed.workspaceId : "",
+      accountId: typeof parsed.accountId === "string" ? parsed.accountId : "",
+      selectedBoardIds: Array.isArray(parsed.selectedBoardIds)
+        ? parsed.selectedBoardIds.filter((value): value is string => typeof value === "string")
+        : [],
+      boardDistributionMode:
+        parsed.boardDistributionMode === "first_selected" ||
+        parsed.boardDistributionMode === "primary_weighted"
+          ? parsed.boardDistributionMode
+          : "round_robin",
+      primaryBoardId: typeof parsed.primaryBoardId === "string" ? parsed.primaryBoardId : "",
+      primaryBoardPercent:
+        typeof parsed.primaryBoardPercent === "number" ? parsed.primaryBoardPercent : 60,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function persistPublishSelection(jobId: string, selection: PersistedPublishSelection) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(
+      getPublishSelectionStorageKey(jobId),
+      JSON.stringify(selection),
+    );
+  } catch {
+    // Ignore storage failures and keep the current in-memory state.
+  }
 }
 
 function toneForStatus(status: string) {
