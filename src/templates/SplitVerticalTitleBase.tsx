@@ -16,6 +16,7 @@ type SplitVerticalTitleBaseProps = TemplateRenderProps & {
     domain: TemplateTextRoleStyle;
   };
   titleClassName?: string;
+  bandPaddingXOverride?: number;
 };
 
 export function SplitVerticalTitleBase({
@@ -30,6 +31,7 @@ export function SplitVerticalTitleBase({
   numberTreatment = "none",
   typography,
   titleClassName = "w-full max-w-[960px]",
+  bandPaddingXOverride,
 }: SplitVerticalTitleBaseProps) {
   const firstImage = images[0] ?? "/sample-workspace-a.svg";
   const secondImage = images[1] ?? firstImage;
@@ -112,8 +114,8 @@ export function SplitVerticalTitleBase({
           style={{
             backgroundColor: preset.palette.band,
             height: bandHeight,
-            paddingLeft: preset.layout.bandPaddingX,
-            paddingRight: preset.layout.bandPaddingX,
+            paddingLeft: bandPaddingXOverride ?? preset.layout.bandPaddingX,
+            paddingRight: bandPaddingXOverride ?? preset.layout.bandPaddingX,
           }}
         >
           {showNumberBadge ? (

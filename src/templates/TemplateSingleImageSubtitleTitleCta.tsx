@@ -127,7 +127,7 @@ export function TemplateSingleImageSubtitleTitleCta({
 
       </div>
 
-      <div className="absolute inset-x-0 bottom-[58px] flex justify-center px-[80px] text-center">
+      <div className="absolute inset-x-0 bottom-[34px] flex justify-center px-[80px] text-center">
         <AutoFitText
           as="p"
           text={cleanedDomain}

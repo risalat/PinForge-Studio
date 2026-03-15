@@ -453,8 +453,12 @@ export function JobReviewManager({
       });
       progressToastId = notify({
         tone: "progress",
-        title: `Rendering 0 of ${targetRenderablePlans.length} pins`,
-        message: "Preparing the first plan in the queue.",
+        title: `0 of ${targetRenderablePlans.length} pins generated`,
+        message: buildRenderProgressMessage({
+          completed: 0,
+          total: targetRenderablePlans.length,
+          currentLabel: targetRenderablePlans[0]?.templateId ?? "Preparing",
+        }),
         sticky: true,
       });
 
@@ -469,8 +473,12 @@ export function JobReviewManager({
         });
         updateNotification(progressToastId, {
           tone: "progress",
-          title: `Rendering ${index + 1} of ${targetRenderablePlans.length} pins`,
-          message: `Working on ${plan.templateId}.`,
+          title: `${index} of ${targetRenderablePlans.length} pins generated`,
+          message: buildRenderProgressMessage({
+            completed: index,
+            total: targetRenderablePlans.length,
+            currentLabel: plan.templateId,
+          }),
           sticky: true,
         });
 
@@ -1125,7 +1133,7 @@ export function JobReviewManager({
                 </h3>
                 <p className="mt-2 text-sm text-[var(--dashboard-subtle)]">
                   {renderProgress.active
-                    ? `Rendering ${renderProgress.currentLabel}.`
+                    ? buildRenderProgressMessage(renderProgress)
                     : "Queue finished. Refreshing the workspace."}
                 </p>
               </div>
@@ -1740,4 +1748,13 @@ function formatCompactUrl(value: string) {
   } catch {
     return value;
   }
+}
+
+function buildRenderProgressMessage(input: {
+  completed: number;
+  total: number;
+  currentLabel: string;
+}) {
+  const currentIndex = Math.min(input.total, input.completed + 1);
+  return `Rendering ${currentIndex} of ${input.total}: ${input.currentLabel}.`;
 }

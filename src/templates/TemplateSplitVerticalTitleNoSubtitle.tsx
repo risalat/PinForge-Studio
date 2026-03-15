@@ -5,8 +5,8 @@ const TEMPLATE_TYPOGRAPHY = {
   title: {
     fontFamily: "var(--font-cormorant-garamond), serif",
     fontWeight: 700,
-    letterSpacing: "-0.028em",
-    lineHeight: 1.08,
+    letterSpacing: "0.012em",
+    lineHeight: 1.26,
     textTransform: "uppercase" as const,
   },
   subtitle: {
@@ -39,7 +39,8 @@ export function TemplateSplitVerticalTitleNoSubtitle(props: TemplateRenderProps)
       forceHideSubtitle
       numberTreatment="none"
       typography={TEMPLATE_TYPOGRAPHY}
-      titleClassName="w-full max-w-[960px] uppercase"
+      bandPaddingXOverride={56}
+      titleClassName="w-full max-w-[1040px] uppercase"
     />
   );
 }
