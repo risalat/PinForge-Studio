@@ -55,6 +55,42 @@ export function SplitVerticalTitleBase({
   const showNumberBadge = numberTreatment === "badge" && hasItemNumber;
   const upperImageHeight = 730;
   const lowerImageHeight = 1920 - upperImageHeight - bandHeight - preset.layout.footerHeight;
+  const titleColor = pickReadableColor(preset.palette.band, [
+    preset.palette.title,
+    preset.palette.footer,
+    preset.palette.domain,
+    preset.palette.divider,
+    "#111111",
+    "#fffdf8",
+  ]);
+  const subtitleColor = pickReadableColor(
+    preset.palette.band,
+    [
+      preset.palette.subtitle,
+      preset.palette.title,
+      preset.palette.footer,
+      preset.palette.domain,
+      "#111111",
+      "#fffdf8",
+    ],
+    { minContrast: 4 },
+  );
+  const badgeTextColor = pickReadableColor(preset.palette.footer, [
+    preset.palette.domain,
+    preset.palette.title,
+    preset.palette.band,
+    preset.palette.subtitle,
+    "#fffdf8",
+    "#111111",
+  ]);
+  const footerTextColor = pickReadableColor(preset.palette.footer, [
+    preset.palette.domain,
+    preset.palette.title,
+    preset.palette.band,
+    preset.palette.subtitle,
+    "#fffdf8",
+    "#111111",
+  ]);
 
   return (
     <div
@@ -95,7 +131,7 @@ export function SplitVerticalTitleBase({
                 maxFontSize={28}
                 lineHeight={typography.number.lineHeight}
                 maxLines={1}
-                textColor={preset.palette.domain}
+                textColor={badgeTextColor}
                 fontFamily={typography.number.fontFamily}
                 fontWeight={typography.number.fontWeight}
                 letterSpacing={typography.number.letterSpacing}
@@ -116,7 +152,7 @@ export function SplitVerticalTitleBase({
                   lineHeight={typography.subtitle.lineHeight}
                   maxLines={preset.layout.subtitleMaxLines}
                   className="w-full max-w-[920px]"
-                  textColor={preset.palette.subtitle}
+                  textColor={subtitleColor}
                   fontFamily={typography.subtitle.fontFamily}
                   fontWeight={typography.subtitle.fontWeight}
                   letterSpacing={typography.subtitle.letterSpacing}
@@ -150,7 +186,7 @@ export function SplitVerticalTitleBase({
               lineHeight={typography.title.lineHeight}
               maxLines={titleMaxLines}
               className={titleClassName}
-              textColor={preset.palette.title}
+              textColor={titleColor}
               fontFamily={typography.title.fontFamily}
               fontWeight={typography.title.fontWeight}
               letterSpacing={typography.title.letterSpacing}
@@ -204,7 +240,7 @@ export function SplitVerticalTitleBase({
             lineHeight={typography.domain.lineHeight}
             maxLines={1}
             className="w-full text-center"
-            textColor={preset.palette.domain}
+            textColor={footerTextColor}
             fontFamily={typography.domain.fontFamily}
             fontWeight={typography.domain.fontWeight}
             letterSpacing={typography.domain.letterSpacing}
@@ -215,4 +251,102 @@ export function SplitVerticalTitleBase({
       </div>
     </div>
   );
+}
+
+function pickReadableColor(
+  backgroundHex: string,
+  candidates: string[],
+  options?: {
+    minContrast?: number;
+  },
+) {
+  const minContrast = options?.minContrast ?? 4.5;
+  const variants = buildReadableVariants(backgroundHex, candidates);
+
+  if (!isHexColor(backgroundHex) || variants.length === 0) {
+    return candidates.find(isHexColor) ?? candidates[0] ?? backgroundHex;
+  }
+
+  return variants
+    .map(({ color, sourceIndex, variantIndex }) => {
+      const contrast = getContrastRatio(color, backgroundHex);
+      const meetsContrast = contrast >= minContrast;
+      const score = (meetsContrast ? 1000 : contrast * 140) - sourceIndex * 6 - variantIndex;
+
+      return { color, score };
+    })
+    .sort((left, right) => right.score - left.score)[0]?.color ?? candidates[0] ?? backgroundHex;
+}
+
+function buildReadableVariants(backgroundHex: string, candidates: string[]) {
+  const targetHex = getRelativeLuminance(backgroundHex) < 0.42 ? "#fffdf8" : "#111111";
+  const mixAmounts = [0, 0.16, 0.32, 0.48, 0.64];
+  const variants: Array<{ color: string; sourceIndex: number; variantIndex: number }> = [];
+  const seen = new Set<string>();
+
+  candidates.filter(isHexColor).forEach((candidate, sourceIndex) => {
+    mixAmounts.forEach((amount, variantIndex) => {
+      const color = amount === 0 ? candidate : mixHex(candidate, targetHex, amount);
+      if (seen.has(color)) {
+        return;
+      }
+
+      seen.add(color);
+      variants.push({ color, sourceIndex, variantIndex });
+    });
+  });
+
+  return variants;
+}
+
+function mixHex(fromHex: string, toHex: string, amount: number) {
+  const from = parseHex(fromHex);
+  const to = parseHex(toHex);
+  if (!from || !to) {
+    return fromHex;
+  }
+
+  const mix = (left: number, right: number) =>
+    Math.round(left + (right - left) * Math.max(0, Math.min(1, amount)));
+
+  return `#${[mix(from[0], to[0]), mix(from[1], to[1]), mix(from[2], to[2])]
+    .map((value) => value.toString(16).padStart(2, "0"))
+    .join("")}`;
+}
+
+function parseHex(value: string) {
+  const normalized = value.replace("#", "");
+  if (!/^[0-9a-fA-F]{6}$/.test(normalized)) {
+    return null;
+  }
+
+  return [0, 2, 4].map((index) => parseInt(normalized.slice(index, index + 2), 16)) as [
+    number,
+    number,
+    number,
+  ];
+}
+
+function getContrastRatio(foregroundHex: string, backgroundHex: string) {
+  const foreground = getRelativeLuminance(foregroundHex);
+  const background = getRelativeLuminance(backgroundHex);
+  const lighter = Math.max(foreground, background);
+  const darker = Math.min(foreground, background);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+function getRelativeLuminance(hex: string) {
+  const normalized = hex.replace("#", "");
+  const [r, g, b] = [0, 2, 4]
+    .map((index) => normalized.slice(index, index + 2))
+    .map((channel) => parseInt(channel, 16) / 255)
+    .map((value) =>
+      value <= 0.03928 ? value / 12.92 : Math.pow((value + 0.055) / 1.055, 2.4),
+    );
+
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+function isHexColor(value: string) {
+  return /^#[0-9a-fA-F]{6}$/.test(value);
 }

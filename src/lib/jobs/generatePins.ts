@@ -1077,6 +1077,10 @@ export async function generateTitlesForJobPins(input: {
   const settings = await getIntegrationSettingsForUserId(input.userId);
   const selectedPins = selectPinsForWorkflowAction(job, input.generatedPinIds);
   const result = createStepResultAccumulator();
+  const generatedTitleOptions: Array<{
+    pinId: string;
+    titles: string[];
+  }> = [];
 
   for (const pin of selectedPins) {
     if (pin.pinCopy?.titleStatus === PinCopyFieldStatus.FINALIZED && pin.pinCopy.title?.trim()) {
@@ -1105,7 +1109,8 @@ export async function generateTitlesForJobPins(input: {
           customEndpoint: settings.aiCustomEndpoint,
         },
       );
-      const title = titleDrafts[0]?.title?.trim();
+      const titleCandidates = normalizeGeneratedTitleCandidates(titleDrafts);
+      const title = titleCandidates[0]?.trim();
       if (!title) {
         throw new Error("AI title generation returned an empty title.");
       }
@@ -1123,6 +1128,11 @@ export async function generateTitlesForJobPins(input: {
         },
       });
 
+      generatedTitleOptions.push({
+        pinId: pin.id,
+        titles: titleCandidates,
+      });
+
       result.succeeded += 1;
     } catch (error) {
       const reason = error instanceof Error ? error.message : "Unable to generate a title.";
@@ -1136,7 +1146,10 @@ export async function generateTitlesForJobPins(input: {
     failurePrefix: "Title generation",
   });
 
-  return finalizeStepResult("Title generation", result);
+  return {
+    ...finalizeStepResult("Title generation", result),
+    generatedTitleOptions,
+  };
 }
 
 export async function saveJobPinCopyEdits(input: {
@@ -1613,6 +1626,16 @@ async function upsertJobMilestoneTx(
 
 function normalizeKeywords(keywords?: string[]) {
   return (keywords ?? []).map((keyword) => keyword.trim()).filter((keyword) => keyword !== "");
+}
+
+function normalizeGeneratedTitleCandidates(items: PinTitleOption[]) {
+  return Array.from(
+    new Set(
+      items
+        .map((item) => item.title.trim())
+        .filter((title) => title !== ""),
+    ),
+  ).slice(0, 10);
 }
 
 async function buildSeedPlanRenderContext(

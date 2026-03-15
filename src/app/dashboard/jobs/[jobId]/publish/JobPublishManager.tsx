@@ -76,6 +76,10 @@ type PublishActionResult = {
   failed: number;
   skipped: number;
   message: string;
+  generatedTitleOptions?: Array<{
+    pinId: string;
+    titles: string[];
+  }>;
   failures: Array<{
     pinId: string;
     reason: string;
@@ -131,6 +135,7 @@ export function JobPublishManager({
       description: pin.description,
     })),
   );
+  const [titleCandidatesByPinId, setTitleCandidatesByPinId] = useState<Record<string, string[]>>({});
   const [selectedPinIds, setSelectedPinIds] = useState<string[]>(pins.map((pin) => pin.id));
   const [firstPublishAt, setFirstPublishAt] = useState("");
   const [intervalDays, setIntervalDays] = useState(25);
@@ -716,6 +721,14 @@ export function JobPublishManager({
               tone: result && result.failed > 0 ? "warning" : "success",
               message: result?.message ?? "Action completed.",
             },
+          }));
+        }
+        if (action === "generate_titles" && result?.generatedTitleOptions) {
+          setTitleCandidatesByPinId((current) => ({
+            ...current,
+            ...Object.fromEntries(
+              result.generatedTitleOptions!.map((item) => [item.pinId, item.titles]),
+            ),
           }));
         }
         if (action) {
@@ -1712,6 +1725,32 @@ function formatDateLabel(value: string) {
                           maxLength={TITLE_MAX_LENGTH}
                           className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-white px-3 py-2"
                         />
+                        {(titleCandidatesByPinId[pin.id]?.length ?? 0) > 0 ? (
+                          <div className="mt-3">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--dashboard-muted)]">
+                              Generated options
+                            </p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {titleCandidatesByPinId[pin.id].map((candidate, candidateIndex) => {
+                                const active = (copy?.title ?? "") === candidate;
+                                return (
+                                  <button
+                                    key={`${pin.id}-title-candidate-${candidateIndex}`}
+                                    type="button"
+                                    onClick={() => updateCopy(pin.id, "title", candidate)}
+                                    className={`rounded-full border px-3 py-2 text-left text-xs font-semibold leading-5 ${
+                                      active
+                                        ? "border-[var(--dashboard-accent)] bg-[var(--dashboard-accent-soft-strong)] text-[var(--dashboard-accent-strong)]"
+                                        : "border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] text-[var(--dashboard-subtle)]"
+                                    }`}
+                                  >
+                                    {candidate}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ) : null}
                       </label>
 
                       <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
