@@ -63,6 +63,9 @@ export function TemplateFourImageGridNumberTitleDomain({
     preset.palette.canvas,
     preset.palette.domain,
     preset.palette.band,
+    preset.palette.title,
+    deepenHex(preset.palette.footer, 0.32),
+    "#172033",
     "#fffaf2",
   ]);
   const circleBackground = pickBestContrastColor(frameColor, [

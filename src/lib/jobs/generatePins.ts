@@ -1100,7 +1100,9 @@ export async function generateTitlesForJobPins(input: {
             getTemplateConfig(pin.templateId)?.features.numberTreatment ?? "none",
           imageAssignments: pin.plan.imageAssignments,
           itemNumber:
-            parsePlanRenderContext(pin.plan.notes).itemNumber ?? job.sourceImages.length,
+            parsePlanRenderContext(pin.plan.notes).itemNumber ??
+            job.listCountHint ??
+            job.sourceImages.length,
         }),
         {
           provider: settings.aiProvider,
@@ -1642,6 +1644,7 @@ async function buildSeedPlanRenderContext(
   job: {
     articleTitleSnapshot: string;
     domainSnapshot: string;
+    listCountHint: number | null;
     sourceImages: Array<{ id: string }>;
   },
   assignments: Array<{
@@ -1679,7 +1682,7 @@ async function buildSeedPlanRenderContext(
   }
 
   return {
-    itemNumber: job.sourceImages.length,
+    itemNumber: job.listCountHint ?? job.sourceImages.length,
     visualPreset,
   };
 }
@@ -1837,7 +1840,7 @@ async function generateRenderCopyForPlan(
   const existing = parsePlanRenderContext(plan.notes);
   const supportsSubtitle = templateConfig.textFields.includes("subtitle");
   const numberTreatment = templateConfig.features.numberTreatment;
-  const itemNumber = existing.itemNumber ?? job.sourceImages.length;
+  const itemNumber = existing.itemNumber ?? job.listCountHint ?? job.sourceImages.length;
   let title = existing.title?.trim();
   let subtitle = existing.subtitle?.trim();
 

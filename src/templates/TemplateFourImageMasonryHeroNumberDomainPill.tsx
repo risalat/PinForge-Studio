@@ -73,9 +73,13 @@ export function TemplateFourImageMasonryHeroNumberDomainPill({
   const domainPillBackground = withAlpha(preset.palette.footer, 0.94);
   const domainTextColor = pickBestContrastColor(domainPillBackground, [
     preset.palette.domain,
+    preset.palette.footer,
+    preset.palette.divider,
+    preset.palette.number,
     preset.palette.canvas,
     preset.palette.band,
     preset.palette.title,
+    "#172033",
     "#ffffff",
   ]);
   const collageHeight = 1920 - frameInset * 2;

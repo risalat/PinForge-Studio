@@ -56,6 +56,23 @@ export function TemplateSplitVerticalTitleNumber({
     0.96,
   );
   const domainPillBackground = withAlpha(preset.palette.footer, 0.94);
+  const titleColor = pickBestContrastColor(preset.palette.band, [
+    preset.palette.title,
+    preset.palette.footer,
+    preset.palette.domain,
+    preset.palette.divider,
+    "#111111",
+    "#fffdf8",
+  ]);
+  const domainTextColor = pickBestContrastColor(domainPillBackground, [
+    preset.palette.domain,
+    preset.palette.title,
+    preset.palette.band,
+    preset.palette.canvas,
+    preset.palette.footer,
+    "#111111",
+    "#fffdf8",
+  ]);
   const imageFilter = "saturate(1.04) contrast(1.03)";
 
   return (
@@ -121,7 +138,7 @@ export function TemplateSplitVerticalTitleNumber({
               maxLines={2}
               lineHeight={HERO_NUMBER_TEMPLATE_TYPOGRAPHY.title.lineHeight}
               className="mx-auto w-full max-w-[1020px] uppercase"
-              textColor={preset.palette.title}
+              textColor={titleColor}
               fontFamily={HERO_NUMBER_TEMPLATE_TYPOGRAPHY.title.fontFamily}
               fontWeight={HERO_NUMBER_TEMPLATE_TYPOGRAPHY.title.fontWeight}
               letterSpacing={HERO_NUMBER_TEMPLATE_TYPOGRAPHY.title.letterSpacing}
@@ -149,7 +166,7 @@ export function TemplateSplitVerticalTitleNumber({
             >
               <span
                 style={{
-                  color: preset.palette.domain,
+                  color: domainTextColor,
                   fontFamily: HERO_NUMBER_TEMPLATE_TYPOGRAPHY.domain.fontFamily,
                   fontWeight: HERO_NUMBER_TEMPLATE_TYPOGRAPHY.domain.fontWeight,
                   fontSize: "28px",
@@ -181,16 +198,28 @@ function withAlpha(hex: string, opacity: number) {
 }
 
 function pickBestContrastColor(backgroundHex: string, candidates: string[]) {
-  const normalizedCandidates = candidates.filter((candidate) => isHexColor(candidate));
-  if (!isHexColor(backgroundHex) || normalizedCandidates.length === 0) {
+  const normalizedBackground = stripAlphaChannel(backgroundHex);
+  const normalizedCandidates = candidates
+    .map((candidate) => stripAlphaChannel(candidate))
+    .filter((candidate) => isHexColor(candidate));
+  if (!isHexColor(normalizedBackground) || normalizedCandidates.length === 0) {
     return candidates[0] ?? backgroundHex;
   }
 
   return normalizedCandidates.reduce((best, candidate) =>
-    getContrastRatio(candidate, backgroundHex) > getContrastRatio(best, backgroundHex)
+    getContrastRatio(candidate, normalizedBackground) > getContrastRatio(best, normalizedBackground)
       ? candidate
       : best,
   );
+}
+
+function stripAlphaChannel(value: string) {
+  const normalized = value.replace("#", "");
+  if (/^[0-9a-fA-F]{8}$/.test(normalized)) {
+    return `#${normalized.slice(0, 6)}`;
+  }
+
+  return value;
 }
 
 function getContrastRatio(foregroundHex: string, backgroundHex: string) {

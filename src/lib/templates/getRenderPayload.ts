@@ -48,7 +48,9 @@ export async function getRenderPayload(
       title: renderContext.title?.trim() || job.articleTitleSnapshot,
       subtitle: renderContext.subtitle?.trim() || undefined,
       itemNumber:
-        typeof renderContext.itemNumber === "number" ? renderContext.itemNumber : undefined,
+        typeof renderContext.itemNumber === "number"
+          ? renderContext.itemNumber
+          : job.listCountHint ?? undefined,
       domain: job.domainSnapshot,
       visualPreset: toVisualPreset(
         renderContext.visualPreset ?? renderContext.colorPreset,
