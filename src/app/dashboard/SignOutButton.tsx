@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { BusyActionLabel } from "@/components/ui/BusyActionLabel";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 export function SignOutButton({ className }: { className?: string }) {
@@ -31,7 +32,11 @@ export function SignOutButton({ className }: { className?: string }) {
         "rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-5 py-3 text-sm font-semibold uppercase tracking-[0.22em] text-[var(--dashboard-subtle)] disabled:opacity-60"
       }
     >
-      {isPending ? "Signing out..." : "Sign out"}
+      <BusyActionLabel
+        busy={isPending}
+        label="Sign out"
+        busyLabel="Signing out..."
+      />
     </button>
   );
 }

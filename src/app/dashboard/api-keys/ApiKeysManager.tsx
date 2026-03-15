@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
+import { BusyActionLabel } from "@/components/ui/BusyActionLabel";
 import type { ApiKeyListItem } from "@/lib/types";
 
 type ApiKeysResponse = {
@@ -17,7 +18,9 @@ export function ApiKeysManager({
   const [newKeyName, setNewKeyName] = useState("Extension local key");
   const [generatedKey, setGeneratedKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const [activeAction, setActiveAction] = useState<string | null>(null);
+
+  const isCreating = activeAction === "create";
 
   async function loadApiKeys() {
     const response = await fetch("/api/dashboard/api-keys", {
@@ -30,11 +33,12 @@ export function ApiKeysManager({
     }
   }
 
-  function handleCreate() {
-    startTransition(async () => {
-      setError(null);
-      setGeneratedKey(null);
+  async function handleCreate() {
+    setActiveAction("create");
+    setError(null);
+    setGeneratedKey(null);
 
+    try {
       const response = await fetch("/api/dashboard/api-keys", {
         method: "POST",
         headers: {
@@ -57,13 +61,16 @@ export function ApiKeysManager({
 
       setGeneratedKey(json.plaintextKey);
       await loadApiKeys();
-    });
+    } finally {
+      setActiveAction(null);
+    }
   }
 
-  function handleRevoke(id: string) {
-    startTransition(async () => {
-      setError(null);
+  async function handleRevoke(id: string) {
+    setActiveAction(`revoke:${id}`);
+    setError(null);
 
+    try {
       const response = await fetch(`/api/dashboard/api-keys/${id}/revoke`, {
         method: "POST",
       });
@@ -75,7 +82,9 @@ export function ApiKeysManager({
       }
 
       await loadApiKeys();
-    });
+    } finally {
+      setActiveAction(null);
+    }
   }
 
   return (
@@ -100,10 +109,15 @@ export function ApiKeysManager({
           <button
             type="button"
             onClick={handleCreate}
-            disabled={isPending || newKeyName.trim() === ""}
+            disabled={Boolean(activeAction) || newKeyName.trim() === ""}
             className="rounded-full dashboard-accent-action dashboard-accent-action bg-[var(--dashboard-accent)] px-5 py-3 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
           >
-            Create API key
+            <BusyActionLabel
+              busy={isCreating}
+              label="Create API key"
+              busyLabel="Creating API key..."
+              inverse
+            />
           </button>
         </div>
 
@@ -175,10 +189,14 @@ export function ApiKeysManager({
                       <button
                         type="button"
                         onClick={() => handleRevoke(apiKey.id)}
-                        disabled={isPending}
+                        disabled={Boolean(activeAction)}
                         className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-subtle)] disabled:opacity-60"
                       >
-                        Revoke
+                        <BusyActionLabel
+                          busy={activeAction === `revoke:${apiKey.id}`}
+                          label="Revoke"
+                          busyLabel="Revoking..."
+                        />
                       </button>
                     ) : (
                       <span className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">

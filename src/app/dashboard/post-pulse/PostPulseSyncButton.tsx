@@ -1,11 +1,12 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
+import { BusyActionLabel } from "@/components/ui/BusyActionLabel";
 
 export function PostPulseSyncButton({ workspaceId }: { workspaceId: string }) {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  const [isPending, setIsPending] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -16,7 +17,8 @@ export function PostPulseSyncButton({ workspaceId }: { workspaceId: string }) {
       return;
     }
 
-    startTransition(async () => {
+    void (async () => {
+      setIsPending(true);
       try {
         setFeedback(null);
         setError(null);
@@ -84,8 +86,10 @@ export function PostPulseSyncButton({ workspaceId }: { workspaceId: string }) {
         router.refresh();
       } catch (syncError) {
         setError(syncError instanceof Error ? syncError.message : "Unable to sync Publer activity.");
+      } finally {
+        setIsPending(false);
       }
-    });
+    })();
   }
 
   return (
@@ -96,7 +100,12 @@ export function PostPulseSyncButton({ workspaceId }: { workspaceId: string }) {
         disabled={isPending || !workspaceId}
         className="rounded-full dashboard-accent-action dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
       >
-        {isPending ? "Syncing Publer..." : "Sync Publer now"}
+        <BusyActionLabel
+          busy={isPending}
+          label="Sync Publer now"
+          busyLabel="Syncing Publer..."
+          inverse
+        />
       </button>
       {feedback ? (
         <p className="text-sm text-[var(--dashboard-success-ink)]">{feedback}</p>

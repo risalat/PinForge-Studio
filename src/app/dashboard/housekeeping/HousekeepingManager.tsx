@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
+import { BusyActionLabel } from "@/components/ui/BusyActionLabel";
 
 type StorageAuditResult = {
   provider: "local" | "r2";
@@ -26,69 +27,73 @@ type TempCleanupResult = {
 };
 
 export function HousekeepingManager({ databaseReady }: { databaseReady: boolean }) {
-  const [isPending, startTransition] = useTransition();
   const [days, setDays] = useState(7);
   const [auditResult, setAuditResult] = useState<StorageAuditResult | null>(null);
   const [cleanupResult, setCleanupResult] = useState<TempCleanupResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [activeAction, setActiveAction] = useState<"audit" | "preview" | "delete" | null>(null);
 
-  function runStorageAudit() {
-    startTransition(async () => {
-      try {
-        setError(null);
-        const response = await fetch("/api/dashboard/housekeeping/storage-audit", {
-          method: "POST",
-        });
-        const data = (await response.json()) as {
-          ok?: boolean;
-          error?: string;
-          result?: StorageAuditResult;
-        };
+  async function runStorageAudit() {
+    setActiveAction("audit");
 
-        if (!response.ok || !data.ok || !data.result) {
-          throw new Error(data.error ?? "Unable to run storage audit.");
-        }
+    try {
+      setError(null);
+      const response = await fetch("/api/dashboard/housekeeping/storage-audit", {
+        method: "POST",
+      });
+      const data = (await response.json()) as {
+        ok?: boolean;
+        error?: string;
+        result?: StorageAuditResult;
+      };
 
-        setAuditResult(data.result);
-      } catch (auditError) {
-        setError(auditError instanceof Error ? auditError.message : "Unable to run storage audit.");
+      if (!response.ok || !data.ok || !data.result) {
+        throw new Error(data.error ?? "Unable to run storage audit.");
       }
-    });
+
+      setAuditResult(data.result);
+    } catch (auditError) {
+      setError(auditError instanceof Error ? auditError.message : "Unable to run storage audit.");
+    } finally {
+      setActiveAction(null);
+    }
   }
 
-  function runTempCleanup(apply: boolean) {
+  async function runTempCleanup(apply: boolean) {
     if (apply && !window.confirm("Delete stale temp assets now?")) {
       return;
     }
 
-    startTransition(async () => {
-      try {
-        setError(null);
-        const response = await fetch("/api/dashboard/housekeeping/temp-cleanup", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            days,
-            apply,
-          }),
-        });
-        const data = (await response.json()) as {
-          ok?: boolean;
-          error?: string;
-          result?: TempCleanupResult;
-        };
+    setActiveAction(apply ? "delete" : "preview");
 
-        if (!response.ok || !data.ok || !data.result) {
-          throw new Error(data.error ?? "Unable to run temp cleanup.");
-        }
+    try {
+      setError(null);
+      const response = await fetch("/api/dashboard/housekeeping/temp-cleanup", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          days,
+          apply,
+        }),
+      });
+      const data = (await response.json()) as {
+        ok?: boolean;
+        error?: string;
+        result?: TempCleanupResult;
+      };
 
-        setCleanupResult(data.result);
-      } catch (cleanupError) {
-        setError(cleanupError instanceof Error ? cleanupError.message : "Unable to run temp cleanup.");
+      if (!response.ok || !data.ok || !data.result) {
+        throw new Error(data.error ?? "Unable to run temp cleanup.");
       }
-    });
+
+      setCleanupResult(data.result);
+    } catch (cleanupError) {
+      setError(cleanupError instanceof Error ? cleanupError.message : "Unable to run temp cleanup.");
+    } finally {
+      setActiveAction(null);
+    }
   }
 
   return (
@@ -111,10 +116,15 @@ export function HousekeepingManager({ databaseReady }: { databaseReady: boolean 
             <button
               type="button"
               onClick={runStorageAudit}
-              disabled={!databaseReady || isPending}
+              disabled={!databaseReady || Boolean(activeAction)}
               className="rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
             >
-              {isPending ? "Running..." : "Run audit"}
+              <BusyActionLabel
+                busy={activeAction === "audit"}
+                label="Run audit"
+                busyLabel="Running audit..."
+                inverse
+              />
             </button>
           </div>
           {auditResult ? (
@@ -162,18 +172,27 @@ export function HousekeepingManager({ databaseReady }: { databaseReady: boolean 
               <button
                 type="button"
                 onClick={() => runTempCleanup(false)}
-                disabled={isPending}
+                disabled={Boolean(activeAction)}
                 className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] disabled:opacity-60"
               >
-                Preview
+                <BusyActionLabel
+                  busy={activeAction === "preview"}
+                  label="Preview"
+                  busyLabel="Previewing..."
+                />
               </button>
               <button
                 type="button"
                 onClick={() => runTempCleanup(true)}
-                disabled={isPending}
+                disabled={Boolean(activeAction)}
                 className="rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
               >
-                Delete stale
+                <BusyActionLabel
+                  busy={activeAction === "delete"}
+                  label="Delete stale"
+                  busyLabel="Deleting stale..."
+                  inverse
+                />
               </button>
             </div>
           </div>

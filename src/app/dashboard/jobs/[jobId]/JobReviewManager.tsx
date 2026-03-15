@@ -5,6 +5,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
+import { BusyActionLabel } from "@/components/ui/BusyActionLabel";
 import { useAppFeedback } from "@/components/ui/AppFeedbackProvider";
 
 type SourceImageItem = {
@@ -72,6 +73,15 @@ type FeedbackState = {
   message: string;
   source?: "review" | "images";
 } | null;
+
+type ReviewActionState =
+  | { kind: "save_review"; source: "review" | "images" }
+  | { kind: "assisted" }
+  | { kind: "manual" }
+  | { kind: "discard_plans"; scope: "selected" | "single" }
+  | { kind: "discard_pins"; scope: "all" | "single" }
+  | { kind: "save_overrides"; planId: string }
+  | null;
 
 type RenderProgressState = {
   active: boolean;
@@ -167,7 +177,7 @@ export function JobReviewManager({
         ? [plans[0].id]
         : [],
   );
-  const [isPending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
   const [reviewFeedback, setReviewFeedback] = useState<FeedbackState>(null);
   const [plansFeedback, setPlansFeedback] = useState<FeedbackState>(null);
   const [generationFeedback, setGenerationFeedback] = useState<FeedbackState>(null);
@@ -176,6 +186,7 @@ export function JobReviewManager({
   const [missingAssetPinIds, setMissingAssetPinIds] = useState<string[]>([]);
   const [renderProgress, setRenderProgress] = useState<RenderProgressState | null>(null);
   const [isRenderingPlans, setIsRenderingPlans] = useState(false);
+  const [activeAction, setActiveAction] = useState<ReviewActionState>(null);
 
   const selectedImages = images.filter((image) => image.isSelected);
   const manualTemplate = templates.find((item) => item.id === manualTemplateId) ?? null;
@@ -291,6 +302,7 @@ export function JobReviewManager({
 
   function handleSaveReview(source: "review" | "images") {
     startTransition(async () => {
+      setActiveAction({ kind: "save_review", source });
       try {
         setReviewFeedback(null);
         await runAction(`/api/dashboard/jobs/${jobId}/review`, {
@@ -334,12 +346,15 @@ export function JobReviewManager({
           message,
           sticky: true,
         });
+      } finally {
+        setActiveAction(null);
       }
     });
   }
 
   function handleAssistedPlans() {
     startTransition(async () => {
+      setActiveAction({ kind: "assisted" });
       try {
         setPlansFeedback(null);
         await runAction(`/api/dashboard/jobs/${jobId}/plans`, {
@@ -378,12 +393,15 @@ export function JobReviewManager({
           message,
           sticky: true,
         });
+      } finally {
+        setActiveAction(null);
       }
     });
   }
 
   function handleManualPlan() {
     startTransition(async () => {
+      setActiveAction({ kind: "manual" });
       try {
         setPlansFeedback(null);
         await runAction(`/api/dashboard/jobs/${jobId}/plans`, {
@@ -414,6 +432,8 @@ export function JobReviewManager({
           message,
           sticky: true,
         });
+      } finally {
+        setActiveAction(null);
       }
     });
   }
@@ -563,6 +583,10 @@ export function JobReviewManager({
     }
 
     startTransition(async () => {
+      setActiveAction({
+        kind: "discard_plans",
+        scope: targetPlanIds && targetPlanIds.length > 0 ? "single" : "selected",
+      });
       try {
         setPlansFeedback(null);
         setGenerationFeedback(null);
@@ -598,6 +622,8 @@ export function JobReviewManager({
           message,
           sticky: true,
         });
+      } finally {
+        setActiveAction(null);
       }
     });
   }
@@ -622,6 +648,10 @@ export function JobReviewManager({
     }
 
     startTransition(async () => {
+      setActiveAction({
+        kind: "discard_pins",
+        scope: targetPinIds && targetPinIds.length > 0 ? "single" : "all",
+      });
       try {
         setGenerationFeedback(null);
         setPreviewPinIndex(null);
@@ -655,6 +685,8 @@ export function JobReviewManager({
           message,
           sticky: true,
         });
+      } finally {
+        setActiveAction(null);
       }
     });
   }
@@ -666,6 +698,7 @@ export function JobReviewManager({
     }
 
     startTransition(async () => {
+      setActiveAction({ kind: "save_overrides", planId });
       try {
         setPlansFeedback(null);
         await runAction(`/api/dashboard/jobs/${jobId}/plans`, {
@@ -699,6 +732,8 @@ export function JobReviewManager({
           message,
           sticky: true,
         });
+      } finally {
+        setActiveAction(null);
       }
     });
   }
@@ -716,10 +751,15 @@ export function JobReviewManager({
           <button
             type="button"
             onClick={() => handleSaveReview("review")}
-            disabled={isPending}
+            disabled={Boolean(activeAction) || isRenderingPlans}
             className="rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
           >
-            Save review
+            <BusyActionLabel
+              busy={activeAction?.kind === "save_review" && activeAction.source === "review"}
+              label="Save review"
+              busyLabel="Saving review..."
+              inverse
+            />
           </button>
         </div>
         {reviewFeedback?.source === "review" ? <InlineFeedback feedback={reviewFeedback} /> : null}
@@ -797,10 +837,15 @@ export function JobReviewManager({
           <button
             type="button"
             onClick={() => handleSaveReview("images")}
-            disabled={isPending}
+            disabled={Boolean(activeAction) || isRenderingPlans}
             className="rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
           >
-            Save review
+            <BusyActionLabel
+              busy={activeAction?.kind === "save_review" && activeAction.source === "images"}
+              label="Save review"
+              busyLabel="Saving review..."
+              inverse
+            />
           </button>
         </div>
         {reviewFeedback?.source === "images" ? <InlineFeedback feedback={reviewFeedback} /> : null}
@@ -894,10 +939,20 @@ export function JobReviewManager({
               <button
                 type="button"
                 onClick={handleAssistedPlans}
-                disabled={isPending || selectedTemplateIds.length === 0 || selectedImages.length === 0}
+                disabled={
+                  Boolean(activeAction) ||
+                  isRenderingPlans ||
+                  selectedTemplateIds.length === 0 ||
+                  selectedImages.length === 0
+                }
                 className="rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
               >
-                Create assisted plans
+                <BusyActionLabel
+                  busy={activeAction?.kind === "assisted"}
+                  label="Create assisted plans"
+                  busyLabel="Creating assisted plans..."
+                  inverse
+                />
               </button>
             </div>
 
@@ -1012,10 +1067,15 @@ export function JobReviewManager({
               <button
                 type="button"
                 onClick={handleManualPlan}
-                disabled={isPending || !manualTemplate}
+                disabled={Boolean(activeAction) || isRenderingPlans || !manualTemplate}
                 className="rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
               >
-                Add manual plan
+                <BusyActionLabel
+                  busy={activeAction?.kind === "manual"}
+                  label="Add manual plan"
+                  busyLabel="Adding manual plan..."
+                  inverse
+                />
               </button>
             </div>
 
@@ -1094,26 +1154,39 @@ export function JobReviewManager({
             <button
               type="button"
               onClick={() => handleDiscardPlans()}
-              disabled={isPending || isRenderingPlans || selectedActionPlans.length === 0}
+              disabled={Boolean(activeAction) || isRenderingPlans || selectedActionPlans.length === 0}
               className="rounded-full border border-[var(--dashboard-danger-border)] bg-[var(--dashboard-danger-soft)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-danger-ink)] disabled:opacity-50"
             >
-              Discard selected plans
+              <BusyActionLabel
+                busy={activeAction?.kind === "discard_plans" && activeAction.scope === "selected"}
+                label="Discard selected plans"
+                busyLabel="Discarding plans..."
+              />
             </button>
             <button
               type="button"
               onClick={() => handleDiscardGeneratedPins()}
-              disabled={isPending || isRenderingPlans || generatedPins.length === 0}
+              disabled={Boolean(activeAction) || isRenderingPlans || generatedPins.length === 0}
               className="rounded-full border border-[var(--dashboard-danger-border)] bg-[var(--dashboard-danger-soft)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-danger-ink)] disabled:opacity-50"
             >
-              Discard generated pins
+              <BusyActionLabel
+                busy={activeAction?.kind === "discard_pins" && activeAction.scope === "all"}
+                label="Discard generated pins"
+                busyLabel="Discarding pins..."
+              />
             </button>
             <button
               type="button"
               onClick={() => handleGeneratePins()}
-              disabled={isPending || isRenderingPlans || selectedRenderablePlans.length === 0}
+              disabled={Boolean(activeAction) || isRenderingPlans || selectedRenderablePlans.length === 0}
               className="rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
             >
-              {isRenderingPlans ? "Rendering queue" : "Generate selected plans"}
+              <BusyActionLabel
+                busy={isRenderingPlans}
+                label="Generate selected plans"
+                busyLabel="Rendering queue..."
+                inverse
+              />
             </button>
           </div>
         </div>
@@ -1265,18 +1338,31 @@ export function JobReviewManager({
                       <button
                         type="button"
                         onClick={() => handleGeneratePins([selectedPlan.id])}
-                        disabled={isPending || isRenderingPlans || !["READY", "DRAFT", "FAILED"].includes(selectedPlan.status)}
+                        disabled={
+                          Boolean(activeAction) ||
+                          isRenderingPlans ||
+                          !["READY", "DRAFT", "FAILED"].includes(selectedPlan.status)
+                        }
                         className="rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
                       >
-                        Generate this plan
+                        <BusyActionLabel
+                          busy={isRenderingPlans}
+                          label="Generate this plan"
+                          busyLabel="Rendering plan..."
+                          inverse
+                        />
                       </button>
                       <button
                         type="button"
                         onClick={() => handleDiscardPlans([selectedPlan.id])}
-                        disabled={isPending || isRenderingPlans}
+                        disabled={Boolean(activeAction) || isRenderingPlans}
                         className="rounded-full border border-[var(--dashboard-danger-border)] bg-[var(--dashboard-danger-soft)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-danger-ink)] disabled:opacity-60"
                       >
-                        Discard this plan
+                        <BusyActionLabel
+                          busy={activeAction?.kind === "discard_plans" && activeAction.scope === "single"}
+                          label="Discard this plan"
+                          busyLabel="Discarding plan..."
+                        />
                       </button>
                       <Link
                         href={templates.find((template) => template.id === selectedPlan.templateId)?.previewPath ?? "/library"}
@@ -1287,10 +1373,14 @@ export function JobReviewManager({
                       <button
                         type="button"
                         onClick={() => handleSavePlanSettings(selectedPlan.id)}
-                        disabled={isPending || isRenderingPlans}
+                        disabled={Boolean(activeAction) || isRenderingPlans}
                         className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] disabled:opacity-60"
                       >
-                        Save overrides
+                        <BusyActionLabel
+                          busy={activeAction?.kind === "save_overrides" && activeAction.planId === selectedPlan.id}
+                          label="Save overrides"
+                          busyLabel="Saving overrides..."
+                        />
                       </button>
                     </div>
                   </div>

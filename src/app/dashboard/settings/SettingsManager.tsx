@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { BusyActionLabel } from "@/components/ui/BusyActionLabel";
 import type { AIProvider } from "@/lib/ai";
 import type {
   DashboardAiModelsResponse,
@@ -67,6 +68,9 @@ export function SettingsManager({
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingPublerWorkspaces, setIsLoadingPublerWorkspaces] = useState(false);
   const [isLoadingAiModels, setIsLoadingAiModels] = useState(false);
+  const [loadingWorkspaceProfileIndex, setLoadingWorkspaceProfileIndex] = useState<number | null>(
+    null,
+  );
 
   const canLoadAiModels =
     aiProvider === "custom_endpoint"
@@ -134,6 +138,7 @@ export function SettingsManager({
     }
 
     try {
+      setLoadingWorkspaceProfileIndex(index);
       const response = await fetch("/api/dashboard/settings/publer-options", {
         method: "POST",
         headers: {
@@ -185,6 +190,8 @@ export function SettingsManager({
       setError(
         loadError instanceof Error ? loadError.message : "Unable to load workspace defaults.",
       );
+    } finally {
+      setLoadingWorkspaceProfileIndex((current) => (current === index ? null : current));
     }
   }
 
@@ -499,7 +506,11 @@ export function SettingsManager({
                 disabled={isLoadingPublerWorkspaces || !canLoadPublerWorkspaces}
                 className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] disabled:opacity-60"
               >
-                {isLoadingPublerWorkspaces ? "Loading..." : "Load workspaces"}
+                <BusyActionLabel
+                  busy={isLoadingPublerWorkspaces}
+                  label="Load workspaces"
+                  busyLabel="Loading workspaces..."
+                />
               </button>
               <button
                 type="button"
@@ -530,10 +541,20 @@ export function SettingsManager({
                     key={`${profile.workspaceId || "new"}-${index}`}
                     className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-4"
                   >
+                  {loadingWorkspaceProfileIndex === index ? (
+                    <p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--dashboard-muted)]">
+                      <BusyActionLabel
+                        busy
+                        label="Profile ready"
+                        busyLabel="Loading accounts and boards..."
+                      />
+                    </p>
+                  ) : null}
                   <div className="grid gap-3 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_auto_auto]">
                     <select
                       value={profile.workspaceId}
                       onChange={(event) => handleWorkspaceSelection(index, event.target.value)}
+                      disabled={loadingWorkspaceProfileIndex === index}
                       className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 outline-none"
                     >
                       <option value="">Select workspace</option>
@@ -554,18 +575,20 @@ export function SettingsManager({
                     <button
                       type="button"
                       onClick={() => setDefaultWorkspaceProfile(index)}
+                      disabled={loadingWorkspaceProfileIndex === index}
                       className={`rounded-full border px-4 py-2 text-sm font-semibold ${
                         profile.isDefault
                           ? "border-[var(--dashboard-accent-border)] bg-[var(--dashboard-accent-soft-strong)] text-[var(--dashboard-accent-strong)]"
                           : "border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] text-[var(--dashboard-subtle)]"
-                      }`}
+                      } disabled:opacity-60`}
                     >
                       Default
                     </button>
                     <button
                       type="button"
                       onClick={() => removeWorkspaceProfile(index)}
-                      className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)]"
+                      disabled={loadingWorkspaceProfileIndex === index}
+                      className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] disabled:opacity-60"
                     >
                       Remove
                     </button>
@@ -574,6 +597,7 @@ export function SettingsManager({
                       <select
                         value={profile.defaultAccountId}
                         onChange={(event) => handleWorkspaceAccountSelection(index, event.target.value)}
+                        disabled={loadingWorkspaceProfileIndex === index}
                         className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 outline-none"
                       >
                         <option value="">Default account</option>
@@ -586,6 +610,7 @@ export function SettingsManager({
                       <select
                         value={profile.defaultBoardId}
                         onChange={(event) => updateWorkspaceProfile(index, "defaultBoardId", event.target.value)}
+                        disabled={loadingWorkspaceProfileIndex === index}
                         className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 outline-none"
                       >
                         <option value="">Default board</option>
@@ -620,7 +645,11 @@ export function SettingsManager({
             disabled={isLoadingAiModels || !canLoadAiModels || aiProvider === "custom_endpoint"}
             className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-5 py-3 text-sm font-semibold text-[var(--dashboard-subtle)] disabled:opacity-60"
           >
-            {isLoadingAiModels ? "Loading..." : "Refresh models"}
+            <BusyActionLabel
+              busy={isLoadingAiModels}
+              label="Refresh models"
+              busyLabel="Refreshing models..."
+            />
           </button>
         </div>
 
@@ -724,7 +753,12 @@ export function SettingsManager({
           disabled={isSaving}
           className="rounded-full dashboard-accent-action dashboard-accent-action bg-[var(--dashboard-accent)] px-6 py-3 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
         >
-          {isSaving ? "Saving..." : "Save settings"}
+          <BusyActionLabel
+            busy={isSaving}
+            label="Save settings"
+            busyLabel="Saving settings..."
+            inverse
+          />
         </button>
 
         {success ? (

@@ -3,6 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { PostPulseSyncButton } from "@/app/dashboard/post-pulse/PostPulseSyncButton";
+import { BusyActionLabel } from "@/components/ui/BusyActionLabel";
 import type { PostPulseFilter, PostPulseSort } from "@/lib/dashboard/postPulse";
 
 export function PostPulseWorkspaceControls({
@@ -93,6 +94,11 @@ export function PostPulseWorkspaceControls({
         </select>
         <PostPulseSyncButton workspaceId={workspaceId} />
       </div>
+      {isNavigating ? (
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--dashboard-muted)]">
+          <BusyActionLabel busy label="Filters ready" busyLabel="Updating post list..." />
+        </p>
+      ) : null}
     </div>
   );
 }
