@@ -3,7 +3,14 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import { useRouter } from "next/navigation";
 import { useAppFeedback } from "@/components/ui/AppFeedbackProvider";
 import { buildSchedulePreview } from "@/lib/jobs/schedulePreview";
@@ -311,19 +318,19 @@ export function JobPublishManager({
     [boards, profileDefaultBoardId],
   );
   const isScheduleInsideSpacingGap = useMemo(() => {
-    if (!scheduleContext.recommendedFirstPublishAt || !firstPublishAt) {
+    if (!scheduleContext.spacingRecommendedFirstPublishAt || !firstPublishAt) {
       return false;
     }
 
     const selectedDate = new Date(firstPublishAt);
-    const recommendedDate = new Date(scheduleContext.recommendedFirstPublishAt);
+    const recommendedDate = new Date(scheduleContext.spacingRecommendedFirstPublishAt);
 
     if (Number.isNaN(selectedDate.getTime()) || Number.isNaN(recommendedDate.getTime())) {
       return false;
     }
 
     return selectedDate < recommendedDate;
-  }, [firstPublishAt, scheduleContext.recommendedFirstPublishAt]);
+  }, [firstPublishAt, scheduleContext.spacingRecommendedFirstPublishAt]);
   const filteredBoards = useMemo(() => {
     const query = boardSearchQuery.trim().toLowerCase();
     if (!query) {
@@ -386,6 +393,15 @@ export function JobPublishManager({
       }),
     [copyByPinId, selectedPins],
   );
+  const selectedScheduleDayKey = firstPublishAt ? firstPublishAt.slice(0, 10) : "";
+  const selectedScheduleDay = useMemo(
+    () =>
+      selectedScheduleDayKey
+        ? scheduleContext.upcomingQueueDays.find((day) => day.date === selectedScheduleDayKey) ?? null
+        : null,
+    [scheduleContext.upcomingQueueDays, selectedScheduleDayKey],
+  );
+  const isSelectedScheduleDayFull = Boolean(selectedScheduleDay?.isFull);
 
   const schedulePreview = useMemo(() => {
     if (selectedPins.length === 0 || !firstPublishAt) {
@@ -445,9 +461,6 @@ export function JobPublishManager({
     selectedAiCredential && selectedAiCredential.canUseApiKey,
   );
 
-  // `loadPublerOptions` is intentionally invoked once here after local state hydration.
-  // Subsequent workspace/account changes call it directly from event handlers.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const savedSelection = readPersistedPublishSelection(jobId);
     if (savedSelection) {
@@ -482,30 +495,6 @@ export function JobPublishManager({
     primaryBoardId,
     primaryBoardPercent,
     selectedBoardIds,
-    workspaceId,
-  ]);
-
-  useEffect(() => {
-    if (!integrationReady.canUsePublerApiKey) {
-      return;
-    }
-
-    if (!hasLoadedSavedDestination || hasInitializedOptionsRef.current) {
-      return;
-    }
-
-    hasInitializedOptionsRef.current = true;
-    void loadPublerOptions({
-      preserveCurrentSelection: true,
-      nextWorkspaceId: workspaceId || defaults.workspaceId,
-      nextAccountId: accountId || defaults.accountId,
-    });
-  }, [
-    accountId,
-    defaults.accountId,
-    defaults.workspaceId,
-    hasLoadedSavedDestination,
-    integrationReady.canUsePublerApiKey,
     workspaceId,
   ]);
 
@@ -609,123 +598,135 @@ export function JobPublishManager({
     uploadTracking,
   ]);
 
-  function getWorkspaceProfileDefaults(nextWorkspaceId: string) {
+  const getWorkspaceProfileDefaults = useCallback((nextWorkspaceId: string) => {
     const profile = profileCatalog.find((item) => item.workspaceId === nextWorkspaceId);
 
     return {
       accountId: profile?.defaultAccountId ?? "",
       boardId: profile?.defaultBoardId ?? "",
     };
-  }
+  }, [profileCatalog]);
 
-  async function loadPublerOptions(input?: {
-    preserveCurrentSelection?: boolean;
-    nextWorkspaceId?: string;
-    nextAccountId?: string;
-  }) {
-    setIsLoadingOptions(true);
-    setOptionsError(null);
+  const loadPublerOptions = useCallback(
+    async (input?: {
+      preserveCurrentSelection?: boolean;
+      nextWorkspaceId?: string;
+      nextAccountId?: string;
+    }) => {
+      setIsLoadingOptions(true);
+      setOptionsError(null);
 
-    try {
-      const response = await fetch("/api/dashboard/settings/publer-options", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          workspaceId: input?.nextWorkspaceId ?? workspaceId,
-          accountId: input?.nextAccountId ?? accountId,
-        }),
-      });
-      const data = (await response.json()) as PublerOptionsResponse;
+      try {
+        const response = await fetch("/api/dashboard/settings/publer-options", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            workspaceId: input?.nextWorkspaceId ?? workspaceId,
+            accountId: input?.nextAccountId ?? accountId,
+          }),
+        });
+        const data = (await response.json()) as PublerOptionsResponse;
 
-      if (!response.ok || !data.ok) {
-        throw new Error(data.error ?? "Unable to load Publer options.");
-      }
+        if (!response.ok || !data.ok) {
+          throw new Error(data.error ?? "Unable to load Publer options.");
+        }
 
-      const nextWorkspaces = data.workspaces ?? [];
-      const nextAccounts = data.accounts ?? [];
-      const nextBoards = data.boards ?? [];
-      const profileDefaults = getWorkspaceProfileDefaults(
-        input?.nextWorkspaceId ?? workspaceId,
-      );
-      const resolvedWorkspaceId =
-        input?.preserveCurrentSelection && workspaceId
-          ? workspaceId
-          : data.selectedWorkspaceId ?? workspaceId;
-      const resolvedAccountId =
-        input?.preserveCurrentSelection && accountId
-          ? accountId
-          : input?.nextAccountId?.trim() ||
-            profileDefaults.accountId ||
-            data.selectedAccountId ||
-            accountId;
-
-      setWorkspaces(nextWorkspaces);
-      setAccounts(nextAccounts);
-      setBoards(nextBoards);
-      setWorkspaceId(resolvedWorkspaceId);
-      setAccountId(resolvedAccountId);
-      setSelectedBoardIds((current) => {
-        const validBoardIds = current.filter((boardId) =>
-          nextBoards.some((board) => board.id === boardId),
+        const nextWorkspaces = data.workspaces ?? [];
+        const nextAccounts = data.accounts ?? [];
+        const nextBoards = data.boards ?? [];
+        const profileDefaults = getWorkspaceProfileDefaults(
+          input?.nextWorkspaceId ?? workspaceId,
         );
-        if (validBoardIds.length > 0) {
-          return validBoardIds;
-        }
+        const resolvedWorkspaceId =
+          input?.preserveCurrentSelection && workspaceId
+            ? workspaceId
+            : data.selectedWorkspaceId ?? workspaceId;
+        const resolvedAccountId =
+          input?.preserveCurrentSelection && accountId
+            ? accountId
+            : input?.nextAccountId?.trim() ||
+              profileDefaults.accountId ||
+              data.selectedAccountId ||
+              accountId;
 
-        if (
-          profileDefaults.boardId &&
-          nextBoards.some((board) => board.id === profileDefaults.boardId)
-        ) {
-          return [profileDefaults.boardId];
-        }
+        setWorkspaces(nextWorkspaces);
+        setAccounts(nextAccounts);
+        setBoards(nextBoards);
+        setWorkspaceId(resolvedWorkspaceId);
+        setAccountId(resolvedAccountId);
+        setSelectedBoardIds((current) => {
+          const validBoardIds = current.filter((boardId) =>
+            nextBoards.some((board) => board.id === boardId),
+          );
+          if (validBoardIds.length > 0) {
+            return validBoardIds;
+          }
 
-        return [];
-      });
-      setPrimaryBoardId((current) => {
-        if (current && nextBoards.some((board) => board.id === current)) {
-          return current;
-        }
-        if (
-          profileDefaults.boardId &&
-          nextBoards.some((board) => board.id === profileDefaults.boardId)
-        ) {
-          return profileDefaults.boardId;
-        }
-      return nextBoards[0]?.id ?? "";
-      });
-    } catch (error) {
-      setOptionsError(error instanceof Error ? error.message : "Unable to load Publer options.");
-    } finally {
-      setIsLoadingOptions(false);
+          if (
+            profileDefaults.boardId &&
+            nextBoards.some((board) => board.id === profileDefaults.boardId)
+          ) {
+            return [profileDefaults.boardId];
+          }
+
+          return [];
+        });
+        setPrimaryBoardId((current) => {
+          if (current && nextBoards.some((board) => board.id === current)) {
+            return current;
+          }
+          if (
+            profileDefaults.boardId &&
+            nextBoards.some((board) => board.id === profileDefaults.boardId)
+          ) {
+            return profileDefaults.boardId;
+          }
+          return nextBoards[0]?.id ?? "";
+        });
+      } catch (error) {
+        setOptionsError(
+          error instanceof Error ? error.message : "Unable to load Publer options.",
+        );
+      } finally {
+        setIsLoadingOptions(false);
+      }
+    },
+    [accountId, getWorkspaceProfileDefaults, workspaceId],
+  );
+
+  useEffect(() => {
+    if (!integrationReady.canUsePublerApiKey) {
+      return;
     }
-  }
+
+    if (!hasLoadedSavedDestination || hasInitializedOptionsRef.current) {
+      return;
+    }
+
+    hasInitializedOptionsRef.current = true;
+    void loadPublerOptions({
+      preserveCurrentSelection: true,
+      nextWorkspaceId: workspaceId || defaults.workspaceId,
+      nextAccountId: accountId || defaults.accountId,
+    });
+  }, [
+    accountId,
+    defaults.accountId,
+    defaults.workspaceId,
+    hasLoadedSavedDestination,
+    integrationReady.canUsePublerApiKey,
+    loadPublerOptions,
+    workspaceId,
+  ]);
 
   useEffect(() => {
     if (!workspaceId) {
-      setScheduleContext({
-        workspaceId: "",
-        latestScheduledAt: null,
-        latestPublishedAt: null,
-        anchorAt: null,
-        anchorSource: "none",
-        recommendedFirstPublishAt: null,
-        recommendedWindowEndAt: null,
-        hasPendingSchedule: false,
-      });
+      setScheduleContext(buildEmptyScheduleContext(""));
       return;
     }
 
     let isCancelled = false;
-    setScheduleContext({
-      workspaceId,
-      latestScheduledAt: null,
-      latestPublishedAt: null,
-      anchorAt: null,
-      anchorSource: "none",
-      recommendedFirstPublishAt: null,
-      recommendedWindowEndAt: null,
-      hasPendingSchedule: false,
-    });
+    setScheduleContext(buildEmptyScheduleContext(workspaceId));
 
     const loadScheduleContext = async () => {
       try {
@@ -2176,6 +2177,12 @@ function formatDateLabel(value: string) {
                 ) : null}
                 <div className="mt-3 space-y-1 border-t border-[var(--dashboard-line)] pt-3">
                   <p>
+                    <strong>Daily target:</strong> {scheduleContext.dailyPublishTarget} pins
+                  </p>
+                  <p>
+                    <strong>Today&apos;s queue:</strong> {scheduleContext.todayScheduledCount} / {scheduleContext.dailyPublishTarget}
+                  </p>
+                  <p>
                     <strong>Latest scheduled:</strong>{" "}
                     {isLoadingScheduleContext
                       ? "Loading..."
@@ -2190,9 +2197,20 @@ function formatDateLabel(value: string) {
                       : "No published pin yet"}
                   </p>
                   <p>
-                    <strong>Recommended next slot:</strong>{" "}
+                    <strong>Suggested next slot:</strong>{" "}
                     {scheduleContext.recommendedFirstPublishAt
                       ? formatDateLabel(scheduleContext.recommendedFirstPublishAt)
+                      : "Ready for a first schedule"}
+                  </p>
+                  {scheduleContext.queueSuggestionReason ? (
+                    <p className="text-[var(--dashboard-warning-ink)]">
+                      {scheduleContext.queueSuggestionReason}
+                    </p>
+                  ) : null}
+                  <p>
+                    <strong>Spacing-only earliest:</strong>{" "}
+                    {scheduleContext.spacingRecommendedFirstPublishAt
+                      ? formatDateLabel(scheduleContext.spacingRecommendedFirstPublishAt)
                       : "Ready for a first schedule"}
                   </p>
                 </div>
@@ -2200,6 +2218,24 @@ function formatDateLabel(value: string) {
                   <p className="mt-3 text-[var(--dashboard-warning-ink)]">
                     Selected time is inside the recommended spacing gap.
                   </p>
+                ) : null}
+                {selectedScheduleDay ? (
+                  <p className={`mt-3 ${selectedScheduleDay.isFull ? "text-[var(--dashboard-warning-ink)]" : "text-[var(--dashboard-subtle)]"}`}>
+                    Selected day load: {selectedScheduleDay.scheduledCount} / {scheduleContext.dailyPublishTarget}
+                    {selectedScheduleDay.isFull ? " scheduled. This day is already at capacity." : " scheduled."}
+                  </p>
+                ) : null}
+                {isSelectedScheduleDayFull && scheduleContext.queueAwareSuggestedFirstPublishAt ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setHasEditedFirstPublishAt(true);
+                      setFirstPublishAt(formatDateTimeLocalValue(scheduleContext.queueAwareSuggestedFirstPublishAt as string));
+                    }}
+                    className="mt-3 rounded-full border border-[var(--dashboard-warning-border)] bg-[var(--dashboard-warning-soft)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-warning-ink)]"
+                  >
+                    Use next day with room
+                  </button>
                 ) : null}
               </div>
             </div>
@@ -2256,6 +2292,22 @@ function formatDateLabel(value: string) {
             </div>
 
             <div className="mt-5 overflow-hidden rounded-2xl border border-[var(--dashboard-line)]">
+              <div className="flex flex-wrap gap-2 border-b border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3">
+                {scheduleContext.upcomingQueueDays.map((day) => (
+                  <span
+                    key={day.date}
+                    className={`rounded-full border px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] ${
+                      day.isFull
+                        ? "border-[var(--dashboard-danger-border)] bg-[var(--dashboard-danger-soft)] text-[var(--dashboard-danger-ink)]"
+                        : day.remainingCapacity <= 3
+                          ? "border-[var(--dashboard-warning-border)] bg-[var(--dashboard-warning-soft)] text-[var(--dashboard-warning-ink)]"
+                          : "border-[var(--dashboard-success-border)] bg-[var(--dashboard-success-soft)] text-[var(--dashboard-success-ink)]"
+                    }`}
+                  >
+                    {formatQueueDayLabel(day.date)} {day.scheduledCount}/{scheduleContext.dailyPublishTarget}
+                  </span>
+                ))}
+              </div>
               <div className="grid grid-cols-[minmax(0,1fr)_180px_180px_120px] bg-[var(--dashboard-panel-alt)] px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
                 <span>Pin</span>
                 <span>Board</span>
@@ -3025,6 +3077,33 @@ function formatDateTimeLocalValue(value: string) {
 
   const offsetMs = date.getTimezoneOffset() * 60 * 1000;
   return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
+}
+
+function formatQueueDayLabel(value: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(`${value}T00:00:00.000Z`));
+}
+
+function buildEmptyScheduleContext(workspaceId: string): PublishScheduleContext {
+  return {
+    workspaceId,
+    latestScheduledAt: null,
+    latestPublishedAt: null,
+    anchorAt: null,
+    anchorSource: "none",
+    recommendedFirstPublishAt: null,
+    spacingRecommendedFirstPublishAt: null,
+    recommendedWindowEndAt: null,
+    dailyPublishTarget: 20,
+    todayScheduledCount: 0,
+    upcomingQueueDays: [],
+    queueAwareSuggestedFirstPublishAt: null,
+    queueSuggestionReason: null,
+    hasPendingSchedule: false,
+  };
 }
 
 function resolvePublerRuntimeState(input: {

@@ -11,6 +11,7 @@ import {
 import { getDashboardWorkspaceScope } from "@/lib/dashboard/workspaceScope";
 import { isDatabaseConfigured } from "@/lib/env";
 import { listJobsForUser } from "@/lib/jobs/generatePins";
+import { getPublishQueueCapacitySummary } from "@/lib/jobs/publishQueueCapacity";
 import {
   getIntegrationSettingsSummary,
   getWorkspaceAllowedDomainsForUserId,
@@ -24,6 +25,7 @@ async function getDashboardData() {
       pinsGenerated: 0,
       readyToSchedule: 0,
       postsNeedingFreshPins: 0,
+      queueCapacity: null,
       todaysFreshTargets: [],
       queuedFreshTargetCount: 0,
       recentJobs: [],
@@ -39,11 +41,18 @@ async function getDashboardData() {
     ]);
     const activeWorkspaceId = await getDashboardWorkspaceScope(settings.publerWorkspaceId);
     const allowedDomains = await getWorkspaceAllowedDomainsForUserId(user.id, activeWorkspaceId);
+    const [postPulseRecords, queueCapacity] = await Promise.all([
+      listPostPulseRecordsForUser(user.id, {
+        workspaceId: activeWorkspaceId,
+        allowedDomains,
+      }),
+      getPublishQueueCapacitySummary({
+        userId: user.id,
+        workspaceId: activeWorkspaceId,
+        days: 7,
+      }),
+    ]);
     const filteredJobs = filterByAllowedDomains(allJobs, (job) => job.domainSnapshot, allowedDomains);
-    const postPulseRecords = await listPostPulseRecordsForUser(user.id, {
-      workspaceId: activeWorkspaceId,
-      allowedDomains,
-    });
     const activeReviewJobs = filteredJobs.filter((job) => reviewQueueStatuses.has(job.status));
     const activeReviewPostIds = new Set(activeReviewJobs.map((job) => job.postId));
     const activeReviewUrlKeys = new Set(
@@ -94,6 +103,7 @@ async function getDashboardData() {
       pinsGenerated,
       readyToSchedule,
       postsNeedingFreshPins: buildPostPulseSummary(postPulseRecords).needsFreshPins,
+      queueCapacity,
       todaysFreshTargets,
       queuedFreshTargetCount,
       recentJobs,
@@ -105,6 +115,7 @@ async function getDashboardData() {
       pinsGenerated: 0,
       readyToSchedule: 0,
       postsNeedingFreshPins: 0,
+      queueCapacity: null,
       todaysFreshTargets: [],
       queuedFreshTargetCount: 0,
       recentJobs: [],
@@ -202,6 +213,99 @@ export default async function DashboardPage() {
           </p>
           <p className="mt-4 text-5xl font-black">{data.readyToSchedule}</p>
         </div>
+      </section>
+
+      <section className="rounded-[36px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-6 shadow-[var(--dashboard-shadow-md)]">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.3em] text-[var(--dashboard-muted)]">
+              Publishing capacity
+            </p>
+            <h2 className="mt-2 text-3xl font-black tracking-[-0.04em] text-[var(--dashboard-text)]">
+              Queue coverage for today and next
+            </h2>
+            <p className="mt-3 max-w-3xl text-sm leading-7 text-[var(--dashboard-subtle)]">
+              Daily target-aware queue summary. Scheduling suggestions can steer toward the next day
+              with room, but you still keep full manual control.
+            </p>
+          </div>
+          <Link
+            href="/dashboard/publishing"
+            className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-5 py-3 text-sm font-semibold text-[var(--dashboard-subtle)]"
+          >
+            Open publishing queue
+          </Link>
+        </div>
+
+        {data.queueCapacity ? (
+          <div className="mt-6 grid gap-4 xl:grid-cols-[260px_minmax(0,1fr)]">
+            <div className="rounded-[28px] bg-[linear-gradient(165deg,#11214a_0%,#1e5eff_54%,#71d4ff_100%)] p-5 text-white shadow-[var(--dashboard-shadow-accent)]">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/72">
+                Today
+              </p>
+              <p className="mt-3 text-5xl font-black">
+                {data.queueCapacity.todayScheduledCount}
+                <span className="text-2xl text-white/72"> / {data.queueCapacity.targetPerDay}</span>
+              </p>
+              <p className="mt-3 text-sm leading-6 text-white/82">
+                Pins scheduled for {formatQueueDate(data.queueCapacity.todayDate)}.
+              </p>
+              <div className="mt-5 rounded-[22px] border border-white/18 bg-white/10 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/68">
+                  Next day with room
+                </p>
+                <p className="mt-2 text-2xl font-black">
+                  {data.queueCapacity.nextAvailableDate
+                    ? formatQueueDate(data.queueCapacity.nextAvailableDate)
+                    : "Full window"}
+                </p>
+                <p className="mt-2 text-sm leading-6 text-white/78">
+                  Suggestions will use the next available day when the initial choice is already at target.
+                </p>
+              </div>
+            </div>
+
+            <div className="overflow-hidden rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)]">
+              <div className="grid grid-cols-[180px_140px_140px_minmax(0,1fr)] bg-[var(--dashboard-panel-alt)] px-5 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
+                <span>Date</span>
+                <span>Scheduled</span>
+                <span>Remaining</span>
+                <span>Status</span>
+              </div>
+              <div className="divide-y divide-[var(--dashboard-line)]">
+                {data.queueCapacity.upcomingDays.map((day) => (
+                  <div
+                    key={day.date}
+                    className="grid grid-cols-[180px_140px_140px_minmax(0,1fr)] items-center gap-4 px-5 py-4 text-sm"
+                  >
+                    <div>
+                      <p className="font-semibold text-[var(--dashboard-text)]">
+                        {formatQueueDate(day.date)}
+                      </p>
+                      {day.isToday ? (
+                        <p className="mt-1 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-muted)]">
+                          Today
+                        </p>
+                      ) : null}
+                    </div>
+                    <span className="font-semibold text-[var(--dashboard-text)]">
+                      {day.scheduledCount} / {data.queueCapacity.targetPerDay}
+                    </span>
+                    <span className="text-[var(--dashboard-subtle)]">{day.remainingCapacity}</span>
+                    <QueueLoadChip
+                      label={day.isFull ? "Full" : day.remainingCapacity <= 3 ? "Near full" : "Open"}
+                      tone={day.isFull ? "full" : day.remainingCapacity <= 3 ? "warning" : "open"}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <p className="mt-6 text-sm text-[var(--dashboard-subtle)]">
+            Queue capacity summary is unavailable right now.
+          </p>
+        )}
       </section>
 
       <section className="rounded-[36px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-6 shadow-[var(--dashboard-shadow-md)]">
@@ -449,4 +553,33 @@ function formatDate(value: Date) {
     day: "numeric",
     year: "numeric",
   }).format(value);
+}
+
+function formatQueueDate(value: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(`${value}T00:00:00.000Z`));
+}
+
+function QueueLoadChip({
+  label,
+  tone,
+}: {
+  label: string;
+  tone: "open" | "warning" | "full";
+}) {
+  const className =
+    tone === "full"
+      ? "border-[var(--dashboard-danger-border)] bg-[var(--dashboard-danger-soft)] text-[var(--dashboard-danger-ink)]"
+      : tone === "warning"
+        ? "border-[var(--dashboard-warning-border)] bg-[var(--dashboard-warning-soft)] text-[var(--dashboard-warning-ink)]"
+        : "border-[var(--dashboard-success-border)] bg-[var(--dashboard-success-soft)] text-[var(--dashboard-success-ink)]";
+
+  return (
+    <span className={`inline-flex w-fit rounded-full border px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] ${className}`}>
+      {label}
+    </span>
+  );
 }

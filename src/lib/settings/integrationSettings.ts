@@ -12,6 +12,7 @@ export type WorkspaceProfileInput = {
   workspaceId: string;
   workspaceName: string;
   allowedDomains: string[];
+  dailyPublishTarget?: number | null;
   defaultAccountId?: string;
   defaultBoardId?: string;
   isDefault?: boolean;
@@ -296,6 +297,7 @@ export async function saveIntegrationSettings(
             workspaceId: profile.workspaceId,
             workspaceName: profile.workspaceName,
             allowedDomains: profile.allowedDomains,
+            dailyPublishTarget: profile.dailyPublishTarget ?? null,
             defaultAccountId: profile.defaultAccountId || null,
             defaultBoardId: profile.defaultBoardId || null,
             isDefault: profile.isDefault,
@@ -349,6 +351,7 @@ export async function listWorkspaceProfilesForUserId(userId: string): Promise<Wo
     workspaceId: profile.workspaceId,
     workspaceName: profile.workspaceName,
     allowedDomains: profile.allowedDomains,
+    dailyPublishTarget: profile.dailyPublishTarget ?? null,
     defaultAccountId: profile.defaultAccountId ?? "",
     defaultBoardId: profile.defaultBoardId ?? "",
     isDefault: profile.isDefault,
@@ -654,6 +657,12 @@ function normalizeWorkspaceProfiles(input: WorkspaceProfileInput[]): WorkspacePr
       workspaceId: profile.workspaceId.trim(),
       workspaceName: profile.workspaceName.trim() || profile.workspaceId.trim(),
       allowedDomains: normalizeAllowedDomains(profile.allowedDomains),
+      dailyPublishTarget:
+        typeof profile.dailyPublishTarget === "number" &&
+        Number.isFinite(profile.dailyPublishTarget) &&
+        profile.dailyPublishTarget > 0
+          ? Math.floor(profile.dailyPublishTarget)
+          : null,
       defaultAccountId: profile.defaultAccountId?.trim() ?? "",
       defaultBoardId: profile.defaultBoardId?.trim() ?? "",
       isDefault: Boolean(profile.isDefault),

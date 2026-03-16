@@ -375,6 +375,7 @@ model WorkspaceProfile {
   workspaceId      String
   workspaceName    String
   allowedDomains   String[] @default([])
+  dailyPublishTarget Int?
   defaultAccountId String?
   defaultBoardId   String?
   isDefault        Boolean  @default(false)

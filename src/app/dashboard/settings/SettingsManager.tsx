@@ -26,6 +26,7 @@ type WorkspaceProfileDraft = {
   workspaceId: string;
   workspaceName: string;
   allowedDomainsInput: string;
+  dailyPublishTargetInput: string;
   isDefault: boolean;
   defaultAccountId: string;
   defaultBoardId: string;
@@ -96,6 +97,7 @@ export function SettingsManager({
           workspaceId: firstAvailableWorkspace?.id ?? "",
           workspaceName: firstAvailableWorkspace?.name ?? "",
           allowedDomainsInput: "",
+          dailyPublishTargetInput: "",
           isDefault: current.length === 0,
           defaultAccountId: "",
           defaultBoardId: "",
@@ -455,6 +457,7 @@ export function SettingsManager({
             workspaceId: profile.workspaceId,
             workspaceName: resolveWorkspaceName(profile.workspaceId, publerWorkspaces, profile.workspaceName),
             allowedDomains: parseAllowedDomains(profile.allowedDomainsInput),
+            dailyPublishTarget: parseDailyPublishTarget(profile.dailyPublishTargetInput),
             defaultAccountId: profile.defaultAccountId,
             defaultBoardId: profile.defaultBoardId,
             isDefault: profile.isDefault,
@@ -612,13 +615,14 @@ export function SettingsManager({
 
           <div className="mt-5 overflow-hidden rounded-[22px] border border-[var(--dashboard-line)]">
             <div className="overflow-x-auto">
-              <table className="min-w-[1040px] w-full table-fixed">
+              <table className="min-w-[1180px] w-full table-fixed">
                 <thead className="bg-[var(--dashboard-panel-alt)]">
                   <tr className="text-left">
-                    <SettingsHead className="w-[23%]">Workspace</SettingsHead>
-                    <SettingsHead className="w-[22%]">Domains</SettingsHead>
-                    <SettingsHead className="w-[22%]">Account</SettingsHead>
-                    <SettingsHead className="w-[22%]">Board</SettingsHead>
+                    <SettingsHead className="w-[19%]">Workspace</SettingsHead>
+                    <SettingsHead className="w-[20%]">Domains</SettingsHead>
+                    <SettingsHead className="w-[14%]">Daily target</SettingsHead>
+                    <SettingsHead className="w-[18%]">Account</SettingsHead>
+                    <SettingsHead className="w-[18%]">Board</SettingsHead>
                     <SettingsHead className="w-[11%]">Actions</SettingsHead>
                   </tr>
                 </thead>
@@ -626,7 +630,7 @@ export function SettingsManager({
                   {workspaceProfiles.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={5}
+                        colSpan={6}
                         className="px-5 py-5 text-sm text-[var(--dashboard-subtle)]"
                       >
                         No workspace profiles yet.
@@ -676,6 +680,24 @@ export function SettingsManager({
                               placeholder="mightypaint.com, anotherdomain.com"
                               className="w-full rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 outline-none"
                             />
+                          </td>
+                          <td className="px-5 py-4 align-top">
+                            <div className="space-y-2">
+                              <input
+                                type="number"
+                                min={1}
+                                step={1}
+                                value={profile.dailyPublishTargetInput}
+                                onChange={(event) =>
+                                  updateWorkspaceProfile(index, "dailyPublishTargetInput", event.target.value)
+                                }
+                                placeholder="20"
+                                className="w-full rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 outline-none"
+                              />
+                              <p className="text-xs leading-5 text-[var(--dashboard-muted)]">
+                                Leave blank to use the default target of 20.
+                              </p>
+                            </div>
                           </td>
                           <td className="px-5 py-4 align-top">
                             <select
@@ -971,23 +993,6 @@ function SettingsHead({ children, className = "" }: { children: string; classNam
   );
 }
 
-function SettingsRow({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <tr className="border-b border-[var(--dashboard-line)] last:border-b-0">
-      <td className="w-[220px] px-5 py-4 align-top">
-        <FieldLabel>{label}</FieldLabel>
-      </td>
-      <td className="px-5 py-4">{children}</td>
-    </tr>
-  );
-}
-
 function parseAllowedDomains(input: string) {
   return input
     .split(",")
@@ -995,11 +1000,27 @@ function parseAllowedDomains(input: string) {
     .filter((value) => value !== "");
 }
 
+function parseDailyPublishTarget(input: string) {
+  const trimmed = input.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return null;
+  }
+
+  return Math.floor(parsed);
+}
+
 function toWorkspaceProfileDraft(profile: WorkspaceProfileSummary): WorkspaceProfileDraft {
   return {
     workspaceId: profile.workspaceId,
     workspaceName: profile.workspaceName,
     allowedDomainsInput: profile.allowedDomains.join(", "),
+    dailyPublishTargetInput:
+      typeof profile.dailyPublishTarget === "number" ? String(profile.dailyPublishTarget) : "",
     isDefault: profile.isDefault,
     defaultAccountId: profile.defaultAccountId,
     defaultBoardId: profile.defaultBoardId,

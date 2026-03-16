@@ -75,9 +75,18 @@ export interface WorkspaceProfileSummary {
   workspaceId: string;
   workspaceName: string;
   allowedDomains: string[];
+  dailyPublishTarget: number | null;
   defaultAccountId: string;
   defaultBoardId: string;
   isDefault: boolean;
+}
+
+export interface PublishQueueDaySummary {
+  date: string;
+  scheduledCount: number;
+  remainingCapacity: number;
+  isFull: boolean;
+  isToday: boolean;
 }
 
 export interface PublishScheduleContext {
@@ -87,7 +96,13 @@ export interface PublishScheduleContext {
   anchorAt: string | null;
   anchorSource: "scheduled" | "published" | "none";
   recommendedFirstPublishAt: string | null;
+  spacingRecommendedFirstPublishAt: string | null;
   recommendedWindowEndAt: string | null;
+  dailyPublishTarget: number;
+  todayScheduledCount: number;
+  upcomingQueueDays: PublishQueueDaySummary[];
+  queueAwareSuggestedFirstPublishAt: string | null;
+  queueSuggestionReason: string | null;
   hasPendingSchedule: boolean;
 }
 

@@ -1,4 +1,5 @@
 import { ScheduleRunItemStatus } from "@prisma/client";
+import { findNextPublishDateWithCapacity, getPublishQueueCapacitySummary } from "@/lib/jobs/publishQueueCapacity";
 import { prisma } from "@/lib/prisma";
 import type { PublishScheduleContext } from "@/lib/types";
 
@@ -79,6 +80,28 @@ export async function getPublishScheduleContextForPost(input: {
     : latestPublishedAt
       ? "published"
       : "none";
+  const spacingRecommendedFirstPublishAt = anchorAt ? addDays(anchorAt, MIN_SPACING_DAYS) : null;
+  const recommendationBase = spacingRecommendedFirstPublishAt ?? now;
+  const queueCapacity = await getPublishQueueCapacitySummary({
+    userId: input.userId,
+    workspaceId,
+    fromDate: recommendationBase,
+    days: 10,
+  });
+  const nextAvailableDate = await findNextPublishDateWithCapacity({
+    userId: input.userId,
+    workspaceId,
+    fromDate: recommendationBase,
+  });
+  const queueAwareSuggestedFirstPublishAt = nextAvailableDate
+    ? mergeDateWithTime(nextAvailableDate, recommendationBase)
+    : spacingRecommendedFirstPublishAt;
+  const recommendationBaseDateKey = toUtcDateKey(recommendationBase);
+  const queueSuggestionReason =
+    nextAvailableDate &&
+    nextAvailableDate !== recommendationBaseDateKey
+      ? `${formatDateKey(recommendationBaseDateKey)} is already at the daily target.`
+      : null;
 
   return {
     workspaceId,
@@ -86,8 +109,14 @@ export async function getPublishScheduleContextForPost(input: {
     latestPublishedAt: toIsoString(latestPublishedAt),
     anchorAt: toIsoString(anchorAt),
     anchorSource,
-    recommendedFirstPublishAt: toIsoString(anchorAt ? addDays(anchorAt, MIN_SPACING_DAYS) : null),
+    recommendedFirstPublishAt: toIsoString(queueAwareSuggestedFirstPublishAt),
+    spacingRecommendedFirstPublishAt: toIsoString(spacingRecommendedFirstPublishAt),
     recommendedWindowEndAt: toIsoString(anchorAt ? addDays(anchorAt, MAX_SPACING_DAYS) : null),
+    dailyPublishTarget: queueCapacity.targetPerDay,
+    todayScheduledCount: queueCapacity.todayScheduledCount,
+    upcomingQueueDays: queueCapacity.upcomingDays,
+    queueAwareSuggestedFirstPublishAt: toIsoString(queueAwareSuggestedFirstPublishAt),
+    queueSuggestionReason,
     hasPendingSchedule: Boolean(latestScheduledAt),
   };
 }
@@ -112,4 +141,32 @@ function addDays(value: Date, days: number) {
 
 function toIsoString(value: Date | null) {
   return value ? value.toISOString() : null;
+}
+
+function mergeDateWithTime(dateKey: string, timeSource: Date) {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  return new Date(
+    Date.UTC(
+      year,
+      month - 1,
+      day,
+      timeSource.getUTCHours(),
+      timeSource.getUTCMinutes(),
+      timeSource.getUTCSeconds(),
+      timeSource.getUTCMilliseconds(),
+    ),
+  );
+}
+
+function toUtcDateKey(value: Date) {
+  return value.toISOString().slice(0, 10);
+}
+
+function formatDateKey(value: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(`${value}T00:00:00.000Z`));
 }
