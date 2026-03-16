@@ -84,6 +84,24 @@ a {
   color: inherit !important;
 }
 
+.library-primary-action {
+  color: #fff5e8 !important;
+  text-shadow: 0 1px 0 rgba(20, 10, 4, 0.22);
+}
+
+.library-primary-action:visited,
+.library-primary-action:hover,
+.library-primary-action:focus,
+.library-primary-action:active {
+  color: #fff5e8 !important;
+}
+
+.library-primary-action > *,
+.library-primary-action span,
+.library-primary-action svg {
+  color: inherit !important;
+}
+
 .dashboard-shell button,
 .dashboard-shell a[href] {
   transition:

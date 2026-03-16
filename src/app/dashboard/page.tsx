@@ -3,7 +3,11 @@ import Link from "next/link";
 import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
 import { requireAuthenticatedDashboardUser } from "@/lib/auth/dashboardSession";
 import { filterByAllowedDomains } from "@/lib/dashboard/domainScope";
-import { buildPostPulseSummary, listPostPulseRecordsForUser } from "@/lib/dashboard/postPulse";
+import {
+  buildPostPulseSummary,
+  listPostPulseRecordsForUser,
+  type PostPulseRecord,
+} from "@/lib/dashboard/postPulse";
 import { getDashboardWorkspaceScope } from "@/lib/dashboard/workspaceScope";
 import { isDatabaseConfigured } from "@/lib/env";
 import { listJobsForUser } from "@/lib/jobs/generatePins";
@@ -19,6 +23,8 @@ async function getDashboardData() {
       pinsGenerated: 0,
       readyToSchedule: 0,
       postsNeedingFreshPins: 0,
+      todaysFreshTargets: [],
+      queuedFreshTargetCount: 0,
       recentJobs: [],
       databaseReady: false,
     };
@@ -37,18 +43,37 @@ async function getDashboardData() {
       workspaceId: activeWorkspaceId,
       allowedDomains,
     });
+    const activeReviewJobs = filteredJobs.filter((job) => reviewQueueStatuses.has(job.status));
+    const activeReviewPostIds = new Set(activeReviewJobs.map((job) => job.postId));
     const postsProcessed = new Set(filteredJobs.map((job) => job.postUrlSnapshot)).size;
     const pinsGenerated = filteredJobs.reduce((total, job) => total + job.generatedPins.length, 0);
     const readyToSchedule = filteredJobs.filter(
       (job) => job.status === GenerationJobStatus.READY_TO_SCHEDULE,
     ).length;
     const recentJobs = filteredJobs.slice(0, 8);
+    const staleFreshTargets = rankFreshPinTargets(postPulseRecords);
+    const todaysFreshTargets = staleFreshTargets
+      .filter((record) => !activeReviewPostIds.has(record.postId))
+      .slice(0, 10)
+      .map((record) => ({
+        postId: record.postId,
+        title: record.title,
+        url: record.url,
+        domain: record.domain,
+        latestJobId: record.latestJobId,
+        lastPublishedAt: record.lastPublishedAt,
+        freshnessAgeDays: record.freshnessAgeDays,
+        totalJobs: record.totalJobs,
+      }));
+    const queuedFreshTargetCount = staleFreshTargets.filter((record) => activeReviewPostIds.has(record.postId)).length;
 
     return {
       postsProcessed,
       pinsGenerated,
       readyToSchedule,
       postsNeedingFreshPins: buildPostPulseSummary(postPulseRecords).needsFreshPins,
+      todaysFreshTargets,
+      queuedFreshTargetCount,
       recentJobs,
       databaseReady: true,
     };
@@ -58,6 +83,8 @@ async function getDashboardData() {
       pinsGenerated: 0,
       readyToSchedule: 0,
       postsNeedingFreshPins: 0,
+      todaysFreshTargets: [],
+      queuedFreshTargetCount: 0,
       recentJobs: [],
       databaseReady: false,
     };
@@ -156,6 +183,117 @@ export default async function DashboardPage() {
       </section>
 
       <section className="rounded-[36px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-6 shadow-[var(--dashboard-shadow-md)]">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.3em] text-[var(--dashboard-muted)]">
+              Immediate action
+            </p>
+            <h2 className="mt-2 text-3xl font-black tracking-[-0.04em] text-[var(--dashboard-text)]">
+              Today&apos;s fresh-pin targets
+            </h2>
+            <p className="mt-3 max-w-3xl text-sm leading-7 text-[var(--dashboard-subtle)]">
+              Curated from Post Pulse by oldest last published date. Anything already in the inbox or
+              active review queue is excluded so this list stays focused on net-new work.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <Link
+              href="/dashboard/post-pulse"
+              className="rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-5 py-3 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)]"
+            >
+              Open Post Pulse
+            </Link>
+            <Link
+              href="/dashboard/inbox"
+              className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-5 py-3 text-sm font-semibold text-[var(--dashboard-subtle)]"
+            >
+              Review queued posts
+            </Link>
+          </div>
+        </div>
+
+        <div className="mt-6 grid gap-4 xl:grid-cols-[220px_minmax(0,1fr)]">
+          <div className="rounded-[28px] bg-[linear-gradient(165deg,#11214a_0%,#1e5eff_54%,#71d4ff_100%)] p-5 text-white shadow-[var(--dashboard-shadow-accent)]">
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/72">
+              Ready now
+            </p>
+            <p className="mt-3 text-5xl font-black">{data.todaysFreshTargets.length}</p>
+            <p className="mt-3 text-sm leading-6 text-white/82">
+              Top stale posts that are not already in today&apos;s active review queue.
+            </p>
+            <div className="mt-5 rounded-[22px] border border-white/18 bg-white/10 p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/68">
+                Already queued
+              </p>
+              <p className="mt-2 text-3xl font-black">{data.queuedFreshTargetCount}</p>
+              <p className="mt-2 text-sm leading-6 text-white/78">
+                Post Pulse candidates skipped because they are already in inbox or review.
+              </p>
+            </div>
+          </div>
+
+          <div className="overflow-hidden rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)]">
+            {data.todaysFreshTargets.length === 0 ? (
+              <div className="p-6 text-sm text-[var(--dashboard-subtle)]">
+                No net-new fresh-pin targets right now. The stale posts are either already in queue or
+                Post Pulse does not have any aged-out published posts to surface.
+              </div>
+            ) : (
+              <div className="divide-y divide-[var(--dashboard-line)]">
+                {data.todaysFreshTargets.map((target, index) => (
+                  <div key={target.postId} className="grid gap-4 px-5 py-5 lg:grid-cols-[72px_minmax(0,1fr)_220px] lg:items-center">
+                    <div className="inline-flex h-14 w-14 items-center justify-center rounded-[20px] bg-[var(--dashboard-panel-alt)] text-lg font-black text-[var(--dashboard-accent-strong)]">
+                      {index + 1}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
+                        {target.domain}
+                      </p>
+                      <p className="mt-2 line-clamp-2 text-lg font-bold text-[var(--dashboard-text)]">
+                        {target.title}
+                      </p>
+                      <p className="mt-2 break-all text-sm text-[var(--dashboard-subtle)]">{target.url}</p>
+                    </div>
+                    <div className="flex flex-col gap-3 lg:items-end">
+                      <div className="text-left lg:text-right">
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
+                          Last published
+                        </p>
+                        <p className="mt-2 text-base font-bold text-[var(--dashboard-text)]">
+                          {target.lastPublishedAt ? formatDate(target.lastPublishedAt) : "Unknown"}
+                        </p>
+                        <p className="mt-1 text-sm text-[var(--dashboard-subtle)]">
+                          {target.freshnessAgeDays ?? 0} day{target.freshnessAgeDays === 1 ? "" : "s"} since last pin
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-3 lg:justify-end">
+                        {target.latestJobId ? (
+                          <Link
+                            href={`/dashboard/jobs/${target.latestJobId}`}
+                            className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)]"
+                          >
+                            Latest cycle
+                          </Link>
+                        ) : null}
+                        <Link
+                          href={target.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)]"
+                        >
+                          Open article
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-[36px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-6 shadow-[var(--dashboard-shadow-md)]">
         <div className="flex items-center justify-between gap-4">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.3em] text-[var(--dashboard-muted)]">
@@ -217,6 +355,31 @@ export default async function DashboardPage() {
   );
 }
 
+const reviewQueueStatuses = new Set<GenerationJobStatus>([
+  GenerationJobStatus.RECEIVED,
+  GenerationJobStatus.REVIEWING,
+  GenerationJobStatus.READY_FOR_GENERATION,
+  GenerationJobStatus.FAILED,
+]);
+
+function rankFreshPinTargets(records: PostPulseRecord[]) {
+  return [...records]
+    .filter(
+      (record) =>
+        record.freshnessStatus === "needs_fresh_pins" &&
+        record.lastPublishedAt !== null &&
+        typeof record.freshnessAgeDays === "number",
+    )
+    .sort((left, right) => {
+      const ageDelta = (right.freshnessAgeDays ?? 0) - (left.freshnessAgeDays ?? 0);
+      if (ageDelta !== 0) {
+        return ageDelta;
+      }
+
+      return (left.lastPublishedAt?.getTime() ?? 0) - (right.lastPublishedAt?.getTime() ?? 0);
+    });
+}
+
 function FocusCard({
   href,
   label,
@@ -256,4 +419,12 @@ function formatLabel(value: string) {
     .split("_")
     .map((part) => part.charAt(0) + part.slice(1).toLowerCase())
     .join(" ");
+}
+
+function formatDate(value: Date) {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(value);
 }

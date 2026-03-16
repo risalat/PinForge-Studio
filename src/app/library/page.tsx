@@ -120,7 +120,7 @@ export default function TemplateLibraryPage() {
                   <div className="flex flex-wrap gap-3">
                     <Link
                       href={template.previewPath ?? `/preview/${template.id}`}
-                      className="rounded-full bg-[#2c1c12] px-5 py-3 text-sm font-semibold uppercase tracking-[0.22em] text-[#f7ede0]"
+                      className="library-primary-action inline-flex items-center justify-center rounded-full bg-[#2c1c12] px-5 py-3 text-sm font-semibold uppercase tracking-[0.22em] text-[#fff5e8]"
                     >
                       Open preview
                     </Link>
