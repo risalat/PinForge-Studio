@@ -113,7 +113,7 @@ export function resolveDomain(input: { postUrl: string; domain?: string }) {
   }
 
   try {
-    return new URL(input.postUrl).hostname;
+    return new URL(normalizeArticleUrl(input.postUrl)).hostname;
   } catch {
     return "pinforge.tenreclabs.com";
   }
@@ -121,4 +121,84 @@ export function resolveDomain(input: { postUrl: string; domain?: string }) {
 
 export function normalizeDomain(input: string) {
   return input.trim().toLowerCase().replace(/^www\./, "");
+}
+
+export function normalizeArticleUrl(input: string) {
+  const trimmed = input.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  try {
+    const parsed = new URL(trimmed);
+    const protocol = parsed.protocol.toLowerCase();
+    const hostname = parsed.hostname.toLowerCase().replace(/^www\./, "");
+    const pathname = parsed.pathname.replace(/\/{2,}/g, "/").replace(/\/+$/, "") || "/";
+    const searchParams = new URLSearchParams(parsed.search);
+    for (const key of Array.from(searchParams.keys())) {
+      const normalizedKey = key.toLowerCase();
+      if (
+        normalizedKey.startsWith("utm_") ||
+        normalizedKey === "fbclid" ||
+        normalizedKey === "gclid" ||
+        normalizedKey === "mc_cid" ||
+        normalizedKey === "mc_eid"
+      ) {
+        searchParams.delete(key);
+      }
+    }
+    searchParams.sort();
+    const search = searchParams.toString();
+    const port =
+      parsed.port && !isDefaultPort(protocol, parsed.port) ? `:${parsed.port}` : "";
+
+    return `${protocol}//${hostname}${port}${pathname}${search ? `?${search}` : ""}`;
+  } catch {
+    return trimmed.replace(/\/+$/, "").toLowerCase();
+  }
+}
+
+export function buildArticleUrlCandidates(input: string) {
+  const trimmed = input.trim();
+  const canonical = normalizeArticleUrl(trimmed);
+  const candidates = new Set<string>();
+
+  if (trimmed) {
+    candidates.add(trimmed);
+  }
+  if (canonical) {
+    candidates.add(canonical);
+  }
+
+  try {
+    const parsed = new URL(canonical || trimmed);
+    const hostname = parsed.hostname.toLowerCase().replace(/^www\./, "");
+    const protocol = parsed.protocol.toLowerCase();
+    const pathname = parsed.pathname.replace(/\/{2,}/g, "/").replace(/\/+$/, "") || "/";
+    const search = parsed.search;
+    const port =
+      parsed.port && !isDefaultPort(protocol, parsed.port) ? `:${parsed.port}` : "";
+    const hosts = new Set([hostname, `www.${hostname}`]);
+    const paths = new Set([pathname]);
+
+    if (pathname !== "/") {
+      paths.add(`${pathname}/`);
+    } else {
+      paths.add("/");
+    }
+
+    for (const host of hosts) {
+      for (const path of paths) {
+        candidates.add(`${protocol}//${host}${port}${path}${search}`);
+      }
+    }
+  } catch {
+    // Ignore malformed URLs and fall back to the raw/canonical string set.
+  }
+
+  return Array.from(candidates).filter(Boolean);
+}
+
+function isDefaultPort(protocol: string, port: string) {
+  return (protocol === "https:" && port === "443") || (protocol === "http:" && port === "80");
 }

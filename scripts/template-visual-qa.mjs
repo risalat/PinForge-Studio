@@ -4,7 +4,11 @@ import { chromium } from "playwright";
 
 const BASE_URL = process.env.PINFORGE_BASE_URL || "http://127.0.0.1:3000";
 const OUTPUT_DIR = path.resolve(process.cwd(), "artifacts", "template-qa");
-const TEMPLATE_IDS = ["split-vertical-title", "split-vertical-title-no-subtitle"];
+const TEMPLATE_IDS = [
+  "split-vertical-title",
+  "split-vertical-title-no-subtitle",
+  "single-image-header-title-domain-cta",
+];
 
 async function main() {
   await fs.mkdir(OUTPUT_DIR, { recursive: true });

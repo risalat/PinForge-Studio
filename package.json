@@ -10,6 +10,7 @@
     "postinstall": "prisma generate",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
+    "posts:repair-canonical": "node scripts/repair-canonical-posts.mjs",
     "storage:audit": "node scripts/storage-audit.mjs",
     "storage:cleanup-temp": "node scripts/storage-cleanup-temp.mjs",
     "playwright:install": "playwright install chromium",

@@ -31,6 +31,14 @@ export const sampleTemplateDataSingleImageSubtitleTitleCta: TemplateRenderProps 
   visualPreset: "midnight-gold",
 };
 
+export const sampleTemplateDataSingleImageHeaderTitleDomainCta: TemplateRenderProps = {
+  title: "How To Thin Water Based Paint For Spray Gun",
+  subtitle: "A Complete Guide",
+  images: ["/sample-images/7.jpg"],
+  domain: "mightypaint.com",
+  visualPreset: "cocoa-blush",
+};
+
 export const sampleTemplateDataFourImageMasonryHeroNumberDomainPill: TemplateRenderProps = {
   title: "Accent Wall Bedroom Ideas",
   images: [

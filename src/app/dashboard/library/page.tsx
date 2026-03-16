@@ -160,6 +160,8 @@ function getTemplateDescription(templateId: string) {
       return "Split layout with a hero number badge, locked editorial typography, and stronger listicle packaging.";
     case "single-image-subtitle-title-cta":
       return "Single-image editorial card with a reference-locked subtitle, headline, and footer CTA treatment.";
+    case "single-image-header-title-domain-cta":
+      return "Single full-bleed image with a translucent top header card, editorial kicker, uppercase title, and inline domain CTA.";
     case "four-image-masonry-hero-number-domain-pill":
       return "Four-image masonry collage with a centered number medallion, bold title card, and compact domain pill.";
     case "four-image-grid-number-title-domain":
@@ -187,6 +189,8 @@ function getTemplateUsage(templateId: string) {
       return "Best for numbered listicles that need a visible count hook.";
     case "single-image-subtitle-title-cta":
       return "Best for single-image pins where the subtitle names a paint, product, or featured idea.";
+    case "single-image-header-title-domain-cta":
+      return "Best for single-image tutorial or explainer pins where the title and CTA need to sit together in a clean top header.";
     case "four-image-masonry-hero-number-domain-pill":
       return "Best for multi-image inspiration roundups that need a visible count and centered title block.";
     case "four-image-grid-number-title-domain":

@@ -15,6 +15,7 @@ import {
   getIntegrationSettingsSummary,
   getWorkspaceAllowedDomainsForUserId,
 } from "@/lib/settings/integrationSettings";
+import { normalizeArticleUrl } from "@/lib/types";
 
 async function getDashboardData() {
   if (!isDatabaseConfigured()) {
@@ -45,7 +46,16 @@ async function getDashboardData() {
     });
     const activeReviewJobs = filteredJobs.filter((job) => reviewQueueStatuses.has(job.status));
     const activeReviewPostIds = new Set(activeReviewJobs.map((job) => job.postId));
-    const postsProcessed = new Set(filteredJobs.map((job) => job.postUrlSnapshot)).size;
+    const activeReviewUrlKeys = new Set(
+      activeReviewJobs
+        .map((job) => normalizeArticleUrl(job.postUrlSnapshot))
+        .filter((value) => value !== ""),
+    );
+    const postsProcessed = new Set(
+      filteredJobs
+        .map((job) => normalizeArticleUrl(job.postUrlSnapshot))
+        .filter((value) => value !== ""),
+    ).size;
     const pinsGenerated = filteredJobs.reduce((total, job) => total + job.generatedPins.length, 0);
     const readyToSchedule = filteredJobs.filter(
       (job) => job.status === GenerationJobStatus.READY_TO_SCHEDULE,
@@ -53,7 +63,13 @@ async function getDashboardData() {
     const recentJobs = filteredJobs.slice(0, 8);
     const staleFreshTargets = rankFreshPinTargets(postPulseRecords);
     const todaysFreshTargets = staleFreshTargets
-      .filter((record) => !activeReviewPostIds.has(record.postId))
+      .filter((record) => {
+        const normalizedRecordUrl = normalizeArticleUrl(record.url);
+        return (
+          !activeReviewPostIds.has(record.postId) &&
+          (normalizedRecordUrl === "" || !activeReviewUrlKeys.has(normalizedRecordUrl))
+        );
+      })
       .slice(0, 10)
       .map((record) => ({
         postId: record.postId,
@@ -65,7 +81,13 @@ async function getDashboardData() {
         freshnessAgeDays: record.freshnessAgeDays,
         totalJobs: record.totalJobs,
       }));
-    const queuedFreshTargetCount = staleFreshTargets.filter((record) => activeReviewPostIds.has(record.postId)).length;
+    const queuedFreshTargetCount = staleFreshTargets.filter((record) => {
+      const normalizedRecordUrl = normalizeArticleUrl(record.url);
+      return (
+        activeReviewPostIds.has(record.postId) ||
+        (normalizedRecordUrl !== "" && activeReviewUrlKeys.has(normalizedRecordUrl))
+      );
+    }).length;
 
     return {
       postsProcessed,

@@ -1,8 +1,9 @@
 import { Prisma } from "@prisma/client";
+import { resolveCanonicalPost } from "@/lib/posts/canonicalPost";
 import { prisma } from "@/lib/prisma";
 import { createPublerClient, type PublerClient, type PublerPost } from "@/lib/publer/publerClient";
 import { getIntegrationSettingsForUserId } from "@/lib/settings/integrationSettings";
-import { resolveDomain } from "@/lib/types";
+import { normalizeArticleUrl } from "@/lib/types";
 
 const POSTS_PER_PAGE = 50;
 const BACKFILL_PAGES_PER_RUN = 1;
@@ -196,7 +197,7 @@ async function upsertPublerPostsForUser(input: {
   posts: PublerPost[];
 }) {
   const { userId, workspaceId, posts } = input;
-  const syncablePosts = posts.filter((post) => post.url.trim() !== "");
+  const syncablePosts = posts.filter((post) => normalizeArticleUrl(post.url) !== "");
 
   if (syncablePosts.length === 0) {
     return {
@@ -279,62 +280,7 @@ async function upsertPublerPostsForUser(input: {
       })
     : [];
   const matchedPostIdSet = new Set(matchedPosts.map((post) => post.id));
-
-  const unresolvedUrls = Array.from(
-    new Set(
-      syncablePosts
-        .filter((post) => {
-          const matchedPin = pinMatchByPostId.get(post.id);
-          return !(matchedPin?.postId && matchedPostIdSet.has(matchedPin.postId));
-        })
-        .map((post) => post.url.trim()),
-    ),
-  );
-
-  if (unresolvedUrls.length > 0) {
-    const existingPosts = await prisma.post.findMany({
-      where: {
-        url: {
-          in: unresolvedUrls,
-        },
-      },
-      select: {
-        id: true,
-        url: true,
-      },
-    });
-    const existingPostUrls = new Set(existingPosts.map((post) => post.url));
-    const missingUrls = unresolvedUrls.filter((url) => !existingPostUrls.has(url));
-
-    if (missingUrls.length > 0) {
-      await prisma.post.createMany({
-        data: missingUrls.map((url) => {
-          const sourcePost = syncablePosts.find((post) => post.url.trim() === url);
-          return {
-            url,
-            domain: resolveDomain({ postUrl: url }),
-            title: sourcePost ? getPublicationTitle(sourcePost) : url,
-          };
-        }),
-        skipDuplicates: true,
-      });
-    }
-  }
-
-  const resolvedPostsByUrl = unresolvedUrls.length
-    ? await prisma.post.findMany({
-        where: {
-          url: {
-            in: unresolvedUrls,
-          },
-        },
-        select: {
-          id: true,
-          url: true,
-        },
-      })
-    : [];
-  const postIdByUrl = new Map(resolvedPostsByUrl.map((post) => [post.url, post.id]));
+  const postIdByUrl = new Map<string, string>();
 
   let created = 0;
   let updated = 0;
@@ -343,12 +289,21 @@ async function upsertPublerPostsForUser(input: {
   const updateOperations: Prisma.PrismaPromise<unknown>[] = [];
 
   for (const post of syncablePosts) {
-    const postUrl = post.url.trim();
+    const postUrl = normalizeArticleUrl(post.url);
     const matchedPin = pinMatchByPostId.get(post.id);
-    const resolvedPostId =
+    let resolvedPostId =
       matchedPin?.postId && matchedPostIdSet.has(matchedPin.postId)
         ? matchedPin.postId
         : postIdByUrl.get(postUrl);
+
+    if (!resolvedPostId && postUrl) {
+      const resolvedPost = await resolveCanonicalPost({
+        url: postUrl,
+        title: getPublicationTitle(post),
+      });
+      resolvedPostId = resolvedPost.id;
+      postIdByUrl.set(postUrl, resolvedPost.id);
+    }
 
     if (!resolvedPostId) {
       continue;

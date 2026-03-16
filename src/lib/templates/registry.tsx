@@ -2,6 +2,7 @@ import { TemplateSplitVerticalTitle } from "@/templates/TemplateSplitVerticalTit
 import { TemplateSplitVerticalTitleNoSubtitle } from "@/templates/TemplateSplitVerticalTitleNoSubtitle";
 import { TemplateSplitVerticalTitleNumber } from "@/templates/TemplateSplitVerticalTitleNumber";
 import { TemplateSingleImageSubtitleTitleCta } from "@/templates/TemplateSingleImageSubtitleTitleCta";
+import { TemplateSingleImageHeaderTitleDomainCta } from "@/templates/TemplateSingleImageHeaderTitleDomainCta";
 import { TemplateFourImageMasonryHeroNumberDomainPill } from "@/templates/TemplateFourImageMasonryHeroNumberDomainPill";
 import { TemplateFourImageGridNumberTitleDomain } from "@/templates/TemplateFourImageGridNumberTitleDomain";
 import { TemplateSixImageTripleSplitSlantHeroFooter } from "@/templates/TemplateSixImageTripleSplitSlantHeroFooter";
@@ -15,6 +16,7 @@ import {
   sampleTemplateDataHeroTwoSplitText,
   sampleTemplateDataMasonryGridNumberTitleFooter,
   sampleTemplateDataNineImageGridOverlayNumberFooter,
+  sampleTemplateDataSingleImageHeaderTitleDomainCta,
   sampleTemplateDataNumber,
   sampleTemplateDataNoSubtitle,
   sampleTemplateDataSixImageTripleSplitSlantHeroFooter,
@@ -82,6 +84,21 @@ export const TEMPLATE_CONFIGS: Record<string, TemplateConfig> = {
       overlay: true,
       numberTreatment: "none",
       footer: true,
+    },
+  },
+  "single-image-header-title-domain-cta": {
+    id: "single-image-header-title-domain-cta",
+    name: "Single Image Header Title Domain CTA",
+    componentKey: "TemplateSingleImageHeaderTitleDomainCta",
+    previewPath: "/preview/single-image-header-title-domain-cta",
+    locked: true,
+    canvas: { width: 1080, height: 1920 },
+    imageSlotCount: 1,
+    textFields: ["subtitle", "title", "domain", "visualPreset"],
+    features: {
+      overlay: true,
+      numberTreatment: "none",
+      footer: false,
     },
   },
   "four-image-masonry-hero-number-domain-pill": {
@@ -184,6 +201,7 @@ const TEMPLATE_COMPONENTS: Record<
   "split-vertical-title-no-subtitle": TemplateSplitVerticalTitleNoSubtitle,
   "split-vertical-title-number": TemplateSplitVerticalTitleNumber,
   "single-image-subtitle-title-cta": TemplateSingleImageSubtitleTitleCta,
+  "single-image-header-title-domain-cta": TemplateSingleImageHeaderTitleDomainCta,
   "four-image-masonry-hero-number-domain-pill": TemplateFourImageMasonryHeroNumberDomainPill,
   "four-image-grid-number-title-domain": TemplateFourImageGridNumberTitleDomain,
   "six-image-triple-split-slant-hero-footer": TemplateSixImageTripleSplitSlantHeroFooter,
@@ -221,6 +239,10 @@ export function getSampleTemplateProps(templateId: string) {
 
   if (templateId === "single-image-subtitle-title-cta") {
     return sampleTemplateDataSingleImageSubtitleTitleCta;
+  }
+
+  if (templateId === "single-image-header-title-domain-cta") {
+    return sampleTemplateDataSingleImageHeaderTitleDomainCta;
   }
 
   if (templateId === "four-image-masonry-hero-number-domain-pill") {

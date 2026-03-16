@@ -25,6 +25,7 @@ import {
   EditablePinTitleSchema,
 } from "@/lib/ai/validators";
 import { env } from "@/lib/env";
+import { resolveCanonicalPost } from "@/lib/posts/canonicalPost";
 import { prisma } from "@/lib/prisma";
 import {
   PublerClient,
@@ -65,7 +66,7 @@ import {
   type TemplateVisualPresetId,
 } from "@/lib/templates/types";
 import type { GenerateRequestPayload } from "@/lib/types";
-import { resolveDomain } from "@/lib/types";
+import { normalizeArticleUrl, resolveDomain } from "@/lib/types";
 
 export type GeneratePinsInput = GenerateRequestPayload;
 
@@ -199,19 +200,16 @@ export async function createIntakeJob(input: {
   userId: string;
   payload: GenerateRequestPayload;
 }) {
-  const domain = resolveDomain(input.payload);
-
-  const post = await prisma.post.upsert({
-    where: { url: input.payload.postUrl },
-    update: {
-      title: input.payload.title,
-      domain,
-    },
-    create: {
-      url: input.payload.postUrl,
-      title: input.payload.title,
-      domain,
-    },
+  const canonicalPostUrl = normalizeArticleUrl(input.payload.postUrl);
+  const domain = resolveDomain({
+    postUrl: canonicalPostUrl,
+    domain: input.payload.domain,
+  });
+  const post = await resolveCanonicalPost({
+    url: canonicalPostUrl,
+    title: input.payload.title,
+    domain,
+    replaceTitle: true,
   });
 
   const existingUnresolvedJob = await prisma.generationJob.findFirst({
@@ -256,7 +254,7 @@ export async function createIntakeJob(input: {
     data: {
       userId: input.userId,
       postId: post.id,
-      postUrlSnapshot: input.payload.postUrl,
+      postUrlSnapshot: canonicalPostUrl,
       articleTitleSnapshot: input.payload.title,
       domainSnapshot: domain,
       status: GenerationJobStatus.RECEIVED,
@@ -338,7 +336,7 @@ export async function createFreshPinsJobFromPost(input: {
     data: {
       userId: input.userId,
       postId: latestJob.postId,
-      postUrlSnapshot: latestJob.postUrlSnapshot,
+      postUrlSnapshot: normalizeArticleUrl(latestJob.postUrlSnapshot),
       articleTitleSnapshot: latestJob.articleTitleSnapshot,
       domainSnapshot: latestJob.domainSnapshot,
       status: GenerationJobStatus.REVIEWING,
