@@ -39,6 +39,14 @@ export const sampleTemplateDataSingleImageHeaderTitleDomainCta: TemplateRenderPr
   visualPreset: "cocoa-blush",
 };
 
+export const sampleTemplateDataSingleImageTitleFooter: TemplateRenderProps = {
+  title: "The Power of White in Home Design",
+  subtitle: "Minimalist Magic",
+  images: ["/sample-images/8.jpg"],
+  domain: "mightypaint.com",
+  visualPreset: "obsidian-punch",
+};
+
 export const sampleTemplateDataFourImageMasonryHeroNumberDomainPill: TemplateRenderProps = {
   title: "Accent Wall Bedroom Ideas",
   images: [
