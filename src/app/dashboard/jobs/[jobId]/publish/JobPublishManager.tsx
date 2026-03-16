@@ -13,7 +13,7 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import { useAppFeedback } from "@/components/ui/AppFeedbackProvider";
-import { buildSchedulePreview } from "@/lib/jobs/schedulePreview";
+import { buildCapacityAwareSchedulePreview } from "@/lib/jobs/schedulePreview";
 import type {
   AiCredentialSummary,
   PublishScheduleContext,
@@ -455,16 +455,20 @@ export function JobPublishManager({
     }
 
     try {
-      return buildSchedulePreview({
+      return buildCapacityAwareSchedulePreview({
         pinIds: selectedPins.map((pin) => pin.id),
         firstPublishAt,
         intervalMinutes: intervalDays * 24 * 60,
         jitterMinutes: jitterDays * 24 * 60,
+        targetPerDay: scheduleContext.dailyPublishTarget,
+        existingScheduledCountsByDate: Object.fromEntries(
+          scheduleContext.upcomingQueueDays.map((day) => [day.date, day.scheduledCount]),
+        ),
       });
     } catch {
       return [];
     }
-  }, [firstPublishAt, intervalDays, jitterDays, selectedPins]);
+  }, [firstPublishAt, intervalDays, jitterDays, scheduleContext.dailyPublishTarget, scheduleContext.upcomingQueueDays, selectedPins]);
 
   const schedulePreviewRows = useMemo(
     () =>
@@ -1034,13 +1038,25 @@ export function JobPublishManager({
                 : `${result.succeeded} pin${result.succeeded === 1 ? "" : "s"} uploaded to Publer.`,
           });
         } else {
+          const failedPinIds = Array.from(
+            new Set(
+              (result.failures ?? [])
+                .map((failure) => failure.pinId)
+                .filter((pinId) => input.generatedPinIds.includes(pinId)),
+            ),
+          );
+
+          if (failedPinIds.length > 0) {
+            setSelectedPinIds(failedPinIds);
+          }
+
           setSectionFeedback((current) => ({
             ...current,
             [input.section]: {
               tone: result.failed > 0 ? "warning" : "success",
               message:
                 result.failed > 0
-                  ? `${result.succeeded} completed, ${result.failed} failed.`
+                  ? `${result.succeeded} completed, ${result.failed} failed. Failed pins are selected so retry runs only on them.`
                   : result.message,
             },
           }));
@@ -1055,7 +1071,7 @@ export function JobPublishManager({
                 : "Description generation complete",
             message:
               result.failed > 0
-                ? `${result.succeeded} completed, ${result.failed} failed.`
+                ? `${result.succeeded} completed, ${result.failed} failed. Failed pins are selected for retry.`
                 : result.message,
           });
         }
@@ -2302,6 +2318,10 @@ function formatDateLabel(value: string) {
                       firstPublishAt,
                       intervalMinutes: intervalDays * 24 * 60,
                       jitterMinutes: jitterDays * 24 * 60,
+                      schedulePlan: schedulePreview.map((item) => ({
+                        pinId: item.pinId,
+                        scheduledFor: item.scheduledFor.toISOString(),
+                      })),
                       workspaceId,
                       accountId,
                       boardIds: selectedBoardIds,

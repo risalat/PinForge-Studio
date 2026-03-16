@@ -1492,6 +1492,10 @@ export async function scheduleJobPins(input: {
   firstPublishAt: string;
   intervalMinutes: number;
   jitterMinutes?: number;
+  schedulePlan?: Array<{
+    pinId: string;
+    scheduledFor: string;
+  }>;
   workspaceId?: string;
   accountId?: string;
   boardId?: string;
@@ -1559,13 +1563,27 @@ export async function scheduleJobPins(input: {
     });
   }
 
-  const previewItems = buildSchedulePreview({
+  const fallbackPreviewItems = buildSchedulePreview({
     pinIds: selectedPins.map((pin) => pin.id),
     firstPublishAt,
     intervalMinutes: input.intervalMinutes,
     jitterMinutes: input.jitterMinutes ?? 0,
   });
-  const previewByPinId = new Map(previewItems.map((item) => [item.pinId, item]));
+  const previewByPinId = new Map(fallbackPreviewItems.map((item) => [item.pinId, item]));
+
+  for (const scheduledItem of input.schedulePlan ?? []) {
+    const scheduledFor = new Date(scheduledItem.scheduledFor);
+    if (Number.isNaN(scheduledFor.valueOf())) {
+      throw new Error("Schedule plan contains an invalid datetime.");
+    }
+
+    previewByPinId.set(scheduledItem.pinId, {
+      pinId: scheduledItem.pinId,
+      index: 0,
+      scheduledFor,
+      jitterOffsetMinutes: 0,
+    });
+  }
 
   const scheduleRun = await prisma.scheduleRun.create({
     data: {

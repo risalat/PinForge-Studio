@@ -47,7 +47,15 @@ const publishSchema = z.discriminatedUnion("action", [
     action: z.literal("schedule"),
     firstPublishAt: z.string().min(1),
     intervalMinutes: z.number().int().positive().max(60 * 24 * 60),
-    jitterMinutes: z.number().int().min(0).max(60 * 24).optional(),
+    jitterMinutes: z.number().int().min(0).max(60 * 24 * 60).optional(),
+    schedulePlan: z
+      .array(
+        z.object({
+          pinId: z.string().min(1),
+          scheduledFor: z.string().min(1),
+        }),
+      )
+      .optional(),
     workspaceId: z.string().optional(),
     accountId: z.string().optional(),
     boardId: z.string().optional(),
@@ -158,6 +166,7 @@ export async function POST(request: Request, { params }: RouteProps) {
           firstPublishAt: payload.firstPublishAt,
           intervalMinutes: payload.intervalMinutes,
           jitterMinutes: payload.jitterMinutes,
+          schedulePlan: payload.schedulePlan,
           workspaceId: payload.workspaceId,
           accountId: payload.accountId,
           boardId: payload.boardId,

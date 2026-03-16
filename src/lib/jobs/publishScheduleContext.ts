@@ -81,7 +81,10 @@ export async function getPublishScheduleContextForPost(input: {
       ? "published"
       : "none";
   const spacingRecommendedFirstPublishAt = anchorAt ? addDays(anchorAt, MIN_SPACING_DAYS) : null;
-  const recommendationBase = spacingRecommendedFirstPublishAt ?? now;
+  const recommendationBase =
+    spacingRecommendedFirstPublishAt && spacingRecommendedFirstPublishAt > now
+      ? spacingRecommendedFirstPublishAt
+      : now;
   const queueCapacity = await getPublishQueueCapacitySummary({
     userId: input.userId,
     workspaceId,
