@@ -90,9 +90,7 @@ export default function TemplateLibraryPage() {
                     </div>
 
                     <p className="text-base leading-7 text-[#604834]">
-                      {template.id === "split-vertical-title"
-                        ? "Subtitle-first editorial layout for titles that benefit from a short kicker plus a multi-line main headline."
-                        : "Image-led editorial layout for stronger standalone titles without a supporting kicker line."}
+                      {getTemplateDescription(template.id)}
                     </p>
 
                     <div className="grid gap-3 sm:grid-cols-2">
@@ -109,9 +107,7 @@ export default function TemplateLibraryPage() {
                           Usage note
                         </p>
                         <p className="mt-2 text-sm leading-6 text-[#4d3525]">
-                          {template.id === "split-vertical-title"
-                            ? "Use when the title package includes a kicker/subtitle."
-                            : "Use when the headline should dominate on its own."}
+                          {getTemplateUsage(template.id)}
                         </p>
                       </div>
                     </div>
@@ -145,4 +141,74 @@ export default function TemplateLibraryPage() {
       </div>
     </main>
   );
+}
+
+function getTemplateDescription(templateId: string) {
+  switch (templateId) {
+    case "split-vertical-title":
+      return "Subtitle-first editorial layout for titles that benefit from a short kicker plus a multi-line main headline.";
+    case "split-vertical-title-no-subtitle":
+      return "Image-led editorial layout for stronger standalone titles without a supporting kicker line.";
+    case "split-vertical-title-number":
+      return "Split layout with a hero number block and a title-first listicle treatment.";
+    case "single-image-subtitle-title-cta":
+      return "Single-image editorial card with a subtitle, large title, and compact CTA-footer treatment.";
+    case "single-image-header-title-domain-cta":
+      return "Single full-bleed image with a translucent top header card, editorial kicker, uppercase title, and inline domain CTA.";
+    case "single-image-title-footer":
+      return "Single-image layout with a white subtitle strip, deep footer title panel, and a compact read-more plus domain row.";
+    case "four-image-masonry-hero-number-domain-pill":
+      return "Four-image masonry collage with a centered number medallion, bold title card, and compact domain pill.";
+    case "four-image-grid-number-title-domain":
+      return "Four-image asymmetric grid with a centered hero number, full-width title band, and domain pill.";
+    case "four-image-grid-title-footer":
+      return "Clean four-image grid with a translucent center title band and a full-width footer domain bar.";
+    case "hero-text-triple-split-footer":
+      return "Warm editorial layout with one hero image, a full-width text panel, and a lower triple-split strip capped by a footer domain bar.";
+    case "six-image-triple-split-slant-hero-footer":
+      return "Six-image collage with a triple top strip, tilted middle photos, editorial title band, and full-width footer.";
+    case "nine-image-grid-overlay-number-footer":
+      return "Nine-image square grid with a centered number medallion, editorial title band, and compact footer pill.";
+    case "masonry-grid-number-title-footer":
+      return "Seven-image masonry collage with a centered number card, dark editorial title band, and footer domain pill.";
+    case "hero-two-split-text":
+      return "Full-width hero image with a side-by-side number and three-line title strip, followed by a lower two-image split.";
+    default:
+      return "Locked Pinterest template ready for preview, render, and manual plan use.";
+  }
+}
+
+function getTemplateUsage(templateId: string) {
+  switch (templateId) {
+    case "split-vertical-title":
+      return "Use when the title package includes a kicker/subtitle.";
+    case "split-vertical-title-no-subtitle":
+      return "Use when the headline should dominate on its own.";
+    case "split-vertical-title-number":
+      return "Use for numbered listicles that need the count to do visual work.";
+    case "single-image-subtitle-title-cta":
+      return "Use for single-image pins where the subtitle names a paint, product, or featured idea.";
+    case "single-image-header-title-domain-cta":
+      return "Use for tutorial or explainer pins where the title and CTA should sit together in a top header.";
+    case "single-image-title-footer":
+      return "Use for single-image editorial pins that need a strong dark footer title block.";
+    case "four-image-masonry-hero-number-domain-pill":
+      return "Use for inspiration roundups that need a visible count and centered title block.";
+    case "four-image-grid-number-title-domain":
+      return "Use for roundup pins that need a strong listicle badge and simple four-image structure.";
+    case "four-image-grid-title-footer":
+      return "Use when the title should sit across the middle without a separate number badge.";
+    case "hero-text-triple-split-footer":
+      return "Use for seasonal decor or roundup pins where one hero image should lead before supporting detail shots.";
+    case "six-image-triple-split-slant-hero-footer":
+      return "Use when multiple angles plus one strong hero image make the pin more persuasive.";
+    case "nine-image-grid-overlay-number-footer":
+      return "Use for dense inspiration roundups that need many examples plus a strong listicle hook.";
+    case "masonry-grid-number-title-footer":
+      return "Use for editorial collage pins that need a richer masonry structure with a centered count hook.";
+    case "hero-two-split-text":
+      return "Use for listicle pins that need one dominant hero, a huge count, and a stacked center title strip.";
+    default:
+      return "Use for locked template-driven render tests and job planning.";
+  }
 }

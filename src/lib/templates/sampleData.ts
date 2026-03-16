@@ -85,6 +85,19 @@ export const sampleTemplateDataFourImageGridTitleFooter: TemplateRenderProps = {
   visualPreset: "teal-flare",
 };
 
+export const sampleTemplateDataHeroTextTripleSplitFooter: TemplateRenderProps = {
+  title: "20 Last-Minute Fall Living Room Decor Ideas",
+  subtitle: "Quick & Easy Fall Living Room Decor",
+  images: [
+    "/sample-images/7.jpg",
+    "/sample-images/1.jpg",
+    "/sample-images/8.jpg",
+    "/sample-images/9.jpg",
+  ],
+  domain: "mightypaint.com",
+  visualPreset: "berry-citrus",
+};
+
 export const sampleTemplateDataSixImageTripleSplitSlantHeroFooter: TemplateRenderProps = {
   title: "Gorgeous Lakehouse Exterior Ideas",
   subtitle: "That Wow from Every Angle",

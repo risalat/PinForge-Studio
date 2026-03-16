@@ -7,6 +7,7 @@ import { TemplateSingleImageTitleFooter } from "@/templates/TemplateSingleImageT
 import { TemplateFourImageMasonryHeroNumberDomainPill } from "@/templates/TemplateFourImageMasonryHeroNumberDomainPill";
 import { TemplateFourImageGridNumberTitleDomain } from "@/templates/TemplateFourImageGridNumberTitleDomain";
 import { TemplateFourImageGridTitleFooter } from "@/templates/TemplateFourImageGridTitleFooter";
+import { TemplateHeroTextTripleSplitFooter } from "@/templates/TemplateHeroTextTripleSplitFooter";
 import { TemplateSixImageTripleSplitSlantHeroFooter } from "@/templates/TemplateSixImageTripleSplitSlantHeroFooter";
 import { TemplateNineImageGridOverlayNumberFooter } from "@/templates/TemplateNineImageGridOverlayNumberFooter";
 import { TemplateMasonryGridNumberTitleFooter } from "@/templates/TemplateMasonryGridNumberTitleFooter";
@@ -17,6 +18,7 @@ import {
   sampleTemplateDataFourImageGridNumberTitleDomain,
   sampleTemplateDataFourImageGridTitleFooter,
   sampleTemplateDataHeroTwoSplitText,
+  sampleTemplateDataHeroTextTripleSplitFooter,
   sampleTemplateDataMasonryGridNumberTitleFooter,
   sampleTemplateDataNineImageGridOverlayNumberFooter,
   sampleTemplateDataSingleImageHeaderTitleDomainCta,
@@ -165,6 +167,21 @@ export const TEMPLATE_CONFIGS: Record<string, TemplateConfig> = {
       footer: true,
     },
   },
+  "hero-text-triple-split-footer": {
+    id: "hero-text-triple-split-footer",
+    name: "Hero Text Triple Split Footer",
+    componentKey: "TemplateHeroTextTripleSplitFooter",
+    previewPath: "/preview/hero-text-triple-split-footer",
+    locked: true,
+    canvas: { width: 1080, height: 1920 },
+    imageSlotCount: 4,
+    textFields: ["subtitle", "title", "domain", "visualPreset"],
+    features: {
+      overlay: true,
+      numberTreatment: "none",
+      footer: true,
+    },
+  },
   "six-image-triple-split-slant-hero-footer": {
     id: "six-image-triple-split-slant-hero-footer",
     name: "Six Image Triple Split Slant Hero Footer",
@@ -240,6 +257,7 @@ const TEMPLATE_COMPONENTS: Record<
   "four-image-masonry-hero-number-domain-pill": TemplateFourImageMasonryHeroNumberDomainPill,
   "four-image-grid-number-title-domain": TemplateFourImageGridNumberTitleDomain,
   "four-image-grid-title-footer": TemplateFourImageGridTitleFooter,
+  "hero-text-triple-split-footer": TemplateHeroTextTripleSplitFooter,
   "six-image-triple-split-slant-hero-footer": TemplateSixImageTripleSplitSlantHeroFooter,
   "nine-image-grid-overlay-number-footer": TemplateNineImageGridOverlayNumberFooter,
   "masonry-grid-number-title-footer": TemplateMasonryGridNumberTitleFooter,
@@ -295,6 +313,10 @@ export function getSampleTemplateProps(templateId: string) {
 
   if (templateId === "four-image-grid-title-footer") {
     return sampleTemplateDataFourImageGridTitleFooter;
+  }
+
+  if (templateId === "hero-text-triple-split-footer") {
+    return sampleTemplateDataHeroTextTripleSplitFooter;
   }
 
   if (templateId === "six-image-triple-split-slant-hero-footer") {
