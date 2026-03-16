@@ -14,7 +14,7 @@ const imageSchema = z.object({
   alt: z.string().trim().max(200).optional(),
   caption: z.string().trim().max(500).optional(),
   nearestHeading: z.string().trim().max(200).optional(),
-  sectionHeadingPath: z.array(z.string().trim().min(1)).max(12).optional(),
+  sectionHeadingPath: z.array(z.string().trim().min(1)).optional(),
   surroundingTextSnippet: z.string().trim().max(1000).optional(),
 });
 
@@ -23,11 +23,11 @@ const generateSchema = z.object({
   title: z.string().min(1),
   domain: z.string().min(1).optional(),
   images: z.array(imageSchema).min(1),
-  globalKeywords: z.array(z.string().trim().min(1)).max(20).optional(),
+  globalKeywords: z.array(z.string().trim().min(1)).optional(),
   titleStyle: z.enum(titleStyleOptions).optional(),
   toneHint: z.string().trim().max(120).optional(),
-  listCountHint: z.number().int().positive().max(50).optional(),
-  titleVariationCount: z.number().int().positive().max(10).optional(),
+  listCountHint: z.number().int().positive().optional(),
+  titleVariationCount: z.number().int().positive().optional(),
 });
 
 export async function POST(request: Request) {

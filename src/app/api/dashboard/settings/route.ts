@@ -21,7 +21,7 @@ const settingsSchema = z.object({
         workspaceId: z.string(),
         workspaceName: z.string(),
         allowedDomains: z.array(z.string()),
-        dailyPublishTarget: z.number().int().positive().max(500).nullable().optional(),
+        dailyPublishTarget: z.number().int().positive().nullable().optional(),
         defaultAccountId: z.string().optional(),
         defaultBoardId: z.string().optional(),
         isDefault: z.boolean().optional(),

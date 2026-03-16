@@ -86,6 +86,7 @@ model User {
   publicationRecords  PublicationRecord[]
   publicationSyncStates PublicationSyncState[]
   workspaceProfiles   WorkspaceProfile[]
+  freshTargetSnoozes  FreshTargetSnooze[]
 }
 
 model Post {
@@ -97,6 +98,22 @@ model Post {
   updatedAt DateTime        @updatedAt
   jobs      GenerationJob[]
   publicationRecords PublicationRecord[]
+  freshTargetSnoozes FreshTargetSnooze[]
+}
+
+model FreshTargetSnooze {
+  id          String   @id @default(cuid())
+  userId      String
+  postId      String
+  workspaceId String   @default("")
+  snoozedUntil DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post        Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId, workspaceId])
+  @@index([userId, workspaceId, snoozedUntil])
 }
 
 model GenerationJob {

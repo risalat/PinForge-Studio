@@ -19,7 +19,7 @@ const reviewSchema = z.object({
   titleStyle: z.enum(["balanced", "seo", "curiosity", "benefit"]).optional(),
   toneHint: z.string().optional(),
   listCountHint: z.number().int().positive().nullable().optional(),
-  titleVariationCount: z.number().int().positive().max(10).nullable().optional(),
+  titleVariationCount: z.number().int().positive().nullable().optional(),
 });
 
 type RouteProps = {

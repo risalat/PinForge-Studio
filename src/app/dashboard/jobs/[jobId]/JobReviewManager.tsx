@@ -829,7 +829,6 @@ export function JobReviewManager({
                 <input
                   type="number"
                   min={1}
-                  max={10}
                   value={titleVariationCountValue}
                   onChange={(event) => setTitleVariationCountValue(event.target.value)}
                   className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-2"
@@ -973,7 +972,6 @@ export function JobReviewManager({
                 <input
                   type="number"
                   min={1}
-                  max={12}
                   value={pinCount}
                   onChange={(event) => setPinCount(Number(event.target.value))}
                   className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-3 py-2"

@@ -17,7 +17,7 @@ export const runtime = "nodejs";
 const plansSchema = z.discriminatedUnion("mode", [
   z.object({
     mode: z.literal("assisted_auto"),
-    pinCount: z.number().int().positive().max(20),
+    pinCount: z.number().int().positive(),
     templateIds: z.array(z.string().min(1)).optional(),
     presetStrategy: z.enum(["recommended", "random_all", "random_bold"]).optional(),
     presetCategoryIds: z.array(z.enum(templateVisualPresetCategories)).optional(),

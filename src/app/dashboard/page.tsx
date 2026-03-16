@@ -1,5 +1,6 @@
 import { GenerationJobStatus } from "@prisma/client";
 import Link from "next/link";
+import { SnoozeFreshTargetButton } from "@/app/dashboard/SnoozeFreshTargetButton";
 import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
 import { requireAuthenticatedDashboardUser } from "@/lib/auth/dashboardSession";
 import { filterByAllowedDomains } from "@/lib/dashboard/domainScope";
@@ -12,6 +13,7 @@ import { getDashboardWorkspaceScope } from "@/lib/dashboard/workspaceScope";
 import { isDatabaseConfigured } from "@/lib/env";
 import { listJobsForUser } from "@/lib/jobs/generatePins";
 import { getPublishQueueCapacitySummary } from "@/lib/jobs/publishQueueCapacity";
+import { prisma } from "@/lib/prisma";
 import {
   getIntegrationSettingsSummary,
   getWorkspaceAllowedDomainsForUserId,
@@ -52,6 +54,19 @@ async function getDashboardData() {
         days: 7,
       }),
     ]);
+    const activeSnoozes = await prisma.freshTargetSnooze.findMany({
+      where: {
+        userId: user.id,
+        workspaceId: activeWorkspaceId,
+        snoozedUntil: {
+          gt: new Date(),
+        },
+      },
+      select: {
+        postId: true,
+      },
+    });
+    const snoozedPostIds = new Set(activeSnoozes.map((item) => item.postId));
     const filteredJobs = filterByAllowedDomains(allJobs, (job) => job.domainSnapshot, allowedDomains);
     const activeReviewJobs = filteredJobs.filter((job) => reviewQueueStatuses.has(job.status));
     const activeReviewPostIds = new Set(activeReviewJobs.map((job) => job.postId));
@@ -70,7 +85,9 @@ async function getDashboardData() {
       (job) => job.status === GenerationJobStatus.READY_TO_SCHEDULE,
     ).length;
     const recentJobs = filteredJobs.slice(0, 8);
-    const staleFreshTargets = rankFreshPinTargets(postPulseRecords);
+    const staleFreshTargets = rankFreshPinTargets(postPulseRecords).filter(
+      (record) => !snoozedPostIds.has(record.postId),
+    );
     const todaysFreshTargets = staleFreshTargets
       .filter((record) => {
         const normalizedRecordUrl = normalizeArticleUrl(record.url);
@@ -89,6 +106,7 @@ async function getDashboardData() {
         lastPublishedAt: record.lastPublishedAt,
         freshnessAgeDays: record.freshnessAgeDays,
         totalJobs: record.totalJobs,
+        workspaceId: activeWorkspaceId,
       }));
     const queuedFreshTargetCount = staleFreshTargets.filter((record) => {
       const normalizedRecordUrl = normalizeArticleUrl(record.url);
@@ -393,6 +411,10 @@ export default async function DashboardPage() {
                         </p>
                       </div>
                       <div className="flex flex-wrap gap-3 lg:justify-end">
+                        <SnoozeFreshTargetButton
+                          postId={target.postId}
+                          workspaceId={target.workspaceId}
+                        />
                         {target.latestJobId ? (
                           <Link
                             href={`/dashboard/jobs/${target.latestJobId}`}
