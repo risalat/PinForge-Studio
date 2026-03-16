@@ -1176,72 +1176,117 @@ export async function generateTitlesForJobPins(input: {
     pinId: string;
     titles: string[];
   }> = [];
-
-  for (const pin of selectedPins) {
+  const keywordPlan = buildPinKeywordFocusPlan(selectedPins, job.globalKeywords);
+  const pinsToGenerate = selectedPins.filter((pin) => {
     const existingTitle = pin.pinCopy?.title?.trim();
-    if (
-      existingTitle &&
-      (pin.pinCopy?.titleStatus === PinCopyFieldStatus.FINALIZED ||
-        pin.pinCopy?.titleStatus === PinCopyFieldStatus.GENERATED)
-    ) {
+    if (existingTitle && pin.pinCopy?.titleStatus === PinCopyFieldStatus.FINALIZED) {
       result.skipped += 1;
-      continue;
+      return false;
     }
 
     result.processed += 1;
+    return true;
+  });
+  const recentTitles: string[] = [];
+  const usedKeywordFocuses = new Set<string>();
 
-    try {
-        const titleDrafts = await generatePinTitle(
-        buildTitleRequest(job, {
-          templateName: pin.template.name,
-          templateSupportsSubtitle:
-            getTemplateConfig(pin.templateId)?.textFields.includes("subtitle") ?? false,
-          numberTreatment:
-            getTemplateConfig(pin.templateId)?.features.numberTreatment ?? "none",
-          imageAssignments: pin.plan.imageAssignments,
-          itemNumber:
-            parsePlanRenderContext(pin.plan.notes).itemNumber ??
-            job.listCountHint ??
-            job.sourceImages.length,
-        }),
-          {
-            provider: aiCredential.provider,
-            apiKey: aiCredential.apiKey,
-            model: aiCredential.model,
-            customEndpoint: aiCredential.customEndpoint,
-          },
-        );
-      const titleCandidates = normalizeGeneratedTitleCandidates(titleDrafts);
-      const title = titleCandidates[0]?.trim();
-      if (!title) {
-        throw new Error("AI title generation returned an empty title.");
+  for (const chunk of chunkArray(pinsToGenerate, 4)) {
+    const chunkPrimaryKeywords = chunk
+      .map((pin) => keywordPlan.get(pin.id)?.primaryKeyword?.trim())
+      .filter((value): value is string => Boolean(value));
+
+    const chunkResults = await Promise.all(
+      chunk.map(async (pin) => {
+        try {
+          const coordination = keywordPlan.get(pin.id);
+          const titleDrafts = await generatePinTitle(
+            buildTitleRequest(
+              job,
+              {
+                templateName: pin.template.name,
+                templateSupportsSubtitle:
+                  getTemplateConfig(pin.templateId)?.textFields.includes("subtitle") ?? false,
+                numberTreatment:
+                  getTemplateConfig(pin.templateId)?.features.numberTreatment ?? "none",
+                imageAssignments: pin.plan.imageAssignments,
+                itemNumber:
+                  parsePlanRenderContext(pin.plan.notes).itemNumber ??
+                  job.listCountHint ??
+                  job.sourceImages.length,
+              },
+              {
+                keywordFocus: coordination?.primaryKeyword,
+                secondaryKeywords: coordination?.secondaryKeywords ?? [],
+                avoidKeywords: [
+                  ...usedKeywordFocuses,
+                  ...chunkPrimaryKeywords.filter(
+                    (keyword) => keyword !== coordination?.primaryKeyword,
+                  ),
+                ],
+                recentTitles: recentTitles.slice(-8),
+              },
+            ),
+            {
+              provider: aiCredential.provider,
+              apiKey: aiCredential.apiKey,
+              model: aiCredential.model,
+              customEndpoint: aiCredential.customEndpoint,
+            },
+          );
+          const titleCandidates = normalizeGeneratedTitleCandidates(titleDrafts);
+          const title = titleCandidates[0]?.trim();
+          if (!title) {
+            throw new Error("AI title generation returned an empty title.");
+          }
+
+          await prisma.pinCopy.upsert({
+            where: { generatedPinId: pin.id },
+            update: {
+              title,
+              titleOptions: titleCandidates,
+              titleStatus: PinCopyFieldStatus.GENERATED,
+            },
+            create: {
+              generatedPinId: pin.id,
+              title,
+              titleOptions: titleCandidates,
+              titleStatus: PinCopyFieldStatus.GENERATED,
+            },
+          });
+
+          return {
+            ok: true as const,
+            pinId: pin.id,
+            titles: titleCandidates,
+            title,
+            primaryKeyword: coordination?.primaryKeyword?.trim() || "",
+          };
+        } catch (error) {
+          return {
+            ok: false as const,
+            pinId: pin.id,
+            reason: error instanceof Error ? error.message : "Unable to generate a title.",
+          };
+        }
+      }),
+    );
+
+    for (const item of chunkResults) {
+      if (!item.ok) {
+        result.failed += 1;
+        result.failures.push({ pinId: item.pinId, reason: item.reason });
+        continue;
       }
 
-      await prisma.pinCopy.upsert({
-        where: { generatedPinId: pin.id },
-        update: {
-          title,
-          titleOptions: titleCandidates,
-          titleStatus: PinCopyFieldStatus.GENERATED,
-        },
-        create: {
-          generatedPinId: pin.id,
-          title,
-          titleOptions: titleCandidates,
-          titleStatus: PinCopyFieldStatus.GENERATED,
-        },
-      });
-
       generatedTitleOptions.push({
-        pinId: pin.id,
-        titles: titleCandidates,
+        pinId: item.pinId,
+        titles: item.titles,
       });
-
+      recentTitles.push(item.title);
+      if (item.primaryKeyword) {
+        usedKeywordFocuses.add(item.primaryKeyword);
+      }
       result.succeeded += 1;
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : "Unable to generate a title.";
-      result.failed += 1;
-      result.failures.push({ pinId: pin.id, reason });
     }
   }
 
@@ -1336,6 +1381,8 @@ export async function generateDescriptionsForJobPins(input: {
   }
   const selectedPins = selectPinsForWorkflowAction(job, input.generatedPinIds);
   const result = createStepResultAccumulator();
+  const keywordPlan = buildPinKeywordFocusPlan(selectedPins, job.globalKeywords);
+  const pinsToGenerate: Array<(typeof selectedPins)[number] & { finalizedTitle: string }> = [];
 
   for (const pin of selectedPins) {
     const finalizedTitle = pin.pinCopy?.title?.trim();
@@ -1349,50 +1396,77 @@ export async function generateDescriptionsForJobPins(input: {
     }
 
     const existingDescription = pin.pinCopy?.description?.trim();
-    if (
-      existingDescription &&
-      (pin.pinCopy?.descriptionStatus === PinCopyFieldStatus.FINALIZED ||
-        pin.pinCopy?.descriptionStatus === PinCopyFieldStatus.GENERATED)
-    ) {
+    if (existingDescription && pin.pinCopy?.descriptionStatus === PinCopyFieldStatus.FINALIZED) {
       result.skipped += 1;
       continue;
     }
 
     result.processed += 1;
+    pinsToGenerate.push({
+      ...pin,
+      finalizedTitle,
+    });
+  }
 
+  const usedKeywordFocuses = new Set<string>();
+
+  for (const chunk of chunkArray(pinsToGenerate, 5)) {
     try {
-        const descriptionDrafts = await generatePinDescription(
-          buildDescriptionRequest(job, finalizedTitle),
-          {
-            provider: aiCredential.provider,
-            apiKey: aiCredential.apiKey,
-            model: aiCredential.model,
-            customEndpoint: aiCredential.customEndpoint,
+      const descriptionDrafts = await generatePinDescription(
+        buildDescriptionRequest(
+          job,
+          chunk.map((pin) => pin.finalizedTitle),
+          chunk.map((pin) => ({
+            title: pin.finalizedTitle,
+            primaryKeyword: keywordPlan.get(pin.id)?.primaryKeyword,
+            secondaryKeywords: keywordPlan.get(pin.id)?.secondaryKeywords ?? [],
+          })),
+          Array.from(usedKeywordFocuses),
+        ),
+        {
+          provider: aiCredential.provider,
+          apiKey: aiCredential.apiKey,
+          model: aiCredential.model,
+          customEndpoint: aiCredential.customEndpoint,
+        },
+      );
+
+      for (const [index, pin] of chunk.entries()) {
+        const description = descriptionDrafts[index]?.description?.trim();
+        if (!description) {
+          result.failed += 1;
+          result.failures.push({
+            pinId: pin.id,
+            reason: "AI description generation returned an empty description.",
+          });
+          continue;
+        }
+
+        await prisma.pinCopy.upsert({
+          where: { generatedPinId: pin.id },
+          update: {
+            description,
+            descriptionStatus: PinCopyFieldStatus.GENERATED,
           },
-        );
-      const description = descriptionDrafts[0]?.description?.trim();
-      if (!description) {
-        throw new Error("AI description generation returned an empty description.");
+          create: {
+            generatedPinId: pin.id,
+            description,
+            descriptionStatus: PinCopyFieldStatus.GENERATED,
+          },
+        });
+
+        const primaryKeyword = keywordPlan.get(pin.id)?.primaryKeyword?.trim();
+        if (primaryKeyword) {
+          usedKeywordFocuses.add(primaryKeyword);
+        }
+        result.succeeded += 1;
       }
-
-      await prisma.pinCopy.upsert({
-        where: { generatedPinId: pin.id },
-        update: {
-          description,
-          descriptionStatus: PinCopyFieldStatus.GENERATED,
-        },
-        create: {
-          generatedPinId: pin.id,
-          description,
-          descriptionStatus: PinCopyFieldStatus.GENERATED,
-        },
-      });
-
-      result.succeeded += 1;
     } catch (error) {
-      const reason = error instanceof Error ? error.message : "Unable to generate a description.";
-      result.failed += 1;
-      result.failures.push({ pinId: pin.id, reason });
+      const reason = error instanceof Error ? error.message : "Unable to generate descriptions.";
+      for (const pin of chunk) {
+        result.failed += 1;
+        result.failures.push({ pinId: pin.id, reason });
+      }
     }
   }
 
@@ -2131,16 +2205,31 @@ function buildTitleRequest(
     }>;
     itemNumber?: number;
   },
+  coordination?: {
+    keywordFocus?: string;
+    secondaryKeywords?: string[];
+    avoidKeywords?: string[];
+    recentTitles?: string[];
+  },
 ): GeneratePinTitleRequest {
   const toneParts = [job.toneHint?.trim(), `Template: ${pin.templateName}`].filter(Boolean);
   const images = pin.imageAssignments.map((assignment) =>
     buildDedupedImageContext(assignment.sourceImage),
   );
+  const focusedKeywords = buildFocusedKeywordList(
+    job.globalKeywords,
+    coordination?.keywordFocus,
+    coordination?.secondaryKeywords ?? [],
+  );
 
   return {
     article_title: job.articleTitleSnapshot,
     destination_url: job.postUrlSnapshot,
-    global_keywords: job.globalKeywords,
+    global_keywords: focusedKeywords,
+    keyword_focus: coordination?.keywordFocus,
+    secondary_keywords: coordination?.secondaryKeywords,
+    avoid_keywords: coordination?.avoidKeywords?.slice(0, 8),
+    recent_titles: coordination?.recentTitles?.slice(-6),
     title_style: toTitleStyle(job.titleStyle),
     tone_hint: toneParts.length > 0 ? toneParts.join(" | ") : undefined,
     list_count_hint: pin.itemNumber ?? job.listCountHint ?? undefined,
@@ -2433,6 +2522,170 @@ function normalizeRenderText(value: string | undefined) {
   return value?.replace(/\s+/g, " ").trim() ?? "";
 }
 
+function buildPinKeywordFocusPlan(
+  pins: Array<{
+    id: string;
+    plan: {
+      imageAssignments: Array<{
+        sourceImage: {
+          alt: string | null;
+          caption: string | null;
+          nearestHeading: string | null;
+          sectionHeadingPath: string[];
+          surroundingTextSnippet: string | null;
+        };
+      }>;
+    };
+  }>,
+  globalKeywords: string[],
+) {
+  const keywords = dedupeKeywordPool(globalKeywords);
+  const usageCount = new Map<string, number>();
+  const plan = new Map<
+    string,
+    {
+      primaryKeyword?: string;
+      secondaryKeywords: string[];
+    }
+  >();
+
+  if (keywords.length === 0) {
+    for (const pin of pins) {
+      plan.set(pin.id, {
+        secondaryKeywords: [],
+      });
+    }
+    return plan;
+  }
+
+  for (const pin of pins) {
+    const pinContext = buildPinKeywordContext(pin.plan.imageAssignments);
+    const rankedKeywords = keywords
+      .map((keyword, index) => ({
+        keyword,
+        index,
+        usage: usageCount.get(keyword) ?? 0,
+        score: scoreKeywordAgainstContext(keyword, pinContext),
+      }))
+      .sort((left, right) => {
+        if (right.score !== left.score) {
+          return right.score - left.score;
+        }
+        if (left.usage !== right.usage) {
+          return left.usage - right.usage;
+        }
+        return left.index - right.index;
+      });
+
+    const primaryKeyword = rankedKeywords[0]?.keyword;
+    if (primaryKeyword) {
+      usageCount.set(primaryKeyword, (usageCount.get(primaryKeyword) ?? 0) + 1);
+    }
+
+    const secondaryKeywords = rankedKeywords
+      .filter((entry) => entry.keyword !== primaryKeyword)
+      .slice(0, 2)
+      .map((entry) => entry.keyword);
+
+    plan.set(pin.id, {
+      primaryKeyword,
+      secondaryKeywords,
+    });
+  }
+
+  return plan;
+}
+
+function buildPinKeywordContext(
+  assignments: Array<{
+    sourceImage: {
+      alt: string | null;
+      caption: string | null;
+      nearestHeading: string | null;
+      sectionHeadingPath: string[];
+      surroundingTextSnippet: string | null;
+    };
+  }>,
+) {
+  return assignments
+    .flatMap((assignment) => [
+      assignment.sourceImage.alt,
+      assignment.sourceImage.caption,
+      assignment.sourceImage.nearestHeading,
+      ...assignment.sourceImage.sectionHeadingPath,
+      assignment.sourceImage.surroundingTextSnippet,
+    ])
+    .map((value) => normalizeContextText(value))
+    .filter(Boolean)
+    .join(" ");
+}
+
+function scoreKeywordAgainstContext(keyword: string, context: string) {
+  if (!context) {
+    return 0;
+  }
+
+  const normalizedKeyword = normalizeContextText(keyword);
+  if (!normalizedKeyword) {
+    return 0;
+  }
+
+  let score = 0;
+  if (context.includes(normalizedKeyword)) {
+    score += 3;
+  }
+
+  const parts = normalizedKeyword.split(/\s+/).filter((part) => part.length >= 4);
+  for (const part of parts) {
+    if (context.includes(part)) {
+      score += 1;
+    }
+  }
+
+  return score;
+}
+
+function dedupeKeywordPool(keywords: string[]) {
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const keyword of keywords) {
+    const normalized = normalizeContextText(keyword);
+    if (!normalized || seen.has(normalized)) {
+      continue;
+    }
+
+    seen.add(normalized);
+    result.push(keyword.trim());
+  }
+
+  return result;
+}
+
+function buildFocusedKeywordList(
+  globalKeywords: string[],
+  primaryKeyword?: string,
+  secondaryKeywords: string[] = [],
+) {
+  const ordered = [
+    ...(primaryKeyword ? [primaryKeyword] : []),
+    ...secondaryKeywords,
+    ...globalKeywords,
+  ];
+
+  return dedupeKeywordPool(ordered).slice(0, 6);
+}
+
+function chunkArray<T>(items: T[], size: number) {
+  const chunks: T[][] = [];
+
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+
+  return chunks;
+}
+
 function startsWithNumericCount(value: string) {
   return /^\d+\b/.test(value.trim());
 }
@@ -2464,13 +2717,21 @@ function buildDescriptionRequest(
     globalKeywords: string[];
     toneHint: string | null;
   },
-  title: string,
+  titles: string[],
+  keywordFocusByTitle?: Array<{
+    title: string;
+    primaryKeyword?: string;
+    secondaryKeywords?: string[];
+  }>,
+  avoidRepeatingKeywords?: string[],
 ): GeneratePinDescriptionRequest {
   return {
     article_title: job.articleTitleSnapshot,
     destination_url: job.postUrlSnapshot,
-    chosen_titles: [title],
-    global_keywords: job.globalKeywords,
+    chosen_titles: titles,
+    global_keywords: job.globalKeywords.slice(0, 10),
+    keyword_focus_by_title: keywordFocusByTitle,
+    avoid_repeating_keywords: avoidRepeatingKeywords?.slice(0, 10),
     tone_hint: job.toneHint?.trim() || undefined,
   };
 }

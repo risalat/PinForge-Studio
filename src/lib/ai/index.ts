@@ -32,6 +32,10 @@ export interface GeneratePinTitleRequest {
   article_title: string;
   destination_url: string;
   global_keywords?: string[];
+  keyword_focus?: string;
+  secondary_keywords?: string[];
+  avoid_keywords?: string[];
+  recent_titles?: string[];
   title_style?: TitleStyle;
   tone_hint?: string;
   list_count_hint?: number;
@@ -57,6 +61,12 @@ export interface GeneratePinDescriptionRequest {
   destination_url: string;
   chosen_titles: string[];
   global_keywords?: string[];
+  keyword_focus_by_title?: Array<{
+    title: string;
+    primary_keyword?: string;
+    secondary_keywords?: string[];
+  }>;
+  avoid_repeating_keywords?: string[];
   tone_hint?: string;
 }
 
@@ -393,11 +403,15 @@ export class AIClient {
         `Article title: ${titlePayload.article_title}`,
         `Destination URL: ${titlePayload.destination_url}`,
         `Global keywords: ${(titlePayload.global_keywords ?? []).join(", ") || "none"}`,
+        `Primary keyword focus: ${titlePayload.keyword_focus ?? "none"}`,
+        `Secondary keywords: ${(titlePayload.secondary_keywords ?? []).join(", ") || "none"}`,
+        `Avoid repeating these keywords if possible: ${(titlePayload.avoid_keywords ?? []).join(", ") || "none"}`,
+        `Recent accepted titles to avoid echoing: ${(titlePayload.recent_titles ?? []).join(" | ") || "none"}`,
         `List count hint: ${titlePayload.list_count_hint ?? "none"}`,
         "Assigned image context for this pin:",
         JSON.stringify(titlePayload.images ?? [], null, 2),
         'Return JSON with this shape: {"titles":[{"title":"..."}]}',
-        "Rules: title <= 100 chars, no hashtags, distinct variations, specific pin-level framing, avoid generic filler.",
+        "Rules: title <= 100 chars, no hashtags, distinct variations, specific pin-level framing, avoid generic filler, and prefer unused keyword angles when possible.",
       ].join("\n");
     }
 
@@ -478,11 +492,14 @@ export class AIClient {
       `Destination URL: ${descriptionPayload.destination_url}`,
       `Tone hint: ${descriptionPayload.tone_hint ?? "none"}`,
       `Global keywords: ${(descriptionPayload.global_keywords ?? []).join(", ") || "none"}`,
+      `Avoid repeating these keywords across this batch if possible: ${(descriptionPayload.avoid_repeating_keywords ?? []).join(", ") || "none"}`,
       `Chosen titles (${descriptionPayload.chosen_titles.length}):`,
       JSON.stringify(descriptionPayload.chosen_titles, null, 2),
+      "Keyword focus by title:",
+      JSON.stringify(descriptionPayload.keyword_focus_by_title ?? [], null, 2),
       'Return JSON with this shape: {"pins":[{"title":"...","description":"...","keywords_used":["..."]}]}',
       "Keep each title exactly as provided.",
-      "Description rules: <= 500 chars, exactly 3 sentences, no hashtags, strong Pinterest wording, include a save-for-later CTA in the final sentence.",
+      "Description rules: <= 500 chars, exactly 3 sentences, no hashtags, strong Pinterest wording, include a save-for-later CTA in the final sentence. Spread keyword coverage across the batch instead of repeating the same primary phrasing.",
       "keywords_used should list the main relevant terms, synonyms, or annotations you intentionally worked into that description.",
     ].join("\n");
   }
