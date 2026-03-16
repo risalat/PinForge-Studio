@@ -168,6 +168,8 @@ function getTemplateDescription(templateId: string) {
       return "Four-image masonry collage with a centered number medallion, bold title card, and compact domain pill.";
     case "four-image-grid-number-title-domain":
       return "Four-image asymmetric grid with a centered hero number, full-width title band, and domain pill.";
+    case "four-image-grid-title-footer":
+      return "Clean four-image grid with a translucent center title band and a full-width footer domain bar.";
     case "six-image-triple-split-slant-hero-footer":
       return "Six-image collage with a triple top strip, tilted middle photos, editorial title band, and full-width footer.";
     case "nine-image-grid-overlay-number-footer":
@@ -199,6 +201,8 @@ function getTemplateUsage(templateId: string) {
       return "Best for multi-image inspiration roundups that need a visible count and centered title block.";
     case "four-image-grid-number-title-domain":
       return "Best for roundup pins that need a strong listicle badge, big title band, and simple four-image structure.";
+    case "four-image-grid-title-footer":
+      return "Best for clean inspiration roundups where the title should sit across the middle without a separate number badge.";
     case "six-image-triple-split-slant-hero-footer":
       return "Best for exterior or roundup pins that benefit from multiple angles plus one strong hero image.";
     case "nine-image-grid-overlay-number-footer":

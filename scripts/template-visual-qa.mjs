@@ -9,6 +9,7 @@ const TEMPLATE_IDS = [
   "split-vertical-title-no-subtitle",
   "single-image-header-title-domain-cta",
   "single-image-title-footer",
+  "four-image-grid-title-footer",
 ];
 
 async function main() {

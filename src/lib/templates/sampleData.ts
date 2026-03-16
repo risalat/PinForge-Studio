@@ -73,6 +73,18 @@ export const sampleTemplateDataFourImageGridNumberTitleDomain: TemplateRenderPro
   visualPreset: "terracotta-ink",
 };
 
+export const sampleTemplateDataFourImageGridTitleFooter: TemplateRenderProps = {
+  title: "20+ Kitchen Lights To Match Your Vibe",
+  images: [
+    "/sample-images/1.jpg",
+    "/sample-images/2.jpg",
+    "/sample-images/3.jpg",
+    "/sample-images/4.jpg",
+  ],
+  domain: "mightypaint.com",
+  visualPreset: "teal-flare",
+};
+
 export const sampleTemplateDataSixImageTripleSplitSlantHeroFooter: TemplateRenderProps = {
   title: "Gorgeous Lakehouse Exterior Ideas",
   subtitle: "That Wow from Every Angle",
