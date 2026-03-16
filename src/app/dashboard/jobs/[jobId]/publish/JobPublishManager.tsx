@@ -239,6 +239,52 @@ export function JobPublishManager({
       ),
     [copyState],
   );
+  const dirtyCopyPayload = useMemo(() => {
+    const persistedByPinId = new Map(
+      currentPins.map((pin) => [
+        pin.id,
+        {
+          title: pin.title,
+          description: pin.description,
+        },
+      ]),
+    );
+
+    return copyState
+      .map((copy) => {
+        const persisted = persistedByPinId.get(copy.generatedPinId);
+        if (!persisted) {
+          return null;
+        }
+
+        const payload: {
+          generatedPinId: string;
+          title?: string;
+          description?: string;
+        } = {
+          generatedPinId: copy.generatedPinId,
+        };
+
+        if (copy.title !== persisted.title) {
+          payload.title = copy.title;
+        }
+
+        if (copy.description !== persisted.description) {
+          payload.description = copy.description;
+        }
+
+        return payload.title !== undefined || payload.description !== undefined ? payload : null;
+      })
+      .filter(
+        (
+          value,
+        ): value is {
+          generatedPinId: string;
+          title?: string;
+          description?: string;
+        } => Boolean(value),
+      );
+  }, [copyState, currentPins]);
 
   useEffect(() => {
     setLivePins(pins);
@@ -2064,11 +2110,15 @@ function formatDateLabel(value: string) {
               busyLabel: "Saving copy...",
               onClick: () =>
                 handleAction(
-                  { action: "save_copy", copies: copyState },
+                  { action: "save_copy", copies: dirtyCopyPayload },
                   "Unable to save copy edits.",
                   "titles",
                 ),
-              disabled: isPending || Boolean(activeAction) || currentPins.length === 0,
+              disabled:
+                isPending ||
+                Boolean(activeAction) ||
+                currentPins.length === 0 ||
+                dirtyCopyPayload.length === 0,
             }}
           />
 

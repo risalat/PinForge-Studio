@@ -1337,9 +1337,17 @@ export async function saveJobPinCopyEdits(input: {
           description:
             validatedDescription !== undefined ? validatedDescription || null : undefined,
           titleStatus:
-            validatedTitle !== undefined ? PinCopyFieldStatus.FINALIZED : undefined,
+            validatedTitle !== undefined
+              ? validatedTitle
+                ? PinCopyFieldStatus.FINALIZED
+                : PinCopyFieldStatus.EMPTY
+              : undefined,
           descriptionStatus:
-            validatedDescription !== undefined ? PinCopyFieldStatus.FINALIZED : undefined,
+            validatedDescription !== undefined
+              ? validatedDescription
+                ? PinCopyFieldStatus.FINALIZED
+                : PinCopyFieldStatus.EMPTY
+              : undefined,
         },
         create: {
           generatedPinId: copy.generatedPinId,
