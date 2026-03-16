@@ -30,7 +30,6 @@ import { prisma } from "@/lib/prisma";
 import {
   PublerClient,
   createPublerClient,
-  extractPostIdsFromJobRaw,
   extractScheduleOutcomesFromJobRaw,
   isFailureStatus,
   uploadMediaWithQueueHandling,
@@ -1629,6 +1628,16 @@ export async function scheduleJobPins(input: {
       .map((pin) => getPinAssetKey(pin))
       .filter((value): value is string => Boolean(value)),
   );
+  const schedulablePins: Array<{
+    pin: (typeof selectedPins)[number];
+    itemId: string;
+    scheduledFor: Date;
+    assignedBoardId: string;
+    assetKey: string;
+    title: string;
+    description: string;
+    mediaId: string;
+  }> = [];
 
   for (const pin of selectedPins) {
     const preview = previewByPinId.get(pin.id);
@@ -1670,26 +1679,44 @@ export async function scheduleJobPins(input: {
     }
 
     result.processed += 1;
+    schedulablePins.push({
+      pin,
+      itemId: item.id,
+      scheduledFor,
+      assignedBoardId,
+      assetKey,
+      title,
+      description,
+      mediaId,
+    });
+  }
 
+  if (schedulablePins.length > 0) {
     try {
-      const scheduleJob = await publerClient.schedulePost({
-        networks: {
-          pinterest: {
-            type: "photo",
-            title,
-            text: description,
-            url: job.postUrlSnapshot,
-            media: [{ id: mediaId }],
-          },
+      const scheduleJob = await publerClient.schedulePosts({
+        bulk: {
+          state: "scheduled",
+          posts: schedulablePins.map((entry) => ({
+            networks: {
+              pinterest: {
+                type: "photo",
+                title: entry.title,
+                text: entry.description,
+                url: job.postUrlSnapshot,
+                media: [{ id: entry.mediaId }],
+              },
+            },
+            accounts: [
+              {
+                id: accountId,
+                scheduled_at: entry.scheduledFor.toISOString(),
+                album_id: entry.assignedBoardId,
+              },
+            ],
+          })),
         },
-        accounts: [
-          {
-            id: accountId,
-            scheduled_at: scheduledFor.toISOString(),
-            album_id: assignedBoardId,
-          },
-        ],
       });
+
       const scheduleSnapshot = await waitForPublerJobCompletion({
         client: publerClient,
         jobId: scheduleJob.jobId,
@@ -1699,53 +1726,81 @@ export async function scheduleJobPins(input: {
         throw new Error(scheduleSnapshot.error ?? "Publer schedule job failed.");
       }
 
-      const outcome = extractScheduleOutcome(scheduleSnapshot.raw);
-      if (outcome?.error || isFailureStatus(outcome?.status)) {
-        throw new Error(outcome?.error ?? "Publer schedule outcome reported failure.");
-      }
+      const outcomes = extractScheduleOutcomesFromJobRaw(scheduleSnapshot.raw);
 
-      await prisma.scheduleRunItem.update({
-        where: { id: item.id },
-        data: {
-          publerJobId: scheduleJob.jobId,
-          publerPostId: outcome?.postId,
-          status: ScheduleRunItemStatus.SCHEDULED,
-          errorMessage: null,
-        },
-      });
+      for (const [index, entry] of schedulablePins.entries()) {
+        const outcome = outcomes[index];
+        if (outcome?.error || isFailureStatus(outcome?.status)) {
+          const reason = outcome?.error ?? "Publer schedule outcome reported failure.";
+          result.failed += 1;
+          result.failures.push({ pinId: entry.pin.id, reason });
 
-      scheduleAssignments.push({
-        pinId: pin.id,
-        boardId: assignedBoardId,
-        scheduledFor: scheduledFor.toISOString(),
-        status: "scheduled",
-        postId: outcome?.postId,
-      });
-      successfullyScheduledPinIds.push(pin.id);
-      if (assetKey) {
-        scheduledAssetKeys.add(assetKey);
+          await prisma.scheduleRunItem.update({
+            where: { id: entry.itemId },
+            data: {
+              publerJobId: scheduleJob.jobId,
+              status: ScheduleRunItemStatus.FAILED,
+              errorMessage: reason,
+            },
+          });
+
+          scheduleAssignments.push({
+            pinId: entry.pin.id,
+            boardId: entry.assignedBoardId,
+            scheduledFor: entry.scheduledFor.toISOString(),
+            status: "failed",
+            error: reason,
+          });
+          continue;
+        }
+
+        await prisma.scheduleRunItem.update({
+          where: { id: entry.itemId },
+          data: {
+            publerJobId: scheduleJob.jobId,
+            publerPostId: outcome?.postId,
+            status: ScheduleRunItemStatus.SCHEDULED,
+            errorMessage: null,
+          },
+        });
+
+        scheduleAssignments.push({
+          pinId: entry.pin.id,
+          boardId: entry.assignedBoardId,
+          scheduledFor: entry.scheduledFor.toISOString(),
+          status: "scheduled",
+          postId: outcome?.postId,
+        });
+        successfullyScheduledPinIds.push(entry.pin.id);
+        if (entry.assetKey) {
+          scheduledAssetKeys.add(entry.assetKey);
+        }
+        result.succeeded += 1;
       }
-      result.succeeded += 1;
     } catch (error) {
-      const reason = error instanceof Error ? error.message : "Unable to schedule pin in Publer.";
-      result.failed += 1;
-      result.failures.push({ pinId: pin.id, reason });
+      const reason =
+        error instanceof Error ? error.message : "Unable to schedule pins in Publer.";
 
-      await prisma.scheduleRunItem.update({
-        where: { id: item.id },
-        data: {
-          status: ScheduleRunItemStatus.FAILED,
-          errorMessage: reason,
-        },
-      });
+      for (const entry of schedulablePins) {
+        result.failed += 1;
+        result.failures.push({ pinId: entry.pin.id, reason });
 
-      scheduleAssignments.push({
-        pinId: pin.id,
-        boardId: assignedBoardId,
-        scheduledFor: scheduledFor.toISOString(),
-        status: "failed",
-        error: reason,
-      });
+        await prisma.scheduleRunItem.update({
+          where: { id: entry.itemId },
+          data: {
+            status: ScheduleRunItemStatus.FAILED,
+            errorMessage: reason,
+          },
+        });
+
+        scheduleAssignments.push({
+          pinId: entry.pin.id,
+          boardId: entry.assignedBoardId,
+          scheduledFor: entry.scheduledFor.toISOString(),
+          status: "failed",
+          error: reason,
+        });
+      }
     }
   }
 
@@ -3101,22 +3156,6 @@ function buildBoardAssignments(input: {
       boardId,
     };
   });
-}
-
-function extractScheduleOutcome(raw: Record<string, unknown>) {
-  const outcomes = extractScheduleOutcomesFromJobRaw(raw);
-  if (outcomes.length > 0) {
-    return outcomes[0];
-  }
-
-  const postIds = extractPostIdsFromJobRaw(raw);
-  if (postIds.length > 0) {
-    return {
-      postId: postIds[0],
-    };
-  }
-
-  return undefined;
 }
 
 export type GeneratedTitleDraft = PinTitleOption;

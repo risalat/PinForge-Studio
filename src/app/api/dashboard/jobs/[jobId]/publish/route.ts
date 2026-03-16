@@ -15,7 +15,7 @@ import {
 import { resolveStoredAssetUrl } from "@/lib/storage/assetUrl";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 const publishSchema = z.discriminatedUnion("action", [
   z.object({

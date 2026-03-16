@@ -122,6 +122,8 @@ type PublerOptionsResponse = {
 type BoardDistributionMode = "round_robin" | "first_selected" | "primary_weighted";
 const TITLE_MAX_LENGTH = 100;
 const DESCRIPTION_MAX_LENGTH = 500;
+const TITLE_ACTION_CHUNK_SIZE = 4;
+const DESCRIPTION_ACTION_CHUNK_SIZE = 5;
 
 type PublishStatusResponse = {
   ok: boolean;
@@ -914,22 +916,36 @@ export function JobPublishManager({
           copyProgressToastIdRef.current = progressToastId;
         }
 
-        for (const [index, pinId] of input.generatedPinIds.entries()) {
+        const pinIdChunks =
+          input.action === "upload_media"
+            ? input.generatedPinIds.map((pinId) => [pinId])
+            : chunkPinIds(
+                input.generatedPinIds,
+                input.action === "generate_titles"
+                  ? TITLE_ACTION_CHUNK_SIZE
+                  : DESCRIPTION_ACTION_CHUNK_SIZE,
+              );
+
+        let completedPins = 0;
+
+        for (const [chunkIndex, pinIdChunk] of pinIdChunks.entries()) {
           if (progressToastId) {
             updateNotification(progressToastId, {
               tone: "progress",
               title:
                 input.action === "generate_titles"
-                  ? `${index} of ${input.generatedPinIds.length} titles generated`
-                  : `${index} of ${input.generatedPinIds.length} descriptions generated`,
-              message: buildCopyProgressMessage({
+                  ? `${completedPins} of ${input.generatedPinIds.length} titles generated`
+                  : `${completedPins} of ${input.generatedPinIds.length} descriptions generated`,
+              message: buildChunkProgressMessage({
                 action:
                   input.action === "generate_titles"
                     ? "generate_titles"
                     : "generate_descriptions",
-                completed: index,
+                completed: completedPins,
                 total: input.generatedPinIds.length,
-                pinId,
+                currentChunk: chunkIndex + 1,
+                chunkCount: pinIdChunks.length,
+                chunkPinIds: pinIdChunk,
                 pins: currentPins,
               }),
               sticky: true,
@@ -939,7 +955,7 @@ export function JobPublishManager({
           try {
             const nextResult = await runAction({
               action: input.action,
-              generatedPinIds: [pinId],
+              generatedPinIds: pinIdChunk,
               ...(input.action !== "upload_media" && input.aiCredentialId
                 ? { aiCredentialId: input.aiCredentialId }
                 : {}),
@@ -967,14 +983,20 @@ export function JobPublishManager({
               }));
             }
           } catch (error) {
-            result.processed += 1;
-            result.failed += 1;
-            result.failures.push({
-              pinId,
-              reason: error instanceof Error ? error.message : input.fallbackMessage,
-            });
+            result.processed += pinIdChunk.length;
+            result.failed += pinIdChunk.length;
+            result.failures.push(
+              ...pinIdChunk.map((pinId) => ({
+                pinId,
+                reason: error instanceof Error ? error.message : input.fallbackMessage,
+              })),
+            );
           }
 
+          completedPins = Math.min(
+            input.generatedPinIds.length,
+            result.succeeded + result.failed + result.skipped,
+          );
           await refreshPublishSnapshot().catch(() => null);
         }
 
@@ -1207,6 +1229,7 @@ export function JobPublishManager({
           ? ((payload as { generatedPinIds: string[] }).generatedPinIds ?? [])
           : [];
       const feedbackSection = section ?? resolveSectionForAction(action);
+      let progressToastId: string | null = null;
 
       try {
         if (feedbackSection) {
@@ -1234,8 +1257,19 @@ export function JobPublishManager({
                 : pin,
             ),
           );
+        } else if (action === "schedule") {
+          progressToastId = notify({
+            tone: "progress",
+            title: `Scheduling ${actionPinIds.length} selected pins`,
+            message: "Submitting the schedule to Publer and waiting for confirmation.",
+            sticky: true,
+          });
         }
         const result = await runAction(payload);
+        if (progressToastId) {
+          dismissNotification(progressToastId);
+          progressToastId = null;
+        }
         if (feedbackSection) {
           setSectionFeedback((current) => ({
             ...current,
@@ -1291,9 +1325,28 @@ export function JobPublishManager({
               }));
             }
           }
+          if (pins && action === "schedule") {
+            const failedPinIds = Array.from(
+              new Set((result?.failures ?? []).map((failure) => failure.pinId)),
+            );
+            if (failedPinIds.length > 0) {
+              setSelectedPinIds(failedPinIds);
+            }
+          }
+        }
+        if (action === "schedule") {
+          notify({
+            tone: result && result.failed > 0 ? "info" : "success",
+            title: result && result.failed > 0 ? "Scheduling finished with issues" : "Scheduling complete",
+            message: result?.message ?? "Scheduling finished.",
+          });
         }
         router.refresh();
       } catch (error) {
+        if (progressToastId) {
+          dismissNotification(progressToastId);
+          progressToastId = null;
+        }
         if (feedbackSection) {
           setSectionFeedback((current) => ({
             ...current,
@@ -1342,6 +1395,13 @@ export function JobPublishManager({
           notify({
             tone: "error",
             title: "Media upload failed",
+            message: error instanceof Error ? error.message : fallbackMessage,
+            sticky: true,
+          });
+        } else if (action === "schedule") {
+          notify({
+            tone: "error",
+            title: "Scheduling failed",
             message: error instanceof Error ? error.message : fallbackMessage,
             sticky: true,
           });
@@ -2877,25 +2937,44 @@ function buildUploadRecoveryMessage(input: {
   } still need attention and are selected${detail}.`;
 }
 
-function buildCopyProgressMessage(input: {
+function buildChunkProgressMessage(input: {
   action: "generate_titles" | "generate_descriptions";
   completed: number;
   total: number;
-  pinId: string;
+  currentChunk: number;
+  chunkCount: number;
+  chunkPinIds: string[];
   pins: PinItem[];
 }) {
-  const pin = input.pins.find((candidate) => candidate.id === input.pinId);
-  const label = pin?.templateId ?? "selected pin";
+  const labels = input.chunkPinIds
+    .map((pinId) => input.pins.find((candidate) => candidate.id === pinId)?.templateId)
+    .filter((value): value is string => Boolean(value));
+  const labelPreview =
+    labels.length === 0
+      ? "selected pins"
+      : labels.length === 1
+        ? labels[0]
+        : `${labels[0]} and ${labels.length - 1} more`;
 
   if (input.action === "generate_titles") {
     return input.completed === 0
-      ? `Starting title generation for ${label}.`
-      : `Working on ${label}.`;
+      ? `Starting title generation for chunk ${input.currentChunk} of ${input.chunkCount}: ${labelPreview}.`
+      : `Working on chunk ${input.currentChunk} of ${input.chunkCount}: ${labelPreview}.`;
   }
 
   return input.completed === 0
-    ? `Starting description generation for ${label}.`
-    : `Working on ${label}.`;
+    ? `Starting description generation for chunk ${input.currentChunk} of ${input.chunkCount}: ${labelPreview}.`
+    : `Working on chunk ${input.currentChunk} of ${input.chunkCount}: ${labelPreview}.`;
+}
+
+function chunkPinIds(pinIds: string[], size: number) {
+  const chunks: string[][] = [];
+
+  for (let index = 0; index < pinIds.length; index += size) {
+    chunks.push(pinIds.slice(index, index + size));
+  }
+
+  return chunks;
 }
 
 function buildTitleCandidatesByPinId(pins: PinItem[]) {
