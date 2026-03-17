@@ -55,6 +55,7 @@ import {
 import { getTemplateConfig, TEMPLATE_CONFIGS } from "@/lib/templates/registry";
 import {
   getPresetIdsForCategories,
+  getPresetIdsForTemplate,
   recommendSplitVerticalVisualPresetWithImageAwareness,
   splitVerticalBoldPresetIds,
 } from "@/lib/templates/visualPresets";
@@ -442,6 +443,7 @@ export async function createAssistedGenerationPlans(input: {
   templateIds?: string[];
   presetStrategy?: AssistedPresetStrategy;
   presetCategoryIds?: TemplateVisualPresetCategoryId[];
+  allowAnyPresetOverride?: boolean;
 }) {
   const job = await getOwnedJobOrThrow(input.jobId, input.userId);
 
@@ -488,6 +490,12 @@ export async function createAssistedGenerationPlans(input: {
         planIndex: index,
         templateId,
       });
+      const templatePresetPool = input.allowAnyPresetOverride
+        ? presetPool
+        : getPresetIdsForTemplate(templateId, presetPool);
+      const templateFallbackPreset = templatePresetPool.includes(presetSequence[index]!)
+        ? presetSequence[index]
+        : templatePresetPool[0];
       const renderContext = await buildSeedPlanRenderContext(
         job,
         assignedImages.map((sourceImage) => ({
@@ -495,8 +503,8 @@ export async function createAssistedGenerationPlans(input: {
         })),
         input.presetStrategy,
         {
-          allowedPresetPool: presetPool,
-          fallbackPreset: presetSequence[index],
+          allowedPresetPool: templatePresetPool,
+          fallbackPreset: templateFallbackPreset,
         },
       );
 
@@ -632,6 +640,10 @@ export async function createManualGenerationPlan(input: {
     manualAssignedImages.map((sourceImage) => ({
       sourceImage,
     })),
+    "recommended",
+    {
+      allowedPresetPool: getPresetIdsForTemplate(input.templateId),
+    },
   );
 
   const plan = await prisma.generationPlan.create({
@@ -799,7 +811,10 @@ export async function generatePinsForJob(input: {
       },
     });
 
-      const renderCopy = await generateRenderCopyForPlan(job, plan, aiConfig);
+      const recentArtworkTitles = generatedPins
+        .map((pin) => pin.pinCopy?.title?.trim())
+        .filter((value): value is string => Boolean(value));
+      const renderCopy = await generateRenderCopyForPlan(job, plan, aiConfig, recentArtworkTitles);
     const nextRenderContext = serializePlanRenderContext({
       ...parsePlanRenderContext(plan.notes),
       ...renderCopy,
@@ -2136,6 +2151,7 @@ async function generateRenderCopyForPlan(
     aiModel: string;
     aiCustomEndpoint: string;
   },
+  recentArtworkTitles: string[] = [],
 ) {
   const templateConfig = getTemplateConfig(plan.templateId);
   if (!templateConfig) {
@@ -2159,6 +2175,7 @@ async function generateRenderCopyForPlan(
         imageAssignments: plan.imageAssignments,
         itemNumber,
         lockedTitle: title,
+        recentTitles: recentArtworkTitles,
       }),
       {
         provider: settings.aiProvider,
@@ -2197,6 +2214,7 @@ async function generateRenderCopyForPlan(
       pinTitle: shapedCopy.title,
       subtitle: shapedCopy.subtitle,
       domain: job.domainSnapshot,
+      allowedPresetIds: getPresetIdsForTemplate(plan.templateId),
       imageSignals: plan.imageAssignments.map((assignment) => assignment.sourceImage),
     }));
 
@@ -2218,11 +2236,11 @@ function buildRenderCopyRequest(
     listCountHint: number | null;
     titleVariationCount?: number | null;
   },
-    pin: {
-      templateId: string;
-      templateName: string;
-      templateSupportsSubtitle: boolean;
-      numberTreatment: TemplateNumberTreatment;
+  pin: {
+    templateId: string;
+    templateName: string;
+    templateSupportsSubtitle: boolean;
+    numberTreatment: TemplateNumberTreatment;
       imageAssignments: Array<{
       sourceImage: {
         url: string;
@@ -2235,11 +2253,13 @@ function buildRenderCopyRequest(
     }>;
     itemNumber?: number;
     lockedTitle?: string;
+    recentTitles?: string[];
   },
   ): GeneratePinRenderCopyRequest {
-    const titleRequest = buildTitleRequest(job, pin);
-    const isNineImageGridTemplate = pin.templateId === "nine-image-grid-overlay-number-footer";
-    const isHeroTwoSplitTextTemplate = pin.templateId === "hero-two-split-text";
+    const titleRequest = buildTitleRequest(job, pin, {
+      recentTitles: pin.recentTitles,
+    });
+    const artworkRule = getArtworkTitleRule(pin.templateId);
     return {
       ...titleRequest,
       locked_title: pin.lockedTitle?.trim() || undefined,
@@ -2251,11 +2271,12 @@ function buildRenderCopyRequest(
       template_supports_subtitle: pin.templateSupportsSubtitle,
       template_number_treatment: pin.numberTreatment,
       artwork_goal: pin.templateSupportsSubtitle
-        ? "Create a clean Pinterest title + subtitle pairing for the artwork."
-        : "Create one clean Pinterest artwork headline that reads well without a subtitle.",
-      artwork_title_single_line: isNineImageGridTemplate,
-      artwork_title_max_chars: isNineImageGridTemplate ? 28 : isHeroTwoSplitTextTemplate ? 36 : undefined,
-      artwork_title_max_words: isNineImageGridTemplate ? 4 : isHeroTwoSplitTextTemplate ? 5 : undefined,
+        ? "Create a clean Pinterest title + subtitle pairing for the artwork. Prioritize short, punchy readability over SEO."
+        : "Create one clean Pinterest artwork headline that reads well without a subtitle. Prioritize short, punchy readability over SEO.",
+      artwork_title_single_line: artworkRule.singleLine,
+      artwork_title_max_chars: artworkRule.maxChars,
+      artwork_title_max_words: artworkRule.maxWords,
+      artwork_title_max_lines: artworkRule.maxLines,
     };
   }
 
@@ -2452,6 +2473,7 @@ function shapeRenderCopyForTemplate(input: {
 
     title = integrateItemNumberIntoRenderTitle(title, input.itemNumber, input.numberTreatment);
     subtitle = subtitle ? normalizeSubtitleKicker(subtitle, title, input.articleTitle) : undefined;
+    title = enforceArtworkTitleRule(input.templateId, title);
 
     return {
       title,
@@ -2468,7 +2490,7 @@ function shapeRenderCopyForTemplate(input: {
   });
 
   return {
-    title,
+    title: enforceArtworkTitleRule(input.templateId, title),
     subtitle: undefined,
   };
 }
@@ -2509,6 +2531,82 @@ function collapseSingleFieldRenderTitle(input: {
   }
 
   return headline;
+}
+
+function getArtworkTitleRule(templateId: string) {
+  switch (templateId) {
+    case "nine-image-grid-overlay-number-footer":
+      return { maxWords: 4, maxChars: 28, maxLines: 1, singleLine: true };
+    case "hero-two-split-text":
+      return { maxWords: 5, maxChars: 36, maxLines: 3, singleLine: false };
+    case "masonry-grid-number-title-footer":
+      return { maxWords: 5, maxChars: 34, maxLines: 2, singleLine: false };
+    case "six-image-triple-split-slant-hero-footer":
+      return { maxWords: 5, maxChars: 34, maxLines: 2, singleLine: false };
+    case "single-image-header-title-domain-cta":
+      return { maxWords: 7, maxChars: 52, maxLines: 3, singleLine: false };
+    case "single-image-subtitle-title-cta":
+    case "single-image-title-footer":
+    case "four-image-grid-title-footer":
+    case "four-image-grid-number-title-domain":
+    case "four-image-masonry-hero-number-domain-pill":
+    case "split-vertical-title":
+    case "split-vertical-title-no-subtitle":
+    case "split-vertical-title-number":
+    case "hero-text-triple-split-footer":
+      return { maxWords: 6, maxChars: 42, maxLines: 2, singleLine: false };
+    default:
+      return { maxWords: 6, maxChars: 44, maxLines: 2, singleLine: false };
+  }
+}
+
+function enforceArtworkTitleRule(templateId: string, title: string) {
+  const rule = getArtworkTitleRule(templateId);
+  let headline = normalizeRenderText(title)
+    .replace(/\s{2,}/g, " ")
+    .trim();
+
+  headline = cutArtworkAtWeakClause(headline);
+
+  const words = headline.split(/\s+/).filter(Boolean);
+  if (words.length > rule.maxWords) {
+    headline = words.slice(0, rule.maxWords).join(" ");
+  }
+
+  while (headline.length > rule.maxChars) {
+    const reducedWords = headline.split(/\s+/).filter(Boolean);
+    if (reducedWords.length <= 2) {
+      break;
+    }
+    reducedWords.pop();
+    headline = reducedWords.join(" ");
+  }
+
+  if (templateId === "hero-two-split-text" && !isHeroTwoSplitTextTitleWithinLimit(headline)) {
+    headline = compactHeroTwoSplitTextTitle(headline);
+  }
+
+  return headline;
+}
+
+function cutArtworkAtWeakClause(title: string) {
+  const words = title.split(/\s+/).filter(Boolean);
+  const weakClauseWords = new Set([
+    "that",
+    "for",
+    "with",
+    "while",
+    "when",
+    "because",
+    "where",
+    "which",
+  ]);
+
+  const weakClauseIndex = words.findIndex(
+    (word, index) => index >= 3 && weakClauseWords.has(word.toLowerCase().replace(/[^a-z]/g, "")),
+  );
+
+  return weakClauseIndex > 0 ? words.slice(0, weakClauseIndex).join(" ") : title;
 }
 
 function integrateItemNumberIntoRenderTitle(

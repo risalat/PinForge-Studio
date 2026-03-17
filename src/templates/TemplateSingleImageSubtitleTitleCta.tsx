@@ -113,7 +113,7 @@ export function TemplateSingleImageSubtitleTitleCta({
               text={title}
               minFontSize={54}
               maxFontSize={80}
-              maxLines={3}
+              maxLines={2}
               lineHeight={TEMPLATE_TYPOGRAPHY.title.lineHeight}
               className="mx-auto w-full max-w-[610px] uppercase"
               textColor={titleColor}

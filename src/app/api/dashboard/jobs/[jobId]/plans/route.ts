@@ -21,6 +21,7 @@ const plansSchema = z.discriminatedUnion("mode", [
     templateIds: z.array(z.string().min(1)).optional(),
     presetStrategy: z.enum(["recommended", "random_all", "random_bold"]).optional(),
     presetCategoryIds: z.array(z.enum(templateVisualPresetCategories)).optional(),
+    allowAnyPresetOverride: z.boolean().optional(),
   }),
   z.object({
     mode: z.literal("manual"),
@@ -70,6 +71,7 @@ export async function POST(request: Request, { params }: RouteProps) {
         templateIds: payload.templateIds,
         presetStrategy: payload.presetStrategy,
         presetCategoryIds: payload.presetCategoryIds,
+        allowAnyPresetOverride: payload.allowAnyPresetOverride,
       });
     } else if (payload.mode === "manual") {
       await createManualGenerationPlan({

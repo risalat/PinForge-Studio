@@ -193,7 +193,7 @@ export function TemplateHeroTextTripleSplitFooter({
             text={title}
             minFontSize={72}
             maxFontSize={98}
-            maxLines={3}
+            maxLines={2}
             lineHeight={TEMPLATE_TYPOGRAPHY.title.lineHeight}
             className="w-full max-w-[1020px] text-center"
             textColor={titleColor}

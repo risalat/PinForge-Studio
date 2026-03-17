@@ -108,7 +108,7 @@ export function TemplateSingleImageHeaderTitleDomainCta({
               text={title}
               minFontSize={60}
               maxFontSize={102}
-              maxLines={4}
+              maxLines={3}
               lineHeight={TEMPLATE_TYPOGRAPHY.title.lineHeight}
               className="mx-auto w-full max-w-[860px]"
               textColor={inkColor}

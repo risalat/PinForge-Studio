@@ -70,7 +70,7 @@ export const SPLIT_VERTICAL_VISUAL_PRESETS: Record<
       titleMinSizeWithoutSubtitle: 68,
       titleMaxSizeWithoutSubtitle: 108,
       titleMaxLinesWithSubtitle: 2,
-      titleMaxLinesWithoutSubtitle: 3,
+      titleMaxLinesWithoutSubtitle: 2,
       titleTopGapWithSubtitle: 26,
       subtitleMinSize: 26,
       subtitleMaxSize: 34,
@@ -137,7 +137,7 @@ export const SPLIT_VERTICAL_VISUAL_PRESETS: Record<
       titleMinSizeWithoutSubtitle: 70,
       titleMaxSizeWithoutSubtitle: 106,
       titleMaxLinesWithSubtitle: 2,
-      titleMaxLinesWithoutSubtitle: 3,
+      titleMaxLinesWithoutSubtitle: 2,
       titleTopGapWithSubtitle: 26,
       subtitleMinSize: 26,
       subtitleMaxSize: 34,
@@ -203,7 +203,7 @@ export const SPLIT_VERTICAL_VISUAL_PRESETS: Record<
       titleMinSizeWithoutSubtitle: 68,
       titleMaxSizeWithoutSubtitle: 106,
       titleMaxLinesWithSubtitle: 2,
-      titleMaxLinesWithoutSubtitle: 3,
+      titleMaxLinesWithoutSubtitle: 2,
       titleTopGapWithSubtitle: 24,
       subtitleMinSize: 28,
       subtitleMaxSize: 38,
@@ -270,7 +270,7 @@ export const SPLIT_VERTICAL_VISUAL_PRESETS: Record<
       titleMinSizeWithoutSubtitle: 68,
       titleMaxSizeWithoutSubtitle: 106,
       titleMaxLinesWithSubtitle: 2,
-      titleMaxLinesWithoutSubtitle: 3,
+      titleMaxLinesWithoutSubtitle: 2,
       titleTopGapWithSubtitle: 26,
       subtitleMinSize: 26,
       subtitleMaxSize: 34,
@@ -338,7 +338,7 @@ export const SPLIT_VERTICAL_VISUAL_PRESETS: Record<
       titleMinSizeWithoutSubtitle: 70,
       titleMaxSizeWithoutSubtitle: 108,
       titleMaxLinesWithSubtitle: 2,
-      titleMaxLinesWithoutSubtitle: 3,
+      titleMaxLinesWithoutSubtitle: 2,
       titleTopGapWithSubtitle: 24,
       subtitleMinSize: 26,
       subtitleMaxSize: 34,
@@ -404,7 +404,7 @@ export const SPLIT_VERTICAL_VISUAL_PRESETS: Record<
       titleMinSizeWithoutSubtitle: 68,
       titleMaxSizeWithoutSubtitle: 104,
       titleMaxLinesWithSubtitle: 2,
-      titleMaxLinesWithoutSubtitle: 3,
+      titleMaxLinesWithoutSubtitle: 2,
       titleTopGapWithSubtitle: 24,
       subtitleMinSize: 28,
       subtitleMaxSize: 36,
@@ -472,7 +472,7 @@ export const SPLIT_VERTICAL_VISUAL_PRESETS: Record<
       titleMinSizeWithoutSubtitle: 70,
       titleMaxSizeWithoutSubtitle: 108,
       titleMaxLinesWithSubtitle: 2,
-      titleMaxLinesWithoutSubtitle: 3,
+      titleMaxLinesWithoutSubtitle: 2,
       titleTopGapWithSubtitle: 22,
       subtitleMinSize: 28,
       subtitleMaxSize: 36,
@@ -540,7 +540,7 @@ export const SPLIT_VERTICAL_VISUAL_PRESETS: Record<
       titleMinSizeWithoutSubtitle: 70,
       titleMaxSizeWithoutSubtitle: 108,
       titleMaxLinesWithSubtitle: 2,
-      titleMaxLinesWithoutSubtitle: 3,
+      titleMaxLinesWithoutSubtitle: 2,
       titleTopGapWithSubtitle: 22,
       subtitleMinSize: 30,
       subtitleMaxSize: 40,
@@ -608,7 +608,7 @@ export const SPLIT_VERTICAL_VISUAL_PRESETS: Record<
       titleMinSizeWithoutSubtitle: 70,
       titleMaxSizeWithoutSubtitle: 108,
       titleMaxLinesWithSubtitle: 2,
-      titleMaxLinesWithoutSubtitle: 3,
+      titleMaxLinesWithoutSubtitle: 2,
       titleTopGapWithSubtitle: 22,
       subtitleMinSize: 28,
       subtitleMaxSize: 36,
@@ -676,7 +676,7 @@ export const SPLIT_VERTICAL_VISUAL_PRESETS: Record<
       titleMinSizeWithoutSubtitle: 70,
       titleMaxSizeWithoutSubtitle: 108,
       titleMaxLinesWithSubtitle: 2,
-      titleMaxLinesWithoutSubtitle: 3,
+      titleMaxLinesWithoutSubtitle: 2,
       titleTopGapWithSubtitle: 22,
       subtitleMinSize: 28,
       subtitleMaxSize: 36,
@@ -744,7 +744,7 @@ export const SPLIT_VERTICAL_VISUAL_PRESETS: Record<
       titleMinSizeWithoutSubtitle: 70,
       titleMaxSizeWithoutSubtitle: 108,
       titleMaxLinesWithSubtitle: 2,
-      titleMaxLinesWithoutSubtitle: 3,
+      titleMaxLinesWithoutSubtitle: 2,
       titleTopGapWithSubtitle: 22,
       subtitleMinSize: 28,
       subtitleMaxSize: 36,
@@ -812,7 +812,7 @@ export const SPLIT_VERTICAL_VISUAL_PRESETS: Record<
       titleMinSizeWithoutSubtitle: 70,
       titleMaxSizeWithoutSubtitle: 108,
       titleMaxLinesWithSubtitle: 2,
-      titleMaxLinesWithoutSubtitle: 3,
+      titleMaxLinesWithoutSubtitle: 2,
       titleTopGapWithSubtitle: 22,
       subtitleMinSize: 28,
       subtitleMaxSize: 36,
@@ -880,7 +880,7 @@ export const SPLIT_VERTICAL_VISUAL_PRESETS: Record<
       titleMinSizeWithoutSubtitle: 70,
       titleMaxSizeWithoutSubtitle: 108,
       titleMaxLinesWithSubtitle: 2,
-      titleMaxLinesWithoutSubtitle: 3,
+      titleMaxLinesWithoutSubtitle: 2,
       titleTopGapWithSubtitle: 22,
       subtitleMinSize: 28,
       subtitleMaxSize: 36,
@@ -948,7 +948,7 @@ export const SPLIT_VERTICAL_VISUAL_PRESETS: Record<
       titleMinSizeWithoutSubtitle: 70,
       titleMaxSizeWithoutSubtitle: 108,
       titleMaxLinesWithSubtitle: 2,
-      titleMaxLinesWithoutSubtitle: 3,
+      titleMaxLinesWithoutSubtitle: 2,
       titleTopGapWithSubtitle: 22,
       subtitleMinSize: 28,
       subtitleMaxSize: 36,
@@ -1016,7 +1016,7 @@ export const SPLIT_VERTICAL_VISUAL_PRESETS: Record<
       titleMinSizeWithoutSubtitle: 70,
       titleMaxSizeWithoutSubtitle: 108,
       titleMaxLinesWithSubtitle: 2,
-      titleMaxLinesWithoutSubtitle: 3,
+      titleMaxLinesWithoutSubtitle: 2,
       titleTopGapWithSubtitle: 22,
       subtitleMinSize: 28,
       subtitleMaxSize: 36,
@@ -1120,6 +1120,41 @@ export function getPresetIdsForCategories(categoryIds?: TemplateVisualPresetCate
   return templateVisualPresets.filter((presetId) => allowed.has(TEMPLATE_VISUAL_PRESET_CATEGORY_MAP[presetId]));
 }
 
+const TEMPLATE_PRESET_CATEGORY_ALLOWLIST: Record<string, TemplateVisualPresetCategoryId[]> = {
+  "split-vertical-title": ["editorial-soft", "earthy-warm", "dark-drama"],
+  "split-vertical-title-no-subtitle": ["editorial-soft", "earthy-warm", "dark-drama"],
+  "split-vertical-title-number": ["editorial-soft", "earthy-warm", "dark-drama"],
+  "single-image-subtitle-title-cta": ["editorial-soft", "earthy-warm", "dark-drama"],
+  "single-image-header-title-domain-cta": ["editorial-soft", "earthy-warm", "dark-drama"],
+  "single-image-title-footer": ["editorial-soft", "earthy-warm", "dark-drama"],
+  "four-image-masonry-hero-number-domain-pill": ["editorial-soft", "earthy-warm", "dark-drama"],
+  "four-image-grid-number-title-domain": ["editorial-soft", "earthy-warm", "dark-drama"],
+  "four-image-grid-title-footer": ["editorial-soft", "earthy-warm", "dark-drama"],
+  "hero-text-triple-split-footer": ["editorial-soft", "earthy-warm", "dark-drama"],
+  "six-image-triple-split-slant-hero-footer": ["editorial-soft", "earthy-warm", "dark-drama"],
+  "masonry-grid-number-title-footer": ["editorial-soft", "earthy-warm", "dark-drama"],
+  "nine-image-grid-overlay-number-footer": ["editorial-soft", "earthy-warm", "dark-drama", "graphic-pop"],
+  "hero-two-split-text": ["editorial-soft", "earthy-warm", "dark-drama", "graphic-pop"],
+};
+
+export function getPresetIdsForTemplate(
+  templateId: string,
+  pool?: readonly TemplateVisualPresetId[],
+) {
+  const allowedCategories = TEMPLATE_PRESET_CATEGORY_ALLOWLIST[templateId];
+  const source = pool?.length ? [...pool] : [...templateVisualPresets];
+  if (!allowedCategories?.length) {
+    return source;
+  }
+
+  const allowed = new Set(allowedCategories);
+  const filtered = source.filter((presetId) =>
+    allowed.has(TEMPLATE_VISUAL_PRESET_CATEGORY_MAP[presetId]),
+  );
+
+  return filtered.length > 0 ? filtered : source;
+}
+
 export function getSplitVerticalVisualPreset(
   presetId?: TemplateRenderProps["visualPreset"] | TemplateRenderProps["colorPreset"],
 ) {
@@ -1138,6 +1173,7 @@ export function recommendSplitVerticalVisualPreset(input: {
     sectionHeadingPath: string[];
     surroundingTextSnippet: string | null;
   }>;
+  allowedPresetIds?: TemplateVisualPresetId[];
 }) {
   return recommendPresetFromContext(input);
 }
@@ -1155,6 +1191,7 @@ export async function recommendSplitVerticalVisualPresetWithImageAwareness(input
     sectionHeadingPath: string[];
     surroundingTextSnippet: string | null;
   }>;
+  allowedPresetIds?: TemplateVisualPresetId[];
 }) {
   const pixelSignals = await analyzeImageToneSignals(
     input.imageSignals.map((signal) => signal.url ?? "").filter((value) => value.trim() !== ""),
@@ -1176,6 +1213,7 @@ function recommendPresetFromContext(
       sectionHeadingPath: string[];
       surroundingTextSnippet: string | null;
     }>;
+    allowedPresetIds?: TemplateVisualPresetId[];
   },
   pixelSignals?: ImageToneSignals | null,
 ) {
@@ -1195,8 +1233,11 @@ function recommendPresetFromContext(
     .filter((value): value is string => Boolean(value?.trim()))
     .join(" ")
     .toLowerCase();
+  const presetCandidates = (input.allowedPresetIds?.length
+    ? input.allowedPresetIds
+    : (Object.keys(SPLIT_VERTICAL_VISUAL_PRESETS) as TemplateVisualPresetId[]));
   const scores = new Map<TemplateVisualPresetId, number>(
-    Object.keys(SPLIT_VERTICAL_VISUAL_PRESETS).map((presetId) => [
+    presetCandidates.map((presetId) => [
       presetId as TemplateVisualPresetId,
       0,
     ]),
@@ -1375,7 +1416,10 @@ function recommendPresetFromContext(
   const ranked = Array.from(scores.entries()).sort((left, right) => right[1] - left[1]);
   const topScore = ranked[0]?.[1] ?? 0;
   if (topScore <= 0) {
-    return fallbackPresetFromText(`${input.articleTitle}|${input.pinTitle}|${input.domain}`);
+    return fallbackPresetFromText(
+      `${input.articleTitle}|${input.pinTitle}|${input.domain}`,
+      presetCandidates,
+    );
   }
 
   const topPresets = ranked
@@ -1386,6 +1430,7 @@ function recommendPresetFromContext(
     ? topPresets[0]
     : fallbackPresetFromText(
         `${input.articleTitle}|${input.pinTitle}|${input.domain}|${topPresets.join(",")}`,
+        presetCandidates,
       );
 }
 
@@ -1407,11 +1452,15 @@ function incrementScore(
   presetId: TemplateVisualPresetId,
   value: number,
 ) {
+  if (!scores.has(presetId)) {
+    return;
+  }
   scores.set(presetId, (scores.get(presetId) ?? 0) + value);
 }
 
-function fallbackPresetFromText(text: string): TemplateVisualPresetId {
-  const presetOrder: TemplateVisualPresetId[] = [
+function fallbackPresetFromText(
+  text: string,
+  presetOrder: readonly TemplateVisualPresetId[] = [
     "plum-sand",
     "sage-cream",
     "cocoa-blush",
@@ -1426,7 +1475,8 @@ function fallbackPresetFromText(text: string): TemplateVisualPresetId {
     "scarlet-cream",
     "teal-flare",
     "sunset-punch",
-  ];
+  ],
+): TemplateVisualPresetId {
   const hash = [...text].reduce((sum, character) => sum + character.charCodeAt(0), 0);
   return presetOrder[hash % presetOrder.length];
 }

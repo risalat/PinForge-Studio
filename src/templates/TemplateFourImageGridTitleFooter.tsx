@@ -130,12 +130,12 @@ export function TemplateFourImageGridTitleFooter({
           height: titleBandHeight,
         }}
       >
-        <AutoFitTitle
-          text={title}
-          minFontSize={62}
-          maxFontSize={104}
-          maxLines={3}
-          lineHeight={TEMPLATE_TYPOGRAPHY.title.lineHeight}
+            <AutoFitTitle
+              text={title}
+              minFontSize={62}
+              maxFontSize={104}
+              maxLines={2}
+              lineHeight={TEMPLATE_TYPOGRAPHY.title.lineHeight}
           className="w-full max-w-[1008px] text-center"
           textColor={titleColor}
           fontFamily={TEMPLATE_TYPOGRAPHY.title.fontFamily}

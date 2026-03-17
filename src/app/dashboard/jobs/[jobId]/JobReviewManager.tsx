@@ -140,6 +140,7 @@ export function JobReviewManager({
   const [pinCount, setPinCount] = useState(3);
   const [selectedTemplateIds, setSelectedTemplateIds] = useState(templates.map((item) => item.id));
   const [selectedPresetCategoryIds, setSelectedPresetCategoryIds] = useState<string[]>([]);
+  const [allowAnyPresetOverride, setAllowAnyPresetOverride] = useState(false);
   const [assistedPresetStrategy, setAssistedPresetStrategy] = useState<
     "recommended" | "random_all" | "random_bold"
   >("recommended");
@@ -373,10 +374,13 @@ export function JobReviewManager({
           templateIds: selectedTemplateIds,
           presetStrategy: assistedPresetStrategy,
           presetCategoryIds: selectedPresetCategoryIds,
+          allowAnyPresetOverride,
         });
         const message =
           assistedPresetStrategy === "recommended"
-            ? "Assisted plans created with image-aware preset recommendation."
+            ? allowAnyPresetOverride
+              ? "Assisted plans created with image-aware recommendation and full preset override enabled."
+              : "Assisted plans created with image-aware preset recommendation."
             : assistedPresetStrategy === "random_bold"
               ? "Assisted plans created with random bold presets."
               : "Assisted plans created with random presets.";
@@ -1016,6 +1020,17 @@ export function JobReviewManager({
                 </div>
               </div>
             </div>
+
+            <label className="mt-4 flex items-center gap-3 rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-4 py-3 text-sm text-[var(--dashboard-subtle)]">
+              <input
+                type="checkbox"
+                checked={allowAnyPresetOverride}
+                onChange={(event) => setAllowAnyPresetOverride(event.target.checked)}
+              />
+              <span>
+                Allow any preset for assisted plans. Leave this off for template-safe preset matching.
+              </span>
+            </label>
 
             <div className="mt-4 rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-4">
               <div className="flex items-start justify-between gap-4">

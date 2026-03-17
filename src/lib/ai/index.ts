@@ -53,6 +53,7 @@ export interface GeneratePinRenderCopyRequest extends GeneratePinTitleRequest {
   artwork_goal?: string;
   artwork_title_max_chars?: number;
   artwork_title_max_words?: number;
+  artwork_title_max_lines?: number;
   artwork_title_single_line?: boolean;
 }
 
@@ -420,6 +421,7 @@ export class AIClient {
       return [
         "Generate a Pinterest render package for one specific pin.",
         "This copy is for the pin artwork itself. Optimize for visual clarity and composition first. Publish titles are generated later in the workflow.",
+        "This is not an SEO title task. The artwork title should be short, punchy, highly scannable, and emotionally immediate.",
         renderPayload.locked_title
           ? renderPayload.template_supports_subtitle
             ? "Keep the provided title exactly as written and generate a matching subtitle."
@@ -450,6 +452,7 @@ export class AIClient {
         `Artwork title should fit one line: ${renderPayload.artwork_title_single_line ? "yes" : "no"}`,
         `Artwork title max chars: ${renderPayload.artwork_title_max_chars ?? "default"}`,
         `Artwork title max words: ${renderPayload.artwork_title_max_words ?? "default"}`,
+        `Artwork title max lines: ${renderPayload.artwork_title_max_lines ?? "default"}`,
         `Locked title: ${renderPayload.locked_title ?? "none"}`,
         `Article title: ${renderPayload.article_title}`,
         `Destination URL: ${renderPayload.destination_url}`,
@@ -458,13 +461,15 @@ export class AIClient {
         "Assigned image context for this pin:",
         JSON.stringify(renderPayload.images ?? [], null, 2),
         'Return JSON with this shape: {"items":[{"title":"...","subtitle":"..."}]}',
-        "Rules: title <= 100 chars, subtitle <= 40 chars, subtitle <= 5 words, no hashtags, keep both specific and editorial. For subtitle templates, prefer artwork titles around 55 characters or less when possible.",
+        "Rules: title <= 100 chars, subtitle <= 40 chars, subtitle <= 5 words, no hashtags, keep both specific and editorial. Prefer short, punchy noun-phrase headlines over long article-style clauses. Avoid filler phrases like 'that instantly', 'for your', 'make your space feel', and similar padding.",
         renderPayload.artwork_title_single_line ||
+        renderPayload.artwork_title_max_lines ||
         renderPayload.artwork_title_max_words ||
         renderPayload.artwork_title_max_chars
           ? [
               "Critical constraint for this template:",
               renderPayload.artwork_title_single_line ? "the artwork title must fit on a single line;" : "keep the artwork title very short;",
+              renderPayload.artwork_title_max_lines ? `it must fit within ${renderPayload.artwork_title_max_lines} lines;` : undefined,
               renderPayload.artwork_title_max_words ? `stay within ${renderPayload.artwork_title_max_words} words;` : undefined,
               renderPayload.artwork_title_max_chars ? `stay within ${renderPayload.artwork_title_max_chars} characters whenever possible;` : undefined,
               "rewrite for brevity instead of clipping or dropping random words.",
