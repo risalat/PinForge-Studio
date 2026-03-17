@@ -19,23 +19,44 @@ export type WorkspaceSitemapDiscoveryResult = {
   sitemapUrls: string[];
   totalArticles: number;
   totalUntracked: number;
+  totalMatching: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  query: string;
+  filter: WorkspaceSitemapFilter;
   articles: WorkspaceSitemapArticle[];
   error: string | null;
 };
+
+export type WorkspaceSitemapFilter = "all" | "recent_90d" | "missing_lastmod";
 
 export async function listWorkspaceUntrackedSitemapArticles(input: {
   sitemapUrls: string[];
   allowedDomains: string[];
   trackedUrls: string[];
-  limit?: number;
+  page?: number;
+  pageSize?: number;
+  query?: string;
+  filter?: WorkspaceSitemapFilter;
 }): Promise<WorkspaceSitemapDiscoveryResult> {
   const sitemapUrls = normalizeSitemapUrls(input.sitemapUrls);
+  const query = input.query?.trim().toLowerCase() ?? "";
+  const filter = normalizeWorkspaceSitemapFilter(input.filter);
+  const pageSize = Math.max(1, Math.min(100, Math.floor(input.pageSize ?? 25)));
+  const page = Math.max(1, Math.floor(input.page ?? 1));
   if (sitemapUrls.length === 0) {
     return {
       configured: false,
       sitemapUrls: [],
       totalArticles: 0,
       totalUntracked: 0,
+      totalMatching: 0,
+      page: 1,
+      pageSize,
+      totalPages: 1,
+      query,
+      filter,
       articles: [],
       error: null,
     };
@@ -101,24 +122,50 @@ export async function listWorkspaceUntrackedSitemapArticles(input: {
       }
     }
 
-    const articles = Array.from(uniqueArticles.values())
-      .sort((left, right) => {
-        const recencyDelta =
-          (right.lastModifiedAt?.getTime() ?? Number.NEGATIVE_INFINITY) -
-          (left.lastModifiedAt?.getTime() ?? Number.NEGATIVE_INFINITY);
-        if (recencyDelta !== 0) {
-          return recencyDelta;
-        }
+    const sortedArticles = Array.from(uniqueArticles.values()).sort((left, right) => {
+      const recencyDelta =
+        (right.lastModifiedAt?.getTime() ?? Number.NEGATIVE_INFINITY) -
+        (left.lastModifiedAt?.getTime() ?? Number.NEGATIVE_INFINITY);
+      if (recencyDelta !== 0) {
+        return recencyDelta;
+      }
 
-        return left.url.localeCompare(right.url);
-      })
-      .slice(0, Math.max(1, input.limit ?? 12));
+      return left.url.localeCompare(right.url);
+    });
+    const filteredArticles = sortedArticles.filter((article) => {
+      if (filter === "recent_90d") {
+        const ninetyDaysAgo = Date.now() - 90 * 24 * 60 * 60 * 1000;
+        if (!article.lastModifiedAt || article.lastModifiedAt.getTime() < ninetyDaysAgo) {
+          return false;
+        }
+      } else if (filter === "missing_lastmod" && article.lastModifiedAt) {
+        return false;
+      }
+
+      if (!query) {
+        return true;
+      }
+
+      const haystack = `${article.titleGuess} ${article.url} ${article.domain}`.toLowerCase();
+      return haystack.includes(query);
+    });
+    const totalMatching = filteredArticles.length;
+    const totalPages = Math.max(1, Math.ceil(totalMatching / pageSize));
+    const safePage = Math.min(page, totalPages);
+    const startIndex = (safePage - 1) * pageSize;
+    const articles = filteredArticles.slice(startIndex, startIndex + pageSize);
 
     return {
       configured: true,
       sitemapUrls,
       totalArticles: discoveredEntries.length,
       totalUntracked: uniqueArticles.size,
+      totalMatching,
+      page: safePage,
+      pageSize,
+      totalPages,
+      query,
+      filter,
       articles,
       error: null,
     };
@@ -128,10 +175,20 @@ export async function listWorkspaceUntrackedSitemapArticles(input: {
       sitemapUrls,
       totalArticles: 0,
       totalUntracked: 0,
+      totalMatching: 0,
+      page: 1,
+      pageSize,
+      totalPages: 1,
+      query,
+      filter,
       articles: [],
       error: error instanceof Error ? error.message : "Unable to load sitemap articles.",
     };
   }
+}
+
+export function normalizeWorkspaceSitemapFilter(value: string | undefined): WorkspaceSitemapFilter {
+  return value === "recent_90d" || value === "missing_lastmod" ? value : "all";
 }
 
 type ParsedSitemapEntry = {

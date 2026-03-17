@@ -9,7 +9,11 @@ import {
   listPostPulseRecordsForUser,
   type PostPulseRecord,
 } from "@/lib/dashboard/postPulse";
-import { listWorkspaceUntrackedSitemapArticles } from "@/lib/dashboard/workspaceSitemaps";
+import {
+  listWorkspaceUntrackedSitemapArticles,
+  normalizeWorkspaceSitemapFilter,
+  type WorkspaceSitemapFilter,
+} from "@/lib/dashboard/workspaceSitemaps";
 import { getDashboardWorkspaceScope } from "@/lib/dashboard/workspaceScope";
 import { isDatabaseConfigured } from "@/lib/env";
 import { listJobsForUser } from "@/lib/jobs/generatePins";
@@ -21,7 +25,11 @@ import {
 } from "@/lib/settings/integrationSettings";
 import { normalizeArticleUrl } from "@/lib/types";
 
-async function getDashboardData() {
+async function getDashboardData(input?: {
+  untrackedQuery?: string;
+  untrackedFilter?: WorkspaceSitemapFilter;
+  untrackedPage?: number;
+}) {
   if (!isDatabaseConfigured()) {
     return {
       postsProcessed: 0,
@@ -36,6 +44,12 @@ async function getDashboardData() {
         sitemapUrls: [],
         totalArticles: 0,
         totalUntracked: 0,
+        totalMatching: 0,
+        page: 1,
+        pageSize: 25,
+        totalPages: 1,
+        query: "",
+        filter: "all" as WorkspaceSitemapFilter,
         articles: [],
         error: null,
       },
@@ -138,7 +152,10 @@ async function getDashboardData() {
       sitemapUrls: activeWorkspaceProfile?.sitemapUrls ?? [],
       allowedDomains,
       trackedUrls: Array.from(trackedUrlKeys),
-      limit: 12,
+      page: input?.untrackedPage ?? 1,
+      pageSize: 25,
+      query: input?.untrackedQuery ?? "",
+      filter: input?.untrackedFilter ?? "all",
     });
 
     return {
@@ -167,6 +184,12 @@ async function getDashboardData() {
         sitemapUrls: [],
         totalArticles: 0,
         totalUntracked: 0,
+        totalMatching: 0,
+        page: 1,
+        pageSize: 25,
+        totalPages: 1,
+        query: input?.untrackedQuery ?? "",
+        filter: input?.untrackedFilter ?? "all",
         articles: [],
         error: null,
       },
@@ -176,9 +199,23 @@ async function getDashboardData() {
   }
 }
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
   await requireAuthenticatedDashboardUser();
-  const data = await getDashboardData();
+  const resolvedSearchParams = searchParams ? await searchParams : {};
+  const untrackedQuery = firstSearchParam(resolvedSearchParams.unpinnedQuery);
+  const untrackedFilter = normalizeWorkspaceSitemapFilter(
+    firstSearchParam(resolvedSearchParams.unpinnedFilter),
+  );
+  const untrackedPage = normalizePositiveInt(firstSearchParam(resolvedSearchParams.unpinnedPage), 1);
+  const data = await getDashboardData({
+    untrackedQuery,
+    untrackedFilter,
+    untrackedPage,
+  });
   const latestJob = data.recentJobs[0] ?? null;
   const intakeJobs = data.recentJobs.filter((job) =>
     ["RECEIVED", "REVIEWING", "READY_FOR_GENERATION"].includes(job.status),
@@ -375,6 +412,7 @@ export default async function DashboardPage() {
           </div>
           <div className="flex flex-wrap gap-3">
             <MetricInline label="Untracked" value={data.untrackedSitemapArticles.totalUntracked} />
+            <MetricInline label="Matching" value={data.untrackedSitemapArticles.totalMatching} />
             <Link
               href="/dashboard/integrations"
               className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-5 py-3 text-sm font-semibold text-[var(--dashboard-subtle)]"
@@ -385,6 +423,39 @@ export default async function DashboardPage() {
         </div>
 
         <div className="mt-6 overflow-hidden rounded-[24px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)]">
+          <form className="grid gap-4 border-b border-[var(--dashboard-line)] bg-[var(--dashboard-panel-alt)] px-5 py-4 lg:grid-cols-[minmax(0,1fr)_220px_160px]">
+            <input
+              type="search"
+              name="unpinnedQuery"
+              defaultValue={data.untrackedSitemapArticles.query}
+              placeholder="Search title, URL, or domain"
+              className="w-full rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 text-sm outline-none"
+            />
+            <select
+              name="unpinnedFilter"
+              defaultValue={data.untrackedSitemapArticles.filter}
+              className="w-full rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 text-sm outline-none"
+            >
+              <option value="all">All articles</option>
+              <option value="recent_90d">Recent 90 days</option>
+              <option value="missing_lastmod">Missing lastmod</option>
+            </select>
+            <div className="flex gap-3">
+              <input type="hidden" name="unpinnedPage" value="1" />
+              <button
+                type="submit"
+                className="rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-5 py-3 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)]"
+              >
+                Apply
+              </button>
+              <Link
+                href="/dashboard"
+                className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-5 py-3 text-sm font-semibold text-[var(--dashboard-subtle)]"
+              >
+                Reset
+              </Link>
+            </div>
+          </form>
           {!data.untrackedSitemapArticles.configured ? (
             <div className="px-5 py-6 text-sm text-[var(--dashboard-subtle)]">
               No sitemap URLs configured for the active workspace yet.
@@ -405,7 +476,7 @@ export default async function DashboardPage() {
                 <span>Lastmod</span>
                 <span className="text-right">Action</span>
               </div>
-              <div className="divide-y divide-[var(--dashboard-line)]">
+              <div className="max-h-[780px] divide-y divide-[var(--dashboard-line)] overflow-y-auto">
                 {data.untrackedSitemapArticles.articles.map((article) => (
                   <div
                     key={article.normalizedUrl}
@@ -432,6 +503,31 @@ export default async function DashboardPage() {
                   </div>
                 ))}
               </div>
+              {data.untrackedSitemapArticles.totalPages > 1 ? (
+                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--dashboard-line)] px-5 py-4">
+                  <p className="text-sm text-[var(--dashboard-subtle)]">
+                    Page {data.untrackedSitemapArticles.page} of {data.untrackedSitemapArticles.totalPages}
+                  </p>
+                  <div className="flex gap-3">
+                    <PaginationLink
+                      page={data.untrackedSitemapArticles.page - 1}
+                      disabled={data.untrackedSitemapArticles.page <= 1}
+                      query={data.untrackedSitemapArticles.query}
+                      filter={data.untrackedSitemapArticles.filter}
+                    >
+                      Previous
+                    </PaginationLink>
+                    <PaginationLink
+                      page={data.untrackedSitemapArticles.page + 1}
+                      disabled={data.untrackedSitemapArticles.page >= data.untrackedSitemapArticles.totalPages}
+                      query={data.untrackedSitemapArticles.query}
+                      filter={data.untrackedSitemapArticles.filter}
+                    >
+                      Next
+                    </PaginationLink>
+                  </div>
+                </div>
+              ) : null}
             </>
           )}
         </div>
@@ -684,6 +780,43 @@ function MetricInline({ label, value }: { label: string; value: number }) {
   );
 }
 
+function PaginationLink({
+  page,
+  disabled,
+  query,
+  filter,
+  children,
+}: {
+  page: number;
+  disabled: boolean;
+  query: string;
+  filter: WorkspaceSitemapFilter;
+  children: string;
+}) {
+  const href = buildUnpinnedHref({
+    page,
+    query,
+    filter,
+  });
+
+  if (disabled) {
+    return (
+      <span className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-alt)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-muted)] opacity-60">
+        {children}
+      </span>
+    );
+  }
+
+  return (
+    <Link
+      href={href}
+      className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)]"
+    >
+      {children}
+    </Link>
+  );
+}
+
 function formatLabel(value: string) {
   return value
     .split("_")
@@ -726,4 +859,33 @@ function QueueLoadChip({
       {label}
     </span>
   );
+}
+
+function firstSearchParam(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] ?? "" : value ?? "";
+}
+
+function normalizePositiveInt(value: string, fallback: number) {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function buildUnpinnedHref(input: {
+  page: number;
+  query: string;
+  filter: WorkspaceSitemapFilter;
+}) {
+  const params = new URLSearchParams();
+  if (input.query.trim()) {
+    params.set("unpinnedQuery", input.query.trim());
+  }
+  if (input.filter !== "all") {
+    params.set("unpinnedFilter", input.filter);
+  }
+  if (input.page > 1) {
+    params.set("unpinnedPage", String(input.page));
+  }
+
+  const queryString = params.toString();
+  return queryString ? `/dashboard?${queryString}` : "/dashboard";
 }
