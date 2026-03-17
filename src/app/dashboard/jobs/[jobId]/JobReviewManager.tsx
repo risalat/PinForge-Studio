@@ -225,6 +225,27 @@ export function JobReviewManager({
       ? generatedPins[previewPinIndex]
       : null;
 
+  function getButtonClass(options: {
+    tone: "accent" | "danger" | "neutral";
+    busy?: boolean;
+  }) {
+    const base =
+      "rounded-full px-4 py-2 text-sm font-semibold transition duration-150 disabled:opacity-60";
+    const busyState = options.busy
+      ? " cursor-wait scale-[0.99] saturate-[0.92] shadow-none ring-2"
+      : "";
+
+    if (options.tone === "accent") {
+      return `${base} dashboard-accent-action bg-[var(--dashboard-accent)] text-white shadow-[var(--dashboard-shadow-accent)] ${options.busy ? "ring-white/30 brightness-95" : ""}${busyState}`;
+    }
+
+    if (options.tone === "danger") {
+      return `${base} border border-[var(--dashboard-danger-border)] bg-[var(--dashboard-danger-soft)] text-[var(--dashboard-danger-ink)] ${options.busy ? "ring-[var(--dashboard-danger-border)]/40 brightness-95" : ""}${busyState}`;
+    }
+
+    return `${base} border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] text-[var(--dashboard-subtle)] ${options.busy ? "ring-[var(--dashboard-accent)]/18 brightness-95" : ""}${busyState}`;
+  }
+
   function markPinAssetMissing(pinId: string) {
     setMissingAssetPinIds((current) =>
       current.includes(pinId) ? current : [...current, pinId],
@@ -767,7 +788,11 @@ export function JobReviewManager({
             type="button"
             onClick={() => handleSaveReview("review")}
             disabled={Boolean(activeAction) || isRenderingPlans}
-            className="rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
+            aria-busy={activeAction?.kind === "save_review" && activeAction.source === "review"}
+            className={getButtonClass({
+              tone: "accent",
+              busy: activeAction?.kind === "save_review" && activeAction.source === "review",
+            })}
           >
             <BusyActionLabel
               busy={activeAction?.kind === "save_review" && activeAction.source === "review"}
@@ -852,7 +877,11 @@ export function JobReviewManager({
             type="button"
             onClick={() => handleSaveReview("images")}
             disabled={Boolean(activeAction) || isRenderingPlans}
-            className="rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
+            aria-busy={activeAction?.kind === "save_review" && activeAction.source === "images"}
+            className={getButtonClass({
+              tone: "accent",
+              busy: activeAction?.kind === "save_review" && activeAction.source === "images",
+            })}
           >
             <BusyActionLabel
               busy={activeAction?.kind === "save_review" && activeAction.source === "images"}
@@ -959,7 +988,11 @@ export function JobReviewManager({
                   selectedTemplateIds.length === 0 ||
                   selectedImages.length === 0
                 }
-                className="rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
+                aria-busy={activeAction?.kind === "assisted"}
+                className={getButtonClass({
+                  tone: "accent",
+                  busy: activeAction?.kind === "assisted",
+                })}
               >
                 <BusyActionLabel
                   busy={activeAction?.kind === "assisted"}
@@ -1092,7 +1125,11 @@ export function JobReviewManager({
                 type="button"
                 onClick={handleManualPlan}
                 disabled={Boolean(activeAction) || isRenderingPlans || !manualTemplate}
-                className="rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
+                aria-busy={activeAction?.kind === "manual"}
+                className={getButtonClass({
+                  tone: "accent",
+                  busy: activeAction?.kind === "manual",
+                })}
               >
                 <BusyActionLabel
                   busy={activeAction?.kind === "manual"}
@@ -1196,7 +1233,11 @@ export function JobReviewManager({
               type="button"
               onClick={() => handleDiscardPlans()}
               disabled={Boolean(activeAction) || isRenderingPlans || selectedActionPlans.length === 0}
-              className="rounded-full border border-[var(--dashboard-danger-border)] bg-[var(--dashboard-danger-soft)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-danger-ink)] disabled:opacity-50"
+              aria-busy={activeAction?.kind === "discard_plans" && activeAction.scope === "selected"}
+              className={getButtonClass({
+                tone: "danger",
+                busy: activeAction?.kind === "discard_plans" && activeAction.scope === "selected",
+              })}
             >
               <BusyActionLabel
                 busy={activeAction?.kind === "discard_plans" && activeAction.scope === "selected"}
@@ -1208,7 +1249,11 @@ export function JobReviewManager({
               type="button"
               onClick={() => handleDiscardGeneratedPins()}
               disabled={Boolean(activeAction) || isRenderingPlans || generatedPins.length === 0}
-              className="rounded-full border border-[var(--dashboard-danger-border)] bg-[var(--dashboard-danger-soft)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-danger-ink)] disabled:opacity-50"
+              aria-busy={activeAction?.kind === "discard_pins" && activeAction.scope === "all"}
+              className={getButtonClass({
+                tone: "danger",
+                busy: activeAction?.kind === "discard_pins" && activeAction.scope === "all",
+              })}
             >
               <BusyActionLabel
                 busy={activeAction?.kind === "discard_pins" && activeAction.scope === "all"}
@@ -1226,7 +1271,11 @@ export function JobReviewManager({
                 aiCredentials.length === 0 ||
                 !selectedAiCredential?.canUseApiKey
               }
-              className="rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
+              aria-busy={isRenderingPlans}
+              className={getButtonClass({
+                tone: "accent",
+                busy: isRenderingPlans,
+              })}
             >
               <BusyActionLabel
                 busy={isRenderingPlans}
@@ -1392,7 +1441,11 @@ export function JobReviewManager({
                           aiCredentials.length === 0 ||
                           !selectedAiCredential?.canUseApiKey
                         }
-                        className="rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                        aria-busy={isRenderingPlans}
+                        className={getButtonClass({
+                          tone: "accent",
+                          busy: isRenderingPlans,
+                        })}
                       >
                         <BusyActionLabel
                           busy={isRenderingPlans}
@@ -1405,7 +1458,11 @@ export function JobReviewManager({
                         type="button"
                         onClick={() => handleDiscardPlans([selectedPlan.id])}
                         disabled={Boolean(activeAction) || isRenderingPlans}
-                        className="rounded-full border border-[var(--dashboard-danger-border)] bg-[var(--dashboard-danger-soft)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-danger-ink)] disabled:opacity-60"
+                        aria-busy={activeAction?.kind === "discard_plans" && activeAction.scope === "single"}
+                        className={getButtonClass({
+                          tone: "danger",
+                          busy: activeAction?.kind === "discard_plans" && activeAction.scope === "single",
+                        })}
                       >
                         <BusyActionLabel
                           busy={activeAction?.kind === "discard_plans" && activeAction.scope === "single"}
@@ -1423,7 +1480,11 @@ export function JobReviewManager({
                         type="button"
                         onClick={() => handleSavePlanSettings(selectedPlan.id)}
                         disabled={Boolean(activeAction) || isRenderingPlans}
-                        className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] disabled:opacity-60"
+                        aria-busy={activeAction?.kind === "save_overrides" && activeAction.planId === selectedPlan.id}
+                        className={getButtonClass({
+                          tone: "neutral",
+                          busy: activeAction?.kind === "save_overrides" && activeAction.planId === selectedPlan.id,
+                        })}
                       >
                         <BusyActionLabel
                           busy={activeAction?.kind === "save_overrides" && activeAction.planId === selectedPlan.id}
