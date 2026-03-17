@@ -13,6 +13,7 @@ import {
 import { templateVisualPresetCategories } from "@/lib/templates/types";
 
 export const runtime = "nodejs";
+export const maxDuration = 300;
 
 const plansSchema = z.discriminatedUnion("mode", [
   z.object({

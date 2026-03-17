@@ -41,7 +41,7 @@ export function TemplateHeroTwoSplitText({
   const imageSet = normalizeImages(images, 3);
   const cleanedDomain = domain.replace(/^https?:\/\//, "").replace(/^www\./, "");
   const displayNumber = typeof itemNumber === "number" && itemNumber > 0 ? itemNumber : 15;
-  const compactTitle = compactHeroTwoSplitTitle(title);
+  const compactTitle = compactHeroTwoSplitTextTitle(title);
   const titleLines = splitTitleIntoThreeLines(toTitleCase(compactTitle));
 
   const divider = 14;
@@ -247,10 +247,6 @@ function splitTitleIntoThreeLines(title: string) {
   }
 
   return bestSplit;
-}
-
-function compactHeroTwoSplitTitle(title: string) {
-  return compactHeroTwoSplitTextTitle(title);
 }
 
 function toTitleCase(value: string) {
