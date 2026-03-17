@@ -12,6 +12,7 @@ export type WorkspaceProfileInput = {
   workspaceId: string;
   workspaceName: string;
   allowedDomains: string[];
+  sitemapUrls?: string[];
   dailyPublishTarget?: number | null;
   defaultAccountId?: string;
   defaultBoardId?: string;
@@ -297,6 +298,7 @@ export async function saveIntegrationSettings(
             workspaceId: profile.workspaceId,
             workspaceName: profile.workspaceName,
             allowedDomains: profile.allowedDomains,
+            sitemapUrls: profile.sitemapUrls,
             dailyPublishTarget: profile.dailyPublishTarget ?? null,
             defaultAccountId: profile.defaultAccountId || null,
             defaultBoardId: profile.defaultBoardId || null,
@@ -351,6 +353,7 @@ export async function listWorkspaceProfilesForUserId(userId: string): Promise<Wo
     workspaceId: profile.workspaceId,
     workspaceName: profile.workspaceName,
     allowedDomains: profile.allowedDomains,
+    sitemapUrls: profile.sitemapUrls,
     dailyPublishTarget: profile.dailyPublishTarget ?? null,
     defaultAccountId: profile.defaultAccountId ?? "",
     defaultBoardId: profile.defaultBoardId ?? "",
@@ -657,6 +660,7 @@ function normalizeWorkspaceProfiles(input: WorkspaceProfileInput[]): WorkspacePr
       workspaceId: profile.workspaceId.trim(),
       workspaceName: profile.workspaceName.trim() || profile.workspaceId.trim(),
       allowedDomains: normalizeAllowedDomains(profile.allowedDomains),
+      sitemapUrls: normalizeSitemapUrls(profile.sitemapUrls ?? []),
       dailyPublishTarget:
         typeof profile.dailyPublishTarget === "number" &&
         Number.isFinite(profile.dailyPublishTarget) &&
@@ -684,6 +688,16 @@ function normalizeWorkspaceProfiles(input: WorkspaceProfileInput[]): WorkspacePr
   }
 
   return profiles;
+}
+
+function normalizeSitemapUrls(input: string[]) {
+  return Array.from(
+    new Set(
+      input
+        .map((value) => value.trim())
+        .filter((value) => /^https?:\/\//i.test(value)),
+    ),
+  );
 }
 
 function pickDefaultWorkspaceProfile<T extends { isDefault: boolean }>(profiles: T[]) {

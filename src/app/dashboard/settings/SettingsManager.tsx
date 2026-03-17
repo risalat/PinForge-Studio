@@ -26,6 +26,7 @@ type WorkspaceProfileDraft = {
   workspaceId: string;
   workspaceName: string;
   allowedDomainsInput: string;
+  sitemapUrlsInput: string;
   dailyPublishTargetInput: string;
   isDefault: boolean;
   defaultAccountId: string;
@@ -97,6 +98,7 @@ export function SettingsManager({
           workspaceId: firstAvailableWorkspace?.id ?? "",
           workspaceName: firstAvailableWorkspace?.name ?? "",
           allowedDomainsInput: "",
+          sitemapUrlsInput: "",
           dailyPublishTargetInput: "",
           isDefault: current.length === 0,
           defaultAccountId: "",
@@ -457,6 +459,7 @@ export function SettingsManager({
             workspaceId: profile.workspaceId,
             workspaceName: resolveWorkspaceName(profile.workspaceId, publerWorkspaces, profile.workspaceName),
             allowedDomains: parseAllowedDomains(profile.allowedDomainsInput),
+            sitemapUrls: parseSitemapUrls(profile.sitemapUrlsInput),
             dailyPublishTarget: parseDailyPublishTarget(profile.dailyPublishTargetInput),
             defaultAccountId: profile.defaultAccountId,
             defaultBoardId: profile.defaultBoardId,
@@ -615,22 +618,23 @@ export function SettingsManager({
 
           <div className="mt-5 overflow-hidden rounded-[22px] border border-[var(--dashboard-line)]">
             <div className="overflow-x-auto">
-              <table className="min-w-[1180px] w-full table-fixed">
+              <table className="min-w-[1420px] w-full table-fixed">
                 <thead className="bg-[var(--dashboard-panel-alt)]">
                   <tr className="text-left">
-                    <SettingsHead className="w-[19%]">Workspace</SettingsHead>
-                    <SettingsHead className="w-[20%]">Domains</SettingsHead>
-                    <SettingsHead className="w-[14%]">Daily target</SettingsHead>
-                    <SettingsHead className="w-[18%]">Account</SettingsHead>
-                    <SettingsHead className="w-[18%]">Board</SettingsHead>
-                    <SettingsHead className="w-[11%]">Actions</SettingsHead>
+                    <SettingsHead className="w-[16%]">Workspace</SettingsHead>
+                    <SettingsHead className="w-[16%]">Domains</SettingsHead>
+                    <SettingsHead className="w-[22%]">Sitemaps</SettingsHead>
+                    <SettingsHead className="w-[10%]">Daily target</SettingsHead>
+                    <SettingsHead className="w-[14%]">Account</SettingsHead>
+                    <SettingsHead className="w-[14%]">Board</SettingsHead>
+                    <SettingsHead className="w-[8%]">Actions</SettingsHead>
                   </tr>
                 </thead>
                 <tbody>
                   {workspaceProfiles.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={6}
+                        colSpan={7}
                         className="px-5 py-5 text-sm text-[var(--dashboard-subtle)]"
                       >
                         No workspace profiles yet.
@@ -679,6 +683,17 @@ export function SettingsManager({
                               }
                               placeholder="mightypaint.com, anotherdomain.com"
                               className="w-full rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 outline-none"
+                            />
+                          </td>
+                          <td className="px-5 py-4 align-top">
+                            <textarea
+                              rows={3}
+                              value={profile.sitemapUrlsInput}
+                              onChange={(event) =>
+                                updateWorkspaceProfile(index, "sitemapUrlsInput", event.target.value)
+                              }
+                              placeholder={"https://mightypaint.com/post-sitemap.xml\nhttps://mightypaint.com/post-sitemap2.xml"}
+                              className="w-full resize-y rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 outline-none"
                             />
                           </td>
                           <td className="px-5 py-4 align-top">
@@ -1000,6 +1015,13 @@ function parseAllowedDomains(input: string) {
     .filter((value) => value !== "");
 }
 
+function parseSitemapUrls(input: string) {
+  return input
+    .split(/[\r\n,]+/)
+    .map((value) => value.trim())
+    .filter((value) => value !== "");
+}
+
 function parseDailyPublishTarget(input: string) {
   const trimmed = input.trim();
   if (!trimmed) {
@@ -1019,6 +1041,7 @@ function toWorkspaceProfileDraft(profile: WorkspaceProfileSummary): WorkspacePro
     workspaceId: profile.workspaceId,
     workspaceName: profile.workspaceName,
     allowedDomainsInput: profile.allowedDomains.join(", "),
+    sitemapUrlsInput: profile.sitemapUrls.join("\n"),
     dailyPublishTargetInput:
       typeof profile.dailyPublishTarget === "number" ? String(profile.dailyPublishTarget) : "",
     isDefault: profile.isDefault,

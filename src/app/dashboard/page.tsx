@@ -9,6 +9,7 @@ import {
   listPostPulseRecordsForUser,
   type PostPulseRecord,
 } from "@/lib/dashboard/postPulse";
+import { listWorkspaceUntrackedSitemapArticles } from "@/lib/dashboard/workspaceSitemaps";
 import { getDashboardWorkspaceScope } from "@/lib/dashboard/workspaceScope";
 import { isDatabaseConfigured } from "@/lib/env";
 import { listJobsForUser } from "@/lib/jobs/generatePins";
@@ -30,6 +31,14 @@ async function getDashboardData() {
       queueCapacity: null,
       todaysFreshTargets: [],
       queuedFreshTargetCount: 0,
+      untrackedSitemapArticles: {
+        configured: false,
+        sitemapUrls: [],
+        totalArticles: 0,
+        totalUntracked: 0,
+        articles: [],
+        error: null,
+      },
       recentJobs: [],
       databaseReady: false,
     };
@@ -115,6 +124,22 @@ async function getDashboardData() {
         (normalizedRecordUrl !== "" && activeReviewUrlKeys.has(normalizedRecordUrl))
       );
     }).length;
+    const activeWorkspaceProfile =
+      settings.workspaceProfiles.find((profile) => profile.workspaceId === activeWorkspaceId) ??
+      settings.workspaceProfiles.find((profile) => profile.isDefault) ??
+      null;
+    const trackedUrlKeys = new Set(
+      [
+        ...postPulseRecords.map((record) => normalizeArticleUrl(record.url)),
+        ...filteredJobs.map((job) => normalizeArticleUrl(job.postUrlSnapshot)),
+      ].filter((value) => value !== ""),
+    );
+    const untrackedSitemapArticles = await listWorkspaceUntrackedSitemapArticles({
+      sitemapUrls: activeWorkspaceProfile?.sitemapUrls ?? [],
+      allowedDomains,
+      trackedUrls: Array.from(trackedUrlKeys),
+      limit: 12,
+    });
 
     return {
       postsProcessed,
@@ -124,6 +149,7 @@ async function getDashboardData() {
       queueCapacity,
       todaysFreshTargets,
       queuedFreshTargetCount,
+      untrackedSitemapArticles,
       recentJobs,
       databaseReady: true,
     };
@@ -136,6 +162,14 @@ async function getDashboardData() {
       queueCapacity: null,
       todaysFreshTargets: [],
       queuedFreshTargetCount: 0,
+      untrackedSitemapArticles: {
+        configured: false,
+        sitemapUrls: [],
+        totalArticles: 0,
+        totalUntracked: 0,
+        articles: [],
+        error: null,
+      },
       recentJobs: [],
       databaseReady: false,
     };
@@ -324,6 +358,83 @@ export default async function DashboardPage() {
             Queue capacity summary is unavailable right now.
           </p>
         )}
+      </section>
+
+      <section className="rounded-[36px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-6 shadow-[var(--dashboard-shadow-md)]">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.3em] text-[var(--dashboard-muted)]">
+              Sitemap opportunities
+            </p>
+            <h2 className="mt-2 text-3xl font-black tracking-[-0.04em] text-[var(--dashboard-text)]">
+              Articles never pinned yet
+            </h2>
+            <p className="mt-3 max-w-3xl text-sm leading-7 text-[var(--dashboard-subtle)]">
+              Fresh articles from your workspace sitemaps that are still outside both Pinterest activity and active Studio tracking.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <MetricInline label="Untracked" value={data.untrackedSitemapArticles.totalUntracked} />
+            <Link
+              href="/dashboard/integrations"
+              className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-5 py-3 text-sm font-semibold text-[var(--dashboard-subtle)]"
+            >
+              Manage sitemaps
+            </Link>
+          </div>
+        </div>
+
+        <div className="mt-6 overflow-hidden rounded-[24px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)]">
+          {!data.untrackedSitemapArticles.configured ? (
+            <div className="px-5 py-6 text-sm text-[var(--dashboard-subtle)]">
+              No sitemap URLs configured for the active workspace yet.
+            </div>
+          ) : data.untrackedSitemapArticles.error ? (
+            <div className="px-5 py-6 text-sm text-[var(--dashboard-danger-ink)]">
+              {data.untrackedSitemapArticles.error}
+            </div>
+          ) : data.untrackedSitemapArticles.articles.length === 0 ? (
+            <div className="px-5 py-6 text-sm text-[var(--dashboard-subtle)]">
+              No untracked sitemap articles found for this workspace.
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-[minmax(0,1.3fr)_140px_140px_170px] gap-4 bg-[var(--dashboard-panel-alt)] px-5 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
+                <span>Article</span>
+                <span>Domain</span>
+                <span>Lastmod</span>
+                <span className="text-right">Action</span>
+              </div>
+              <div className="divide-y divide-[var(--dashboard-line)]">
+                {data.untrackedSitemapArticles.articles.map((article) => (
+                  <div
+                    key={article.normalizedUrl}
+                    className="grid grid-cols-[minmax(0,1.3fr)_140px_140px_170px] items-center gap-4 px-5 py-4"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold text-[var(--dashboard-text)]">{article.titleGuess}</p>
+                      <p className="mt-1 truncate text-sm text-[var(--dashboard-subtle)]">{article.url}</p>
+                    </div>
+                    <p className="text-sm text-[var(--dashboard-subtle)]">{article.domain}</p>
+                    <p className="text-sm text-[var(--dashboard-subtle)]">
+                      {article.lastModifiedAt ? formatDate(article.lastModifiedAt) : "Unknown"}
+                    </p>
+                    <div className="flex justify-end">
+                      <Link
+                        href={article.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)]"
+                      >
+                        Open article
+                      </Link>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
       </section>
 
       <section className="rounded-[36px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-6 shadow-[var(--dashboard-shadow-md)]">
@@ -558,6 +669,17 @@ function MetricCard({ label, value }: { label: string; value: number }) {
         {label}
       </p>
       <p className="mt-4 text-5xl font-black text-[var(--dashboard-text)]">{value}</p>
+    </div>
+  );
+}
+
+function MetricInline({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-5 py-3">
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
+        {label}
+      </p>
+      <p className="mt-1 text-xl font-black text-[var(--dashboard-text)]">{value}</p>
     </div>
   );
 }

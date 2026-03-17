@@ -1,0 +1,2 @@
+ALTER TABLE "WorkspaceProfile"
+ADD COLUMN "sitemapUrls" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];

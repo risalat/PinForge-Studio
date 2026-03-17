@@ -75,6 +75,7 @@ export interface WorkspaceProfileSummary {
   workspaceId: string;
   workspaceName: string;
   allowedDomains: string[];
+  sitemapUrls: string[];
   dailyPublishTarget: number | null;
   defaultAccountId: string;
   defaultBoardId: string;
