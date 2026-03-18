@@ -8,6 +8,16 @@ export const templateVisualPresets = [
   "powder-blue-clay",
   "peach-cloud",
   "mint-macaroon",
+  "rosewater-satin",
+  "ballet-slipper",
+  "orchid-ink",
+  "peony-punch",
+  "cherry-cream",
+  "magenta-glow",
+  "peach-rose",
+  "petal-latte",
+  "raspberry-truffle",
+  "butter-blush",
   "midnight-gold",
   "terracotta-ink",
   "olive-linen",
@@ -24,10 +34,12 @@ export const templateVisualPresets = [
 
 export const templateVisualPresetCategories = [
   "editorial-soft",
+  "pastel-soft",
   "earthy-warm",
   "dark-drama",
   "graphic-pop",
   "fresh-vivid",
+  "feminine-bold",
 ] as const;
 
 export type TemplateVisualPresetId = (typeof templateVisualPresets)[number];

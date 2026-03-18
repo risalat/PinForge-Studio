@@ -58,6 +58,7 @@ import {
   getPresetIdsForTemplate,
   recommendSplitVerticalVisualPresetWithImageAwareness,
   splitVerticalBoldPresetIds,
+  splitVerticalFemininePresetIds,
 } from "@/lib/templates/visualPresets";
 import {
   templateVisualPresets,
@@ -70,7 +71,11 @@ import { normalizeArticleUrl, resolveDomain } from "@/lib/types";
 
 export type GeneratePinsInput = GenerateRequestPayload;
 
-type AssistedPresetStrategy = "recommended" | "random_all" | "random_bold";
+type AssistedPresetStrategy =
+  | "recommended"
+  | "random_all"
+  | "random_bold"
+  | "random_feminine";
 
 const intakeBlockingStatuses = [
   GenerationJobStatus.RECEIVED,
@@ -1980,7 +1985,11 @@ async function buildSeedPlanRenderContext(
 ) {
   let visualPreset: TemplateVisualPresetId;
 
-  if (presetStrategy === "random_all" || presetStrategy === "random_bold") {
+  if (
+    presetStrategy === "random_all" ||
+    presetStrategy === "random_bold" ||
+    presetStrategy === "random_feminine"
+  ) {
     visualPreset = options?.fallbackPreset ?? pickRandomPreset(options?.allowedPresetPool);
   } else {
     const recommendedPreset = await recommendSplitVerticalVisualPresetWithImageAwareness({
@@ -2015,9 +2024,23 @@ function getPresetPoolForAssistedPlans(
   const strategyPool =
     presetStrategy === "random_bold"
       ? categoryFilteredPool.filter((presetId) => splitVerticalBoldPresetIds.includes(presetId))
+      : presetStrategy === "random_feminine"
+        ? categoryFilteredPool.filter((presetId) => splitVerticalFemininePresetIds.includes(presetId))
       : categoryFilteredPool;
 
-  return strategyPool.length > 0 ? strategyPool : presetStrategy === "random_bold" ? splitVerticalBoldPresetIds : [...templateVisualPresets];
+  if (strategyPool.length > 0) {
+    return strategyPool;
+  }
+
+  if (presetStrategy === "random_bold") {
+    return splitVerticalBoldPresetIds;
+  }
+
+  if (presetStrategy === "random_feminine") {
+    return splitVerticalFemininePresetIds;
+  }
+
+  return [...templateVisualPresets];
 }
 
 function buildBalancedSequence<T>(values: readonly T[], count: number, seed: string) {

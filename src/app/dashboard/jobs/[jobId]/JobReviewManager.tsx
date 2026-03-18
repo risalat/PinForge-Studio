@@ -142,7 +142,7 @@ export function JobReviewManager({
   const [selectedPresetCategoryIds, setSelectedPresetCategoryIds] = useState<string[]>([]);
   const [allowAnyPresetOverride, setAllowAnyPresetOverride] = useState(false);
   const [assistedPresetStrategy, setAssistedPresetStrategy] = useState<
-    "recommended" | "random_all" | "random_bold"
+    "recommended" | "random_all" | "random_bold" | "random_feminine"
   >("recommended");
   const [manualTemplateId, setManualTemplateId] = useState(initialManualTemplate?.id ?? "");
   const [manualAssignedImageIds, setManualAssignedImageIds] = useState<string[]>(
@@ -404,6 +404,8 @@ export function JobReviewManager({
               : "Assisted plans created with image-aware preset recommendation."
             : assistedPresetStrategy === "random_bold"
               ? "Assisted plans created with random bold presets."
+              : assistedPresetStrategy === "random_feminine"
+                ? "Assisted plans created with feminine-forward presets."
               : "Assisted plans created with random presets.";
         setPlansFeedback({
           tone: "success",
@@ -1020,7 +1022,11 @@ export function JobReviewManager({
                   value={assistedPresetStrategy}
                   onChange={(event) =>
                     setAssistedPresetStrategy(
-                      event.target.value as "recommended" | "random_all" | "random_bold",
+                      event.target.value as
+                        | "recommended"
+                        | "random_all"
+                        | "random_bold"
+                        | "random_feminine",
                     )
                   }
                   className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-3 py-2"
@@ -1028,6 +1034,7 @@ export function JobReviewManager({
                   <option value="recommended">Recommended per pin</option>
                   <option value="random_all">Random from all presets</option>
                   <option value="random_bold">Random bold presets only</option>
+                  <option value="random_feminine">Random feminine presets</option>
                 </select>
               </label>
               <div>
