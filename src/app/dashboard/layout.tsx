@@ -1,6 +1,7 @@
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { AppFeedbackProvider } from "@/components/ui/AppFeedbackProvider";
 import { requireAuthenticatedDashboardUser } from "@/lib/auth/dashboardSession";
+import { listPinterestCalendarNotifications } from "@/lib/dashboard/pinterestCalendar";
 import { getDashboardWorkspaceScope } from "@/lib/dashboard/workspaceScope";
 import { isDatabaseConfigured } from "@/lib/env";
 import { getIntegrationSettingsSummary } from "@/lib/settings/integrationSettings";
@@ -14,6 +15,7 @@ export default async function DashboardLayout({
   await requireAuthenticatedDashboardUser();
   let activeWorkspaceId = "";
   let workspaceProfiles: WorkspaceProfileSummary[] = [];
+  let calendarNotifications = listPinterestCalendarNotifications();
 
   if (isDatabaseConfigured()) {
     try {
@@ -28,7 +30,11 @@ export default async function DashboardLayout({
 
   return (
     <AppFeedbackProvider>
-      <DashboardShell activeWorkspaceId={activeWorkspaceId} workspaceProfiles={workspaceProfiles}>
+      <DashboardShell
+        activeWorkspaceId={activeWorkspaceId}
+        workspaceProfiles={workspaceProfiles}
+        calendarNotifications={calendarNotifications}
+      >
         {children}
       </DashboardShell>
     </AppFeedbackProvider>

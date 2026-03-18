@@ -8,15 +8,18 @@ import { DashboardNavigationProgress } from "@/components/dashboard/DashboardNav
 import { DashboardNotificationCenter } from "@/components/dashboard/DashboardNotificationCenter";
 import { DashboardWorkspaceSwitcher } from "@/components/dashboard/DashboardWorkspaceSwitcher";
 import { dashboardNavigation, getDashboardPageTitle } from "@/lib/dashboard/navigation";
+import type { DashboardCalendarNotification } from "@/lib/dashboard/pinterestCalendar";
 import type { WorkspaceProfileSummary } from "@/lib/types";
 
 export function DashboardShell({
   activeWorkspaceId,
   workspaceProfiles,
+  calendarNotifications,
   children,
 }: {
   activeWorkspaceId: string;
   workspaceProfiles: WorkspaceProfileSummary[];
+  calendarNotifications: DashboardCalendarNotification[];
   children: ReactNode;
 }) {
   const pathname = usePathname();
@@ -122,7 +125,7 @@ export function DashboardShell({
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3">
-                  <DashboardNotificationCenter />
+                  <DashboardNotificationCenter calendarNotifications={calendarNotifications} />
                   {header.secondaryActionHref && header.secondaryActionLabel ? (
                   <Link
                     href={header.secondaryActionHref}
