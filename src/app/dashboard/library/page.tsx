@@ -170,6 +170,8 @@ function getTemplateDescription(templateId: string) {
       return "Four-image asymmetric grid with a centered hero number, full-width title band, and domain pill.";
     case "four-image-grid-title-footer":
       return "Clean four-image grid with a translucent center title band and a full-width footer domain bar.";
+    case "four-image-split-band-number":
+      return "Four-image split collage with a dark center band, centered hero number badge, and a locked two-line 1-word/2-word headline.";
     case "hero-text-triple-split-footer":
       return "Warm editorial layout with one hero image, a full-width text panel, and a lower triple-split strip capped by a footer domain bar.";
     case "six-image-triple-split-slant-hero-footer":
@@ -205,6 +207,8 @@ function getTemplateUsage(templateId: string) {
       return "Best for roundup pins that need a strong listicle badge, big title band, and simple four-image structure.";
     case "four-image-grid-title-footer":
       return "Best for clean inspiration roundups where the title should sit across the middle without a separate number badge.";
+    case "four-image-split-band-number":
+      return "Best for short, punchy three-word listicle titles where the first word needs to dominate the center strip.";
     case "hero-text-triple-split-footer":
       return "Best for seasonal decor or roundup pins where one strong hero photo should lead before supporting detail shots.";
     case "six-image-triple-split-slant-hero-footer":

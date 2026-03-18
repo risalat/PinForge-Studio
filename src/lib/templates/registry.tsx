@@ -7,6 +7,7 @@ import { TemplateSingleImageTitleFooter } from "@/templates/TemplateSingleImageT
 import { TemplateFourImageMasonryHeroNumberDomainPill } from "@/templates/TemplateFourImageMasonryHeroNumberDomainPill";
 import { TemplateFourImageGridNumberTitleDomain } from "@/templates/TemplateFourImageGridNumberTitleDomain";
 import { TemplateFourImageGridTitleFooter } from "@/templates/TemplateFourImageGridTitleFooter";
+import { TemplateFourImageSplitBandNumber } from "@/templates/TemplateFourImageSplitBandNumber";
 import { TemplateHeroTextTripleSplitFooter } from "@/templates/TemplateHeroTextTripleSplitFooter";
 import { TemplateSixImageTripleSplitSlantHeroFooter } from "@/templates/TemplateSixImageTripleSplitSlantHeroFooter";
 import { TemplateNineImageGridOverlayNumberFooter } from "@/templates/TemplateNineImageGridOverlayNumberFooter";
@@ -17,6 +18,7 @@ import {
   sampleTemplateDataFourImageMasonryHeroNumberDomainPill,
   sampleTemplateDataFourImageGridNumberTitleDomain,
   sampleTemplateDataFourImageGridTitleFooter,
+  sampleTemplateDataFourImageSplitBandNumber,
   sampleTemplateDataHeroTwoSplitText,
   sampleTemplateDataHeroTextTripleSplitFooter,
   sampleTemplateDataMasonryGridNumberTitleFooter,
@@ -167,6 +169,21 @@ export const TEMPLATE_CONFIGS: Record<string, TemplateConfig> = {
       footer: true,
     },
   },
+  "four-image-split-band-number": {
+    id: "four-image-split-band-number",
+    name: "Four Image Split Band Number",
+    componentKey: "TemplateFourImageSplitBandNumber",
+    previewPath: "/preview/four-image-split-band-number",
+    locked: true,
+    canvas: { width: 1080, height: 1920 },
+    imageSlotCount: 4,
+    textFields: ["title", "itemNumber", "visualPreset"],
+    features: {
+      overlay: true,
+      numberTreatment: "hero",
+      footer: false,
+    },
+  },
   "hero-text-triple-split-footer": {
     id: "hero-text-triple-split-footer",
     name: "Hero Text Triple Split Footer",
@@ -257,6 +274,7 @@ const TEMPLATE_COMPONENTS: Record<
   "four-image-masonry-hero-number-domain-pill": TemplateFourImageMasonryHeroNumberDomainPill,
   "four-image-grid-number-title-domain": TemplateFourImageGridNumberTitleDomain,
   "four-image-grid-title-footer": TemplateFourImageGridTitleFooter,
+  "four-image-split-band-number": TemplateFourImageSplitBandNumber,
   "hero-text-triple-split-footer": TemplateHeroTextTripleSplitFooter,
   "six-image-triple-split-slant-hero-footer": TemplateSixImageTripleSplitSlantHeroFooter,
   "nine-image-grid-overlay-number-footer": TemplateNineImageGridOverlayNumberFooter,
@@ -313,6 +331,10 @@ export function getSampleTemplateProps(templateId: string) {
 
   if (templateId === "four-image-grid-title-footer") {
     return sampleTemplateDataFourImageGridTitleFooter;
+  }
+
+  if (templateId === "four-image-split-band-number") {
+    return sampleTemplateDataFourImageSplitBandNumber;
   }
 
   if (templateId === "hero-text-triple-split-footer") {
