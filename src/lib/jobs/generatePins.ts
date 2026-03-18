@@ -2283,6 +2283,7 @@ function buildRenderCopyRequest(
       recentTitles: pin.recentTitles,
     });
     const artworkRule = getArtworkTitleRule(pin.templateId);
+    const artworkGoal = getArtworkGoal(pin.templateId, pin.templateSupportsSubtitle);
     return {
       ...titleRequest,
       locked_title: pin.lockedTitle?.trim() || undefined,
@@ -2293,9 +2294,7 @@ function buildRenderCopyRequest(
       template_name: pin.templateName,
       template_supports_subtitle: pin.templateSupportsSubtitle,
       template_number_treatment: pin.numberTreatment,
-      artwork_goal: pin.templateSupportsSubtitle
-        ? "Create a clean Pinterest title + subtitle pairing for the artwork. Prioritize short, punchy readability over SEO."
-        : "Create one clean Pinterest artwork headline that reads well without a subtitle. Prioritize short, punchy readability over SEO.",
+      artwork_goal: artworkGoal,
       artwork_title_single_line: artworkRule.singleLine,
       artwork_title_max_chars: artworkRule.maxChars,
       artwork_title_max_words: artworkRule.maxWords,
@@ -2562,6 +2561,8 @@ function getArtworkTitleRule(templateId: string) {
       return { maxWords: 4, maxChars: 28, maxLines: 1, singleLine: true };
     case "hero-two-split-text":
       return { maxWords: 5, maxChars: 36, maxLines: 3, singleLine: false };
+    case "four-image-grid-center-band-title-domain":
+      return { maxWords: 5, maxChars: 34, maxLines: 3, singleLine: false };
     case "masonry-grid-number-title-footer":
       return { maxWords: 5, maxChars: 34, maxLines: 2, singleLine: false };
     case "six-image-triple-split-slant-hero-footer":
@@ -2581,6 +2582,16 @@ function getArtworkTitleRule(templateId: string) {
     default:
       return { maxWords: 6, maxChars: 44, maxLines: 2, singleLine: false };
   }
+}
+
+function getArtworkGoal(templateId: string, templateSupportsSubtitle: boolean) {
+  if (templateId === "four-image-grid-center-band-title-domain") {
+    return "Create a bold Pinterest artwork headline for a three-line center band. Use 4 to 5 strong words total, avoid filler clauses, and make each line feel visually substantial. Prefer one or two words per line, with a punchy magazine-cover feel rather than an article sentence.";
+  }
+
+  return templateSupportsSubtitle
+    ? "Create a clean Pinterest title + subtitle pairing for the artwork. Prioritize short, punchy readability over SEO."
+    : "Create one clean Pinterest artwork headline that reads well without a subtitle. Prioritize short, punchy readability over SEO.";
 }
 
 function enforceArtworkTitleRule(templateId: string, title: string) {

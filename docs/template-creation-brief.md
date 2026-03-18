@@ -38,6 +38,25 @@ Template id / slug:
 - Keep template typography fixed at the template level
   - Presets may change colors
   - Presets must not silently swap the template's font family
+- Define preset color-role mapping deliberately for every new template
+  - Do not just pipe `palette.title`, `palette.number`, or `palette.divider` directly into every field
+  - Decide how each preset role is used by this specific layout:
+    - panel / band background
+    - badge / circle / card background
+    - badge border
+    - number color
+    - primary title line
+    - secondary title line
+    - subtitle / kicker
+    - domain / footer text
+  - High-energy preset families and soft preset families usually need different color assignment rules in the same template
+  - If the template has a dark text strip, the accent line should usually use the brightest readable preset role, not a generic tint
+  - If the template has a light badge or card, the number should usually use a deeper accent role than the title text
+  - Always optimize for visual hierarchy first:
+    - title readability
+    - number emphasis
+    - clean contrast against the immediate background
+  - Prefer template-level, category-aware color selection when one generic formula produces muddy or washed results
 
 ### Tasks
 
@@ -48,6 +67,12 @@ Template id / slug:
    - subtitle block
    - footer/domain strip
    - badge/circle/overlay/card if present
+   - preset role mapping for this layout:
+     - which palette role drives the main band
+     - which palette role drives badge background
+     - which palette role drives number color
+     - which palette role drives title line 1 vs line 2
+     - which roles need category-aware overrides
 3. Implement the template in:
    - `src/templates/<TEMPLATE_COMPONENT_NAME>.tsx`
 4. If needed, update:
@@ -103,6 +128,11 @@ Template id / slug:
 - Tune title and subtitle together, not in isolation.
   - If the title grows, the subtitle often needs a separate max-size cap so the hierarchy stays intact.
   - If both use aggressive autofit ranges, the subtitle can visually compete with the title or vice versa.
+- Treat preset colors as a layout system, not just a palette lookup.
+  - Good templates usually need field-by-field preset decisions rather than simple one-to-one mapping.
+  - Badge background, number color, title accent color, and band background should be tested as separate roles.
+  - Soft palettes and bold palettes often need different assignment logic inside the same template.
+  - If a preset family repeatedly produces muddy titles or weak badges, fix the template's role mapping before blaming the preset itself.
 - Keep text roles explicit.
   - Title, subtitle, number, and footer/domain should each have deliberate font, spacing, and color decisions.
   - Do not rely on generic font classes when the visual hierarchy matters.

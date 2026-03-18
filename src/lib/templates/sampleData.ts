@@ -85,6 +85,19 @@ export const sampleTemplateDataFourImageGridTitleFooter: TemplateRenderProps = {
   visualPreset: "teal-flare",
 };
 
+export const sampleTemplateDataFourImageGridCenterBandTitleDomain: TemplateRenderProps = {
+  title: "Colorful Small Front Porch Ideas In Budget",
+  images: [
+    "/sample-images/1.jpg",
+    "/sample-images/2.jpg",
+    "/sample-images/3.jpg",
+    "/sample-images/4.jpg",
+  ],
+  domain: "mightypaint.com",
+  itemNumber: 30,
+  visualPreset: "berry-citrus",
+};
+
 export const sampleTemplateDataFourImageSplitBandNumber: TemplateRenderProps = {
   title: "Classy Bedroom Ideas",
   images: [
