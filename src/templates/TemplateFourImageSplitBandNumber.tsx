@@ -1,7 +1,10 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { AutoFitText } from "@/components/AutoFitText";
-import { getSplitVerticalVisualPreset } from "@/lib/templates/visualPresets";
+import {
+  getSplitVerticalVisualPreset,
+  getTemplateVisualPresetCategory,
+} from "@/lib/templates/visualPresets";
 import type { TemplateRenderProps } from "@/lib/templates/types";
 import type { CSSProperties } from "react";
 
@@ -9,7 +12,7 @@ const TEMPLATE_TYPOGRAPHY = {
   lineOne: {
     fontFamily: "var(--font-antonio), var(--font-league-spartan), sans-serif",
     fontWeight: 700,
-    letterSpacing: "-0.03em",
+    letterSpacing: "0.01em",
     lineHeight: 0.96,
     textTransform: "uppercase" as const,
   },
@@ -50,7 +53,9 @@ export function TemplateFourImageSplitBandNumber({
   visualPreset,
   colorPreset,
 }: TemplateRenderProps) {
-  const preset = getSplitVerticalVisualPreset(visualPreset ?? colorPreset);
+  const presetId = visualPreset ?? colorPreset;
+  const preset = getSplitVerticalVisualPreset(presetId);
+  const presetCategory = presetId ? getTemplateVisualPresetCategory(presetId) : "editorial-soft";
   const imageSet = normalizeImages(images);
   const displayNumber = typeof itemNumber === "number" && itemNumber > 0 ? itemNumber : 23;
   const [lineOne, lineTwo] = splitIntoOneAndTwoWords(compactTitleToThreeWords(title));
@@ -64,23 +69,14 @@ export function TemplateFourImageSplitBandNumber({
   const rightLeft = tileWidth + gutter;
   const bandBackground = "#050505";
   const badgeSize = 286;
-  const badgeTop = topRowHeight - 96;
+  const badgeTop = topRowHeight - 164;
   const badgeLeft = Math.round((1080 - badgeSize) / 2);
-  const badgeBackground = tintTowardsWhite(preset.palette.canvas, 0.16);
-  const badgeBorder = tintTowardsWhite(preset.palette.divider, 0.52);
-  const numberColor = ensureContrastColor(
-    badgeBackground,
-    deepenHex(preset.palette.number, 0.16),
-    ["#151112", deepenHex(preset.palette.title, 0.34), "#23160d"],
-    6.5,
-  );
-  const firstLineColor = "#fffaf7";
-  const secondLineColor = ensureContrastColor(
-    bandBackground,
-    tintTowardsWhite(preset.palette.divider, 0.58),
-    ["#9fe4db", "#b9fff6", "#ffe28a", "#ffffff"],
-    4.7,
-  );
+  const { badgeBackground, badgeBorder, numberColor, firstLineColor, secondLineColor } =
+    resolveSplitBandColors(
+      presetCategory,
+      preset.palette,
+      bandBackground,
+    );
 
   return (
     <div
@@ -177,6 +173,103 @@ export function TemplateFourImageSplitBandNumber({
       />
     </div>
   );
+}
+
+function resolveSplitBandColors(
+  category:
+    | "editorial-soft"
+    | "pastel-soft"
+    | "earthy-warm"
+    | "dark-drama"
+    | "graphic-pop"
+    | "fresh-vivid"
+    | "feminine-bold",
+  palette: {
+    canvas: string;
+    band: string;
+    footer: string;
+    divider: string;
+    title: string;
+    subtitle: string;
+    domain: string;
+    number: string;
+  },
+  bandBackground: string,
+) {
+  const baseBadgeBackground =
+    category === "dark-drama"
+      ? tintTowardsWhite(mixHex(palette.canvas, palette.divider, 0.22), 0.08)
+      : category === "graphic-pop" || category === "fresh-vivid" || category === "feminine-bold"
+        ? tintTowardsWhite(mixHex(palette.canvas, palette.divider, 0.36), 0.2)
+        : category === "earthy-warm"
+          ? tintTowardsWhite(mixHex(palette.canvas, palette.footer, 0.3), 0.16)
+          : tintTowardsWhite(mixHex(palette.canvas, palette.divider, 0.18), 0.18);
+
+  const badgeBorder = ensureContrastColor(
+    baseBadgeBackground,
+    tintTowardsWhite(palette.divider, 0.44),
+    [
+      tintTowardsWhite(palette.title, 0.58),
+      tintTowardsWhite(palette.number, 0.52),
+      "#f3e3cf",
+      "#d8c2a6",
+    ],
+    1.45,
+  );
+
+  const numberColor = ensureContrastColor(
+    baseBadgeBackground,
+    category === "graphic-pop" || category === "fresh-vivid" || category === "feminine-bold"
+      ? deepenHex(mixHex(palette.number, palette.domain, 0.42), 0.16)
+      : deepenHex(mixHex(palette.number, palette.title, 0.28), 0.2),
+    [
+      deepenHex(palette.domain, 0.26),
+      deepenHex(palette.title, 0.3),
+      "#151112",
+      "#23160d",
+    ],
+    6.4,
+  );
+
+  const firstLineColor = ensureContrastColor(
+    bandBackground,
+    "#fffaf7",
+    ["#ffffff", tintTowardsWhite(palette.canvas, 0.9), "#f8f4ef"],
+    9,
+  );
+
+  const secondLinePreferred =
+    category === "dark-drama"
+      ? tintTowardsWhite(palette.divider, 0.18)
+      : category === "earthy-warm"
+        ? mixHex(tintTowardsWhite(palette.divider, 0.28), palette.title, 0.18)
+        : category === "graphic-pop" || category === "fresh-vivid"
+          ? tintTowardsWhite(mixHex(palette.divider, palette.title, 0.18), 0.1)
+          : category === "feminine-bold"
+            ? tintTowardsWhite(mixHex(palette.divider, palette.title, 0.14), 0.14)
+            : tintTowardsWhite(mixHex(palette.divider, palette.title, 0.24), 0.2);
+
+  const secondLineColor = ensureContrastColor(
+    bandBackground,
+    secondLinePreferred,
+    [
+      tintTowardsWhite(palette.divider, 0.24),
+      tintTowardsWhite(palette.title, 0.42),
+      tintTowardsWhite(palette.number, 0.38),
+      "#ffe28a",
+      "#9fe4db",
+      "#ffffff",
+    ],
+    4.7,
+  );
+
+  return {
+    badgeBackground: baseBadgeBackground,
+    badgeBorder,
+    numberColor,
+    firstLineColor,
+    secondLineColor,
+  };
 }
 
 function ImageTile({
