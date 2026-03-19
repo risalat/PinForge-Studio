@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { SnoozeFreshTargetButton } from "@/app/dashboard/SnoozeFreshTargetButton";
 import type { WorkspaceSitemapFilter } from "@/lib/dashboard/workspaceSitemaps";
 import type { WorkflowJobListItem } from "@/lib/jobs/generatePins";
@@ -68,6 +71,7 @@ export function DashboardOverviewWorkspace({
   data: DashboardOverviewData;
   selectedTab: DashboardOverviewTab;
 }) {
+  const [activeTab, setActiveTab] = useState<DashboardOverviewTab>(selectedTab);
   const latestJob = data.recentJobs[0] ?? null;
   const intakeJobs = data.recentJobs.filter((job) =>
     ["RECEIVED", "REVIEWING", "READY_FOR_GENERATION"].includes(job.status),
@@ -102,6 +106,27 @@ export function DashboardOverviewWorkspace({
   const nextOpenLabel = data.queueCapacity?.nextAvailableDate
     ? formatQueueDate(data.queueCapacity.nextAvailableDate)
     : "Full window";
+
+  useEffect(() => {
+    setActiveTab(selectedTab);
+  }, [selectedTab]);
+
+  function handleTabChange(nextTab: DashboardOverviewTab) {
+    setActiveTab(nextTab);
+
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const href = buildOverviewHref({
+      tab: nextTab,
+      query: data.untrackedSitemapArticles.query,
+      filter: data.untrackedSitemapArticles.filter,
+      page: data.untrackedSitemapArticles.page,
+    });
+
+    window.history.replaceState(null, "", href);
+  }
 
   return (
     <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
@@ -150,42 +175,27 @@ export function DashboardOverviewWorkspace({
         <section className="rounded-[30px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-3 shadow-[var(--dashboard-shadow-sm)]">
           <div className="flex flex-wrap gap-2">
             <OverviewTabLink
-              href={buildOverviewHref({
-                tab: "priority",
-                query: data.untrackedSitemapArticles.query,
-                filter: data.untrackedSitemapArticles.filter,
-                page: data.untrackedSitemapArticles.page,
-              })}
-              active={selectedTab === "priority"}
+              active={activeTab === "priority"}
+              onSelect={() => handleTabChange("priority")}
             >
               Priority
             </OverviewTabLink>
             <OverviewTabLink
-              href={buildOverviewHref({
-                tab: "opportunities",
-                query: data.untrackedSitemapArticles.query,
-                filter: data.untrackedSitemapArticles.filter,
-                page: data.untrackedSitemapArticles.page,
-              })}
-              active={selectedTab === "opportunities"}
+              active={activeTab === "opportunities"}
+              onSelect={() => handleTabChange("opportunities")}
             >
               Opportunities
             </OverviewTabLink>
             <OverviewTabLink
-              href={buildOverviewHref({
-                tab: "queue",
-                query: data.untrackedSitemapArticles.query,
-                filter: data.untrackedSitemapArticles.filter,
-                page: data.untrackedSitemapArticles.page,
-              })}
-              active={selectedTab === "queue"}
+              active={activeTab === "queue"}
+              onSelect={() => handleTabChange("queue")}
             >
               Queue
             </OverviewTabLink>
           </div>
         </section>
 
-        {selectedTab === "priority" ? (
+        {activeTab === "priority" ? (
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_290px]">
             <section className="overflow-hidden rounded-[34px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] shadow-[var(--dashboard-shadow-md)]">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--dashboard-line)] px-5 py-4">
@@ -298,7 +308,7 @@ export function DashboardOverviewWorkspace({
           </div>
         ) : null}
 
-        {selectedTab === "opportunities" ? (
+        {activeTab === "opportunities" ? (
           <section className="overflow-hidden rounded-[34px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] shadow-[var(--dashboard-shadow-md)]">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--dashboard-line)] px-5 py-4">
               <div>
@@ -433,7 +443,7 @@ export function DashboardOverviewWorkspace({
           </section>
         ) : null}
 
-        {selectedTab === "queue" ? (
+        {activeTab === "queue" ? (
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
             <section className="overflow-hidden rounded-[34px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] shadow-[var(--dashboard-shadow-md)]">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--dashboard-line)] px-5 py-4">
@@ -641,25 +651,27 @@ function ActionCard({
 }
 
 function OverviewTabLink({
-  href,
   active,
+  onSelect,
   children,
 }: {
-  href: string;
   active: boolean;
+  onSelect: () => void;
   children: string;
 }) {
   return (
-    <Link
-      href={href}
+    <button
+      type="button"
+      onClick={onSelect}
       className={`rounded-full px-5 py-3 text-sm font-semibold transition ${
         active
           ? "dashboard-accent-action bg-[var(--dashboard-accent)] text-white shadow-[var(--dashboard-shadow-accent)]"
           : "border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] text-[var(--dashboard-subtle)]"
       }`}
+      aria-pressed={active}
     >
       {children}
-    </Link>
+    </button>
   );
 }
 
