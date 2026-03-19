@@ -8,6 +8,7 @@ import {
   Libre_Baskerville,
   Lora,
   Manrope,
+  Parisienne,
   Satisfy,
   Space_Grotesk,
 } from "next/font/google";
@@ -16,6 +17,11 @@ import "./globals.css";
 const literaturnaya = localFont({
   src: "./fonts/Literaturnaya-Regular.ttf",
   variable: "--font-literaturnaya",
+});
+
+const segoeScript = localFont({
+  src: "./fonts/Segoe Script.ttf",
+  variable: "--font-segoe-script",
 });
 
 const spaceGrotesk = Space_Grotesk({
@@ -66,6 +72,12 @@ const satisfy = Satisfy({
   weight: ["400"],
 });
 
+const parisienne = Parisienne({
+  variable: "--font-parisienne",
+  subsets: ["latin"],
+  weight: ["400"],
+});
+
 export const metadata: Metadata = {
   title: "PinForge Studio",
   description: "Pinterest pin rendering and scheduling scaffold for PinForge.",
@@ -79,7 +91,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${literaturnaya.variable} ${spaceGrotesk.variable} ${alata.variable} ${antonio.variable} ${cormorantGaramond.variable} ${libreBaskerville.variable} ${lora.variable} ${manrope.variable} ${leagueSpartan.variable} ${satisfy.variable} antialiased`}
+        className={`${literaturnaya.variable} ${segoeScript.variable} ${spaceGrotesk.variable} ${alata.variable} ${antonio.variable} ${cormorantGaramond.variable} ${libreBaskerville.variable} ${lora.variable} ${manrope.variable} ${leagueSpartan.variable} ${satisfy.variable} ${parisienne.variable} antialiased`}
       >
         {children}
       </body>

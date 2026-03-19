@@ -9,6 +9,7 @@ import { TemplateFourImageGridNumberTitleDomain } from "@/templates/TemplateFour
 import { TemplateFourImageGridTitleFooter } from "@/templates/TemplateFourImageGridTitleFooter";
 import { TemplateFourImageGridCenterBandTitleDomain } from "@/templates/TemplateFourImageGridCenterBandTitleDomain";
 import { TemplateFourImageSplitBandNumber } from "@/templates/TemplateFourImageSplitBandNumber";
+import { TemplateTwoImageSlantBandNumberDomain } from "@/templates/TemplateTwoImageSlantBandNumberDomain";
 import { TemplateHeroTextTripleSplitFooter } from "@/templates/TemplateHeroTextTripleSplitFooter";
 import { TemplateSixImageTripleSplitSlantHeroFooter } from "@/templates/TemplateSixImageTripleSplitSlantHeroFooter";
 import { TemplateNineImageGridOverlayNumberFooter } from "@/templates/TemplateNineImageGridOverlayNumberFooter";
@@ -21,6 +22,7 @@ import {
   sampleTemplateDataFourImageGridTitleFooter,
   sampleTemplateDataFourImageGridCenterBandTitleDomain,
   sampleTemplateDataFourImageSplitBandNumber,
+  sampleTemplateDataTwoImageSlantBandNumberDomain,
   sampleTemplateDataHeroTwoSplitText,
   sampleTemplateDataHeroTextTripleSplitFooter,
   sampleTemplateDataMasonryGridNumberTitleFooter,
@@ -201,6 +203,21 @@ export const TEMPLATE_CONFIGS: Record<string, TemplateConfig> = {
       footer: false,
     },
   },
+  "two-image-slant-band-number-domain": {
+    id: "two-image-slant-band-number-domain",
+    name: "Two Image Slant Band Number Domain",
+    componentKey: "TemplateTwoImageSlantBandNumberDomain",
+    previewPath: "/preview/two-image-slant-band-number-domain",
+    locked: true,
+    canvas: { width: 1080, height: 1920 },
+    imageSlotCount: 3,
+    textFields: ["title", "itemNumber", "domain", "visualPreset"],
+    features: {
+      overlay: true,
+      numberTreatment: "hero",
+      footer: true,
+    },
+  },
   "hero-text-triple-split-footer": {
     id: "hero-text-triple-split-footer",
     name: "Hero Text Triple Split Footer",
@@ -293,6 +310,7 @@ const TEMPLATE_COMPONENTS: Record<
   "four-image-grid-title-footer": TemplateFourImageGridTitleFooter,
   "four-image-grid-center-band-title-domain": TemplateFourImageGridCenterBandTitleDomain,
   "four-image-split-band-number": TemplateFourImageSplitBandNumber,
+  "two-image-slant-band-number-domain": TemplateTwoImageSlantBandNumberDomain,
   "hero-text-triple-split-footer": TemplateHeroTextTripleSplitFooter,
   "six-image-triple-split-slant-hero-footer": TemplateSixImageTripleSplitSlantHeroFooter,
   "nine-image-grid-overlay-number-footer": TemplateNineImageGridOverlayNumberFooter,
@@ -357,6 +375,10 @@ export function getSampleTemplateProps(templateId: string) {
 
   if (templateId === "four-image-split-band-number") {
     return sampleTemplateDataFourImageSplitBandNumber;
+  }
+
+  if (templateId === "two-image-slant-band-number-domain") {
+    return sampleTemplateDataTwoImageSlantBandNumberDomain;
   }
 
   if (templateId === "hero-text-triple-split-footer") {

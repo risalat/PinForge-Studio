@@ -44,8 +44,8 @@ export function TemplateFourImageMasonryHeroNumberDomainPill({
   const frameInset = 10;
   const dividerThickness = 8;
   const collageTop = 10;
-  const titleCardWidth = 864;
-  const titleCardHeight = 270;
+  const titleCardWidth = 980;
+  const titleCardHeight = 324;
   const titleCardTop = 760;
   const titleCardBackground = preset.palette.divider;
   const titleColor = pickBestContrastColor(titleCardBackground, [
@@ -67,9 +67,9 @@ export function TemplateFourImageMasonryHeroNumberDomainPill({
     preset.palette.band,
     "#6d3810",
   ]);
-  const domainPillWidth = 258;
-  const domainPillHeight = 36;
-  const domainPillTop = titleCardTop + titleCardHeight - 8;
+  const domainPillWidth = 388;
+  const domainPillHeight = 58;
+  const domainPillTop = titleCardTop + titleCardHeight - 12;
   const domainPillBackground = withAlpha(preset.palette.footer, 0.94);
   const domainTextColor = pickBestContrastColor(domainPillBackground, [
     preset.palette.domain,
@@ -185,11 +185,11 @@ export function TemplateFourImageMasonryHeroNumberDomainPill({
             backgroundColor: titleCardBackground,
           }}
         >
-          <div className="absolute inset-x-[22px] bottom-[28px] top-[72px] flex items-center justify-center">
+          <div className="absolute inset-x-[22px] bottom-[22px] top-[54px] flex items-center justify-center">
             <AutoFitTitle
               text={title}
-              minFontSize={48}
-              maxFontSize={74}
+              minFontSize={60}
+              maxFontSize={98}
               maxLines={2}
               lineHeight={TEMPLATE_TYPOGRAPHY.title.lineHeight}
               className="mx-auto w-full uppercase"
@@ -215,8 +215,8 @@ export function TemplateFourImageMasonryHeroNumberDomainPill({
           <AutoFitText
             as="p"
             text={cleanedDomain}
-            minFontSize={13}
-            maxFontSize={16}
+            minFontSize={20}
+            maxFontSize={24}
             maxLines={1}
             lineHeight={TEMPLATE_TYPOGRAPHY.domain.lineHeight}
             className="w-full text-center"

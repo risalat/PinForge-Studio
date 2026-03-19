@@ -174,6 +174,8 @@ function getTemplateDescription(templateId: string) {
       return "Four-image equal grid with a white center title box, colored rails, compact kicker line, and a clean footer domain row.";
     case "four-image-split-band-number":
       return "Four-image split collage with a dark center band, centered hero number badge, and a locked two-line 1-word/2-word headline.";
+    case "two-image-slant-band-number-domain":
+      return "Hero image plus lower split collage with a diagonal white title banner, separate number badge, script opener, and rounded domain pill.";
     case "hero-text-triple-split-footer":
       return "Warm editorial layout with one hero image, a full-width text panel, and a lower triple-split strip capped by a footer domain bar.";
     case "six-image-triple-split-slant-hero-footer":
@@ -213,6 +215,8 @@ function getTemplateUsage(templateId: string) {
       return "Best for bright roundup pins where the center title box itself needs to feel like the main design element.";
     case "four-image-split-band-number":
       return "Best for short, punchy three-word listicle titles where the first word needs to dominate the center strip.";
+    case "two-image-slant-band-number-domain":
+      return "Best for decorative listicle pins where a soft script opener, bold lower title, and split lower image pair create stronger visual movement.";
     case "hero-text-triple-split-footer":
       return "Best for seasonal decor or roundup pins where one strong hero photo should lead before supporting detail shots.";
     case "six-image-triple-split-slant-hero-footer":

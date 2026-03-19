@@ -111,6 +111,18 @@ export const sampleTemplateDataFourImageSplitBandNumber: TemplateRenderProps = {
   visualPreset: "powder-blue-clay",
 };
 
+export const sampleTemplateDataTwoImageSlantBandNumberDomain: TemplateRenderProps = {
+  title: "Charming Farmhouse Entryway Inspiration",
+  images: [
+    "/sample-images/1.jpg",
+    "/sample-images/2.jpg",
+    "/sample-images/3.jpg",
+  ],
+  domain: "mightypaint.com",
+  itemNumber: 95,
+  visualPreset: "olive-linen",
+};
+
 export const sampleTemplateDataHeroTextTripleSplitFooter: TemplateRenderProps = {
   title: "20 Last-Minute Fall Living Room Decor Ideas",
   subtitle: "Quick & Easy Fall Living Room Decor",

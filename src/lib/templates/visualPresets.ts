@@ -2112,6 +2112,7 @@ const TEMPLATE_PRESET_CATEGORY_ALLOWLIST: Record<string, TemplateVisualPresetCat
   "four-image-masonry-hero-number-domain-pill": ["editorial-soft", "pastel-soft", "earthy-warm", "dark-drama", "feminine-bold"],
   "four-image-grid-number-title-domain": ["editorial-soft", "pastel-soft", "earthy-warm", "dark-drama", "feminine-bold"],
   "four-image-grid-title-footer": ["editorial-soft", "pastel-soft", "earthy-warm", "dark-drama", "feminine-bold"],
+  "two-image-slant-band-number-domain": ["editorial-soft", "pastel-soft", "earthy-warm", "dark-drama", "graphic-pop", "feminine-bold"],
   "hero-text-triple-split-footer": ["editorial-soft", "pastel-soft", "earthy-warm", "dark-drama", "feminine-bold"],
   "six-image-triple-split-slant-hero-footer": ["editorial-soft", "pastel-soft", "earthy-warm", "dark-drama", "feminine-bold"],
   "masonry-grid-number-title-footer": ["editorial-soft", "pastel-soft", "earthy-warm", "dark-drama", "feminine-bold"],

@@ -77,6 +77,49 @@ type AssistedPresetStrategy =
   | "random_bold"
   | "random_feminine";
 
+const HERO_NUMBER_WEAK_WORDS = new Set([
+  "a",
+  "an",
+  "and",
+  "for",
+  "of",
+  "the",
+  "to",
+  "with",
+  "your",
+  "my",
+  "our",
+  "elevate",
+  "upgrade",
+  "transform",
+  "refresh",
+  "stylish",
+  "beautiful",
+  "gorgeous",
+  "amazing",
+]);
+
+const HERO_NUMBER_ROUNDUP_WORDS = new Set([
+  "ideas",
+  "decor",
+  "colors",
+  "makeovers",
+  "makeover",
+  "looks",
+  "designs",
+  "inspiration",
+  "porch",
+  "entryway",
+  "bedroom",
+  "kitchen",
+  "bathroom",
+  "exterior",
+  "paint",
+  "palette",
+  "styles",
+  "wall",
+]);
+
 const intakeBlockingStatuses = [
   GenerationJobStatus.RECEIVED,
   GenerationJobStatus.REVIEWING,
@@ -2574,6 +2617,10 @@ function getArtworkTitleRule(templateId: string) {
       return { maxWords: 4, maxChars: 28, maxLines: 1, singleLine: true };
     case "hero-two-split-text":
       return { maxWords: 5, maxChars: 36, maxLines: 3, singleLine: false };
+    case "four-image-split-band-number":
+      return { maxWords: 3, maxChars: 24, maxLines: 2, singleLine: false };
+    case "two-image-slant-band-number-domain":
+      return { maxWords: 6, maxChars: 34, maxLines: 3, singleLine: false };
     case "four-image-grid-center-band-title-domain":
       return { maxWords: 5, maxChars: 34, maxLines: 3, singleLine: false };
     case "masonry-grid-number-title-footer":
@@ -2600,6 +2647,14 @@ function getArtworkTitleRule(templateId: string) {
 function getArtworkGoal(templateId: string, templateSupportsSubtitle: boolean) {
   if (templateId === "four-image-grid-center-band-title-domain") {
     return "Create a bold Pinterest artwork headline for a three-line center band. Use 4 to 5 strong words total, avoid filler clauses, and make each line feel visually substantial. Prefer one or two words per line, with a punchy magazine-cover feel rather than an article sentence.";
+  }
+
+  if (templateId === "two-image-slant-band-number-domain") {
+    return "Create a decorative Pinterest artwork headline for a diagonal banner with a separate number badge. Use 4 to 6 strong words total, keep it number-aware, and favor a soft two-word opener followed by two stronger title lines. Avoid filler clauses and make the wording visually scannable on-image rather than article-like.";
+  }
+
+  if (templateId === "four-image-split-band-number") {
+    return "Create a short Pinterest artwork headline for a hero-number listicle band. It must read like a count-based roundup, not a generic slogan. Use exactly 3 strong words total, with a punchy first word and a clear ideas-style finish.";
   }
 
   return templateSupportsSubtitle
@@ -2633,7 +2688,57 @@ function enforceArtworkTitleRule(templateId: string, title: string) {
     headline = compactHeroTwoSplitTextTitle(headline);
   }
 
+  if (templateId === "four-image-split-band-number") {
+    headline = ensureHeroNumberArtworkTitle(headline);
+  }
+
+  if (templateId === "two-image-slant-band-number-domain") {
+    headline = ensureHeroNumberArtworkTitle(headline);
+  }
+
   return headline;
+}
+
+function ensureHeroNumberArtworkTitle(title: string) {
+  const safeTitle = normalizeRenderText(title);
+  if (!safeTitle) {
+    return "Cozy Porch Ideas";
+  }
+
+  const words = safeTitle
+    .split(/\s+/)
+    .map((word) => word.trim())
+    .filter(Boolean);
+
+  const filtered = words.filter((word) => {
+    const normalized = word.toLowerCase().replace(/[^a-z0-9]/g, "");
+    return (
+      normalized !== "" &&
+      !/^\d+$/.test(normalized) &&
+      !HERO_NUMBER_WEAK_WORDS.has(normalized)
+    );
+  });
+
+  const pool = filtered.length > 0 ? filtered : words;
+  const normalizedPool = pool.map((word) => word.toLowerCase().replace(/[^a-z0-9]/g, ""));
+
+  const hasRoundupNoun = normalizedPool.some((word) => HERO_NUMBER_ROUNDUP_WORDS.has(word));
+  if (hasRoundupNoun) {
+    return toTitleCase(pool.slice(0, Math.min(6, pool.length)).join(" "));
+  }
+
+  const strongLead = pool[0] ?? "Cozy";
+  const strongMiddle = pool[1] ?? "Porch";
+  return toTitleCase([strongLead, strongMiddle, "Ideas"].join(" "));
+}
+
+function toTitleCase(value: string) {
+  return value
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
 }
 
 function cutArtworkAtWeakClause(title: string) {
