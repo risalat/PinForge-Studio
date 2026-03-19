@@ -53,6 +53,7 @@ const publishSchema = z.discriminatedUnion("action", [
         z.object({
           pinId: z.string().min(1),
           scheduledFor: z.string().min(1),
+          boardId: z.string().min(1).optional(),
         }),
       )
       .optional(),

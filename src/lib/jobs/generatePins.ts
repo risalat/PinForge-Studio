@@ -1514,6 +1514,7 @@ export async function scheduleJobPins(input: {
   schedulePlan?: Array<{
     pinId: string;
     scheduledFor: string;
+    boardId?: string;
   }>;
   workspaceId?: string;
   accountId?: string;
@@ -1589,6 +1590,7 @@ export async function scheduleJobPins(input: {
     jitterMinutes: input.jitterMinutes ?? 0,
   });
   const previewByPinId = new Map(fallbackPreviewItems.map((item) => [item.pinId, item]));
+  const overrideBoardByPinId = new Map<string, string>();
 
   for (const scheduledItem of input.schedulePlan ?? []) {
     const scheduledFor = new Date(scheduledItem.scheduledFor);
@@ -1602,6 +1604,10 @@ export async function scheduleJobPins(input: {
       scheduledFor,
       jitterOffsetMinutes: 0,
     });
+
+    if (scheduledItem.boardId?.trim()) {
+      overrideBoardByPinId.set(scheduledItem.pinId, scheduledItem.boardId.trim());
+    }
   }
 
   const scheduleRun = await prisma.scheduleRun.create({
@@ -1665,8 +1671,15 @@ export async function scheduleJobPins(input: {
     const mediaId = pin.publerMedia?.mediaId?.trim();
     const title = pin.pinCopy?.title?.trim();
     const description = pin.pinCopy?.description?.trim();
-    const assignedBoardId = assignedBoardByPinId.get(pin.id) ?? selectedBoardIds[0];
+    const assignedBoardId =
+      overrideBoardByPinId.get(pin.id) ??
+      assignedBoardByPinId.get(pin.id) ??
+      selectedBoardIds[0];
     const assetKey = getPinAssetKey(pin);
+
+    if (!selectedBoardIds.includes(assignedBoardId)) {
+      throw new Error("A scheduled board override must be one of the selected boards.");
+    }
 
     if (assetKey && scheduledAssetKeys.has(assetKey)) {
       result.skipped += 1;
@@ -2655,6 +2668,10 @@ function integrateItemNumberIntoRenderTitle(
 
   if (numberTreatment === "hero") {
     return cleanedTitle.replace(/^\d+\s+/, "").trim();
+  }
+
+  if (numberTreatment === "none") {
+    return cleanedTitle;
   }
 
   if (startsWithNumericCount(cleanedTitle)) {

@@ -181,6 +181,7 @@ export function JobPublishManager({
   const [selectedBoardIds, setSelectedBoardIds] = useState<string[]>(
     defaults.boardId ? [defaults.boardId] : [],
   );
+  const [boardOverrideByPinId, setBoardOverrideByPinId] = useState<Record<string, string>>({});
   const [boardDistributionMode, setBoardDistributionMode] =
     useState<BoardDistributionMode>("round_robin");
   const [primaryBoardId, setPrimaryBoardId] = useState(defaults.boardId);
@@ -482,10 +483,21 @@ export function JobPublishManager({
         primaryBoardPercent,
       }).map((assignment, index) => ({
         ...schedulePreview[index],
+        assignedBoardId: boardOverrideByPinId[assignment.pinId] || assignment.boardId,
         board:
-          selectedBoards.find((board) => board.id === assignment.boardId) ?? null,
+          selectedBoards.find(
+            (board) => board.id === (boardOverrideByPinId[assignment.pinId] || assignment.boardId),
+          ) ?? null,
       })),
-    [boardDistributionMode, primaryBoardId, primaryBoardPercent, schedulePreview, selectedBoardIds, selectedBoards],
+    [
+      boardDistributionMode,
+      boardOverrideByPinId,
+      primaryBoardId,
+      primaryBoardPercent,
+      schedulePreview,
+      selectedBoardIds,
+      selectedBoards,
+    ],
   );
 
   const publerRuntimeState = useMemo(
@@ -562,6 +574,21 @@ export function JobPublishManager({
       setPrimaryBoardId(selectedBoardIds[0]);
     }
   }, [primaryBoardId, selectedBoardIds]);
+
+  useEffect(() => {
+    setBoardOverrideByPinId((current) => {
+      const validPinIds = new Set(schedulePreview.map((item) => item.pinId));
+      const nextEntries = Object.entries(current).filter(
+        ([pinId, boardId]) => validPinIds.has(pinId) && selectedBoardIds.includes(boardId),
+      );
+
+      if (nextEntries.length === Object.keys(current).length) {
+        return current;
+      }
+
+      return Object.fromEntries(nextEntries);
+    });
+  }, [schedulePreview, selectedBoardIds]);
 
   useEffect(() => {
     if (uploadTracking?.active || activeAction) {
@@ -2381,6 +2408,8 @@ function formatDateLabel(value: string) {
                       schedulePlan: schedulePreview.map((item) => ({
                         pinId: item.pinId,
                         scheduledFor: item.scheduledFor.toISOString(),
+                        boardId:
+                          schedulePreviewRows.find((row) => row.pinId === item.pinId)?.assignedBoardId,
                       })),
                       workspaceId,
                       accountId,
@@ -2438,7 +2467,7 @@ function formatDateLabel(value: string) {
                   </span>
                 ))}
               </div>
-              <div className="grid grid-cols-[minmax(0,1fr)_180px_180px_120px] bg-[var(--dashboard-panel-alt)] px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
+              <div className="grid grid-cols-[minmax(0,1fr)_240px_180px_120px] bg-[var(--dashboard-panel-alt)] px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
                 <span>Pin</span>
                 <span>Board</span>
                 <span>Planned time</span>
@@ -2454,10 +2483,29 @@ function formatDateLabel(value: string) {
                   return (
                     <div
                       key={item.pinId}
-                      className="grid grid-cols-[minmax(0,1fr)_180px_180px_120px] items-center gap-4 border-t border-[var(--dashboard-line)] px-4 py-3 text-sm text-[var(--dashboard-subtle)]"
+                      className="grid grid-cols-[minmax(0,1fr)_240px_180px_120px] items-center gap-4 border-t border-[var(--dashboard-line)] px-4 py-3 text-sm text-[var(--dashboard-subtle)]"
                     >
                       <span className="truncate">{pin?.templateId ?? item.pinId}</span>
-                      <span className="truncate">{item.board?.name ?? "No board selected"}</span>
+                      {selectedBoards.length > 0 ? (
+                        <select
+                          value={item.assignedBoardId}
+                          onChange={(event) =>
+                            setBoardOverrideByPinId((current) => ({
+                              ...current,
+                              [item.pinId]: event.target.value,
+                            }))
+                          }
+                          className="w-full rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-2 text-sm text-[var(--dashboard-text)] outline-none"
+                        >
+                          {selectedBoards.map((board) => (
+                            <option key={board.id} value={board.id}>
+                              {board.name}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="truncate">{item.board?.name ?? "No board selected"}</span>
+                      )}
                       <span>{formatPreviewDate(item.scheduledFor)}</span>
                       <span>{item.jitterOffsetMinutes / (24 * 60)} day(s)</span>
                     </div>
