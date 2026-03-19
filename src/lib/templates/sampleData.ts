@@ -98,6 +98,20 @@ export const sampleTemplateDataFourImageGridCenterBandTitleDomain: TemplateRende
   visualPreset: "berry-citrus",
 };
 
+export const sampleTemplateDataFiveImageCenterBandNumberDomain: TemplateRenderProps = {
+  title: "Beautiful Bedroom Decor Ideas You'll Love",
+  images: [
+    "/sample-images/1.jpg",
+    "/sample-images/2.jpg",
+    "/sample-images/3.jpg",
+    "/sample-images/4.jpg",
+    "/sample-images/5..jpg",
+  ],
+  domain: "mightypaint.com",
+  itemNumber: 24,
+  visualPreset: "peony-punch",
+};
+
 export const sampleTemplateDataFourImageSplitBandNumber: TemplateRenderProps = {
   title: "Classy Bedroom Ideas",
   images: [

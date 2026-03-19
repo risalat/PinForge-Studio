@@ -172,6 +172,8 @@ function getTemplateDescription(templateId: string) {
       return "Clean four-image grid with a translucent center title band and a full-width footer domain bar.";
     case "four-image-grid-center-band-title-domain":
       return "Four-image equal grid with a white center title box, colored rails, compact kicker line, and a clean footer domain row.";
+    case "five-image-center-band-number-domain":
+      return "Two-over-three image collage with a warm center band, boxed hero number, stacked title lines, and a centered domain pill.";
     case "four-image-split-band-number":
       return "Four-image split collage with a dark center band, centered hero number badge, and a locked two-line 1-word/2-word headline.";
     case "two-image-slant-band-number-domain":
@@ -213,6 +215,8 @@ function getTemplateUsage(templateId: string) {
       return "Best for clean inspiration roundups where the title should sit across the middle without a separate number badge.";
     case "four-image-grid-center-band-title-domain":
       return "Best for bright roundup pins where the center title box itself needs to feel like the main design element.";
+    case "five-image-center-band-number-domain":
+      return "Best for decor or inspiration roundups that need a fuller five-image collage with the number and headline anchored in a calm center band.";
     case "four-image-split-band-number":
       return "Best for short, punchy three-word listicle titles where the first word needs to dominate the center strip.";
     case "two-image-slant-band-number-domain":

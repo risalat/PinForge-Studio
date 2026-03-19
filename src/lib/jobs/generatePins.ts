@@ -2621,6 +2621,8 @@ function getArtworkTitleRule(templateId: string) {
       return { maxWords: 3, maxChars: 24, maxLines: 2, singleLine: false };
     case "two-image-slant-band-number-domain":
       return { maxWords: 6, maxChars: 34, maxLines: 3, singleLine: false };
+    case "five-image-center-band-number-domain":
+      return { maxWords: 6, maxChars: 36, maxLines: 3, singleLine: false };
     case "four-image-grid-center-band-title-domain":
       return { maxWords: 5, maxChars: 34, maxLines: 3, singleLine: false };
     case "masonry-grid-number-title-footer":
@@ -2647,6 +2649,10 @@ function getArtworkTitleRule(templateId: string) {
 function getArtworkGoal(templateId: string, templateSupportsSubtitle: boolean) {
   if (templateId === "four-image-grid-center-band-title-domain") {
     return "Create a bold Pinterest artwork headline for a three-line center band. Use 4 to 5 strong words total, avoid filler clauses, and make each line feel visually substantial. Prefer one or two words per line, with a punchy magazine-cover feel rather than an article sentence.";
+  }
+
+  if (templateId === "five-image-center-band-number-domain") {
+    return "Create a number-aware Pinterest artwork headline for a center band with a separate ellipse number badge. Use 4 to 6 strong words total, do not include the count in the headline itself, and favor a softer 1 to 2 word opener followed by two bolder lower lines. Keep it decor-editorial, compact, and visually scannable.";
   }
 
   if (templateId === "two-image-slant-band-number-domain") {
@@ -2689,6 +2695,10 @@ function enforceArtworkTitleRule(templateId: string, title: string) {
   }
 
   if (templateId === "four-image-split-band-number") {
+    headline = ensureHeroNumberArtworkTitle(headline);
+  }
+
+  if (templateId === "five-image-center-band-number-domain") {
     headline = ensureHeroNumberArtworkTitle(headline);
   }
 

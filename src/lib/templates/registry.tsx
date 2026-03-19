@@ -8,6 +8,7 @@ import { TemplateFourImageMasonryHeroNumberDomainPill } from "@/templates/Templa
 import { TemplateFourImageGridNumberTitleDomain } from "@/templates/TemplateFourImageGridNumberTitleDomain";
 import { TemplateFourImageGridTitleFooter } from "@/templates/TemplateFourImageGridTitleFooter";
 import { TemplateFourImageGridCenterBandTitleDomain } from "@/templates/TemplateFourImageGridCenterBandTitleDomain";
+import { TemplateFiveImageCenterBandNumberDomain } from "@/templates/TemplateFiveImageCenterBandNumberDomain";
 import { TemplateFourImageSplitBandNumber } from "@/templates/TemplateFourImageSplitBandNumber";
 import { TemplateTwoImageSlantBandNumberDomain } from "@/templates/TemplateTwoImageSlantBandNumberDomain";
 import { TemplateHeroTextTripleSplitFooter } from "@/templates/TemplateHeroTextTripleSplitFooter";
@@ -21,6 +22,7 @@ import {
   sampleTemplateDataFourImageGridNumberTitleDomain,
   sampleTemplateDataFourImageGridTitleFooter,
   sampleTemplateDataFourImageGridCenterBandTitleDomain,
+  sampleTemplateDataFiveImageCenterBandNumberDomain,
   sampleTemplateDataFourImageSplitBandNumber,
   sampleTemplateDataTwoImageSlantBandNumberDomain,
   sampleTemplateDataHeroTwoSplitText,
@@ -188,6 +190,21 @@ export const TEMPLATE_CONFIGS: Record<string, TemplateConfig> = {
       footer: true,
     },
   },
+  "five-image-center-band-number-domain": {
+    id: "five-image-center-band-number-domain",
+    name: "Five Image Center Band Number Domain",
+    componentKey: "TemplateFiveImageCenterBandNumberDomain",
+    previewPath: "/preview/five-image-center-band-number-domain",
+    locked: true,
+    canvas: { width: 1080, height: 1920 },
+    imageSlotCount: 5,
+    textFields: ["title", "itemNumber", "domain", "visualPreset"],
+    features: {
+      overlay: true,
+      numberTreatment: "hero",
+      footer: true,
+    },
+  },
   "four-image-split-band-number": {
     id: "four-image-split-band-number",
     name: "Four Image Split Band Number",
@@ -309,6 +326,7 @@ const TEMPLATE_COMPONENTS: Record<
   "four-image-grid-number-title-domain": TemplateFourImageGridNumberTitleDomain,
   "four-image-grid-title-footer": TemplateFourImageGridTitleFooter,
   "four-image-grid-center-band-title-domain": TemplateFourImageGridCenterBandTitleDomain,
+  "five-image-center-band-number-domain": TemplateFiveImageCenterBandNumberDomain,
   "four-image-split-band-number": TemplateFourImageSplitBandNumber,
   "two-image-slant-band-number-domain": TemplateTwoImageSlantBandNumberDomain,
   "hero-text-triple-split-footer": TemplateHeroTextTripleSplitFooter,
@@ -371,6 +389,10 @@ export function getSampleTemplateProps(templateId: string) {
 
   if (templateId === "four-image-grid-center-band-title-domain") {
     return sampleTemplateDataFourImageGridCenterBandTitleDomain;
+  }
+
+  if (templateId === "five-image-center-band-number-domain") {
+    return sampleTemplateDataFiveImageCenterBandNumberDomain;
   }
 
   if (templateId === "four-image-split-band-number") {
