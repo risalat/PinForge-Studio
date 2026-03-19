@@ -93,13 +93,19 @@ async function getDashboardData(input?: {
     });
     const snoozedPostIds = new Set(activeSnoozes.map((item) => item.postId));
     const filteredJobs = filterByAllowedDomains(allJobs, (job) => job.domainSnapshot, allowedDomains);
-    const activeReviewJobs = filteredJobs.filter((job) => reviewQueueStatuses.has(job.status));
-    const activeReviewPostIds = new Set(activeReviewJobs.map((job) => job.postId));
-    const activeReviewUrlKeys = new Set(
-      activeReviewJobs
-        .map((job) => normalizeArticleUrl(job.postUrlSnapshot))
-        .filter((value) => value !== ""),
-    );
+    const latestWorkflowJobsByPostId = new Map<string, (typeof filteredJobs)[number]>();
+    const latestWorkflowJobsByUrlKey = new Map<string, (typeof filteredJobs)[number]>();
+
+    for (const job of filteredJobs) {
+      if (!latestWorkflowJobsByPostId.has(job.postId)) {
+        latestWorkflowJobsByPostId.set(job.postId, job);
+      }
+
+      const normalizedJobUrl = normalizeArticleUrl(job.postUrlSnapshot);
+      if (normalizedJobUrl !== "" && !latestWorkflowJobsByUrlKey.has(normalizedJobUrl)) {
+        latestWorkflowJobsByUrlKey.set(normalizedJobUrl, job);
+      }
+    }
     const postsProcessed = new Set(
       filteredJobs
         .map((job) => normalizeArticleUrl(job.postUrlSnapshot))
@@ -115,10 +121,10 @@ async function getDashboardData(input?: {
     );
     const todaysFreshTargets = staleFreshTargets
       .filter((record) => {
-        const normalizedRecordUrl = normalizeArticleUrl(record.url);
-        return (
-          !activeReviewPostIds.has(record.postId) &&
-          (normalizedRecordUrl === "" || !activeReviewUrlKeys.has(normalizedRecordUrl))
+        return !hasNewerWorkflowSinceLastPublication(
+          record,
+          latestWorkflowJobsByPostId,
+          latestWorkflowJobsByUrlKey,
         );
       })
       .slice(0, 10)
@@ -134,10 +140,10 @@ async function getDashboardData(input?: {
         workspaceId: activeWorkspaceId,
       }));
     const queuedFreshTargetCount = staleFreshTargets.filter((record) => {
-      const normalizedRecordUrl = normalizeArticleUrl(record.url);
-      return (
-        activeReviewPostIds.has(record.postId) ||
-        (normalizedRecordUrl !== "" && activeReviewUrlKeys.has(normalizedRecordUrl))
+      return hasNewerWorkflowSinceLastPublication(
+        record,
+        latestWorkflowJobsByPostId,
+        latestWorkflowJobsByUrlKey,
       );
     }).length;
     const activeWorkspaceProfile =
@@ -235,13 +241,6 @@ export default async function DashboardPage({
   );
 }
 
-const reviewQueueStatuses = new Set<GenerationJobStatus>([
-  GenerationJobStatus.RECEIVED,
-  GenerationJobStatus.REVIEWING,
-  GenerationJobStatus.READY_FOR_GENERATION,
-  GenerationJobStatus.FAILED,
-]);
-
 function rankFreshPinTargets(records: PostPulseRecord[]) {
   return [...records]
     .filter(
@@ -258,6 +257,27 @@ function rankFreshPinTargets(records: PostPulseRecord[]) {
 
       return (left.lastPublishedAt?.getTime() ?? 0) - (right.lastPublishedAt?.getTime() ?? 0);
     });
+}
+
+function hasNewerWorkflowSinceLastPublication(
+  record: PostPulseRecord,
+  jobsByPostId: Map<string, Awaited<ReturnType<typeof listJobsForUser>>[number]>,
+  jobsByUrlKey: Map<string, Awaited<ReturnType<typeof listJobsForUser>>[number]>,
+) {
+  if (!record.lastPublishedAt) {
+    return false;
+  }
+
+  const normalizedRecordUrl = normalizeArticleUrl(record.url);
+  const latestWorkflowJob =
+    jobsByPostId.get(record.postId) ??
+    (normalizedRecordUrl !== "" ? jobsByUrlKey.get(normalizedRecordUrl) : undefined);
+
+  if (!latestWorkflowJob) {
+    return false;
+  }
+
+  return latestWorkflowJob.createdAt > record.lastPublishedAt;
 }
 
 function firstSearchParam(value: string | string[] | undefined) {
