@@ -166,7 +166,10 @@ function compactCenterBandTitle(input: string) {
 
 function splitCenterBandTitle(title: string, itemNumber: number | null) {
   const words = title.split(/\s+/).filter(Boolean);
-  const displayWords = itemNumber ? [String(itemNumber), ...words] : words;
+  const displayWords =
+    itemNumber && !startsWithMatchingNumber(words, itemNumber)
+      ? [String(itemNumber), ...words]
+      : words;
   return balanceThreeLines(displayWords);
 }
 
@@ -289,6 +292,11 @@ function cutWeakClauseWords(words: string[]) {
     (word, index) => index >= 3 && weakClauseWords.has(word.toLowerCase().replace(/[^a-z]/g, "")),
   );
   return weakClauseIndex > 0 ? words.slice(0, weakClauseIndex) : words;
+}
+
+function startsWithMatchingNumber(words: string[], itemNumber: number) {
+  const firstWord = words[0]?.replace(/[^0-9]/g, "") ?? "";
+  return firstWord !== "" && Number.parseInt(firstWord, 10) === itemNumber;
 }
 
 function normalizeWord(word: string) {

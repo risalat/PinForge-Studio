@@ -8,8 +8,23 @@ import {
   getIntegrationSettingsSummary,
   getWorkspaceAllowedDomainsForUserId,
 } from "@/lib/settings/integrationSettings";
+import { DashboardPublishingTableControls } from "@/app/dashboard/publishing/DashboardPublishingTableControls";
 
-export default async function DashboardPublishingPage() {
+type PublishingSearchParams = {
+  query?: string | string[];
+  lane?: string | string[];
+  sort?: string | string[];
+};
+
+export default async function DashboardPublishingPage({
+  searchParams,
+}: {
+  searchParams?: Promise<PublishingSearchParams>;
+}) {
+  const resolvedSearchParams = searchParams ? await searchParams : {};
+  const selectedQuery = firstSearchParam(resolvedSearchParams.query).trim();
+  const selectedLane = normalizePublishingLaneFilter(firstSearchParam(resolvedSearchParams.lane));
+  const selectedSort = normalizePublishingSort(firstSearchParam(resolvedSearchParams.sort));
   const databaseReady = isDatabaseConfigured();
   const user = databaseReady ? await getOrCreateDashboardUser() : null;
   const [allJobs, settings] = user
@@ -32,7 +47,7 @@ export default async function DashboardPublishingPage() {
     (job) => job.status === "FAILED" || job.scheduleRuns[0]?.status === "FAILED",
   );
   const cycleMetaByJobId = buildCycleMetaByJobId(jobs);
-  const publishingRows = [
+  const allPublishingRows = [
     ...readyToPublish.map((job) => ({
       id: job.id,
       postId: job.postId,
@@ -66,7 +81,14 @@ export default async function DashboardPublishingPage() {
       scheduleStatus: formatLabel(job.scheduleRuns[0]?.status ?? job.status),
       generatedPins: job.generatedPins.length,
     })),
-  ].sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime());
+  ];
+  const publishingRows = sortPublishingRows(
+    filterPublishingRows(allPublishingRows, {
+      query: selectedQuery,
+      lane: selectedLane,
+    }),
+    selectedSort,
+  );
 
   return (
     <div className="space-y-6 text-[var(--dashboard-text)]">
@@ -84,10 +106,19 @@ export default async function DashboardPublishingPage() {
         <section className="space-y-4">
           {publishingRows.length === 0 ? (
             <div className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-6 text-sm text-[var(--dashboard-subtle)] shadow-[var(--dashboard-shadow-sm)]">
-              No publishing jobs yet.
+              {allPublishingRows.length === 0 ? "No publishing jobs yet." : "No publishing jobs match the current filters."}
             </div>
           ) : (
             <div className="overflow-hidden rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] shadow-[var(--dashboard-shadow-sm)]">
+              <div className="border-b border-[var(--dashboard-line)] px-5 py-4">
+                <DashboardPublishingTableControls
+                  initialQuery={selectedQuery}
+                  initialLane={selectedLane}
+                  initialSort={selectedSort}
+                  totalCount={allPublishingRows.length}
+                  filteredCount={publishingRows.length}
+                />
+              </div>
               <div className="overflow-x-auto">
                 <table className="min-w-[980px] w-full table-fixed">
                   <thead className="bg-[var(--dashboard-panel-alt)]">
@@ -166,6 +197,72 @@ export default async function DashboardPublishingPage() {
       )}
     </div>
   );
+}
+
+type PublishingLaneFilter = "all" | "ready" | "scheduled" | "failed";
+type PublishingSort = "newest" | "oldest" | "title" | "pins_desc";
+
+function filterPublishingRows<
+  T extends {
+    title: string;
+    domain: string;
+    lane: string;
+    jobStatus: string;
+    scheduleStatus: string;
+  },
+>(rows: T[], input: { query: string; lane: PublishingLaneFilter }) {
+  const query = input.query.toLowerCase();
+  return rows.filter((row) => {
+    const matchesQuery =
+      query === "" ||
+      row.title.toLowerCase().includes(query) ||
+      row.domain.toLowerCase().includes(query) ||
+      row.jobStatus.toLowerCase().includes(query) ||
+      row.scheduleStatus.toLowerCase().includes(query);
+    const matchesLane = input.lane === "all" ? true : row.lane.toLowerCase() === input.lane;
+    return matchesQuery && matchesLane;
+  });
+}
+
+function sortPublishingRows<
+  T extends {
+    title: string;
+    createdAt: Date;
+    generatedPins: number;
+  },
+>(rows: T[], sort: PublishingSort) {
+  const next = [...rows];
+  next.sort((left, right) => {
+    if (sort === "oldest") {
+      return left.createdAt.getTime() - right.createdAt.getTime();
+    }
+    if (sort === "title") {
+      return left.title.localeCompare(right.title);
+    }
+    if (sort === "pins_desc") {
+      return right.generatedPins - left.generatedPins || right.createdAt.getTime() - left.createdAt.getTime();
+    }
+    return right.createdAt.getTime() - left.createdAt.getTime();
+  });
+  return next;
+}
+
+function normalizePublishingLaneFilter(value: string): PublishingLaneFilter {
+  if (value === "ready" || value === "scheduled" || value === "failed") {
+    return value;
+  }
+  return "all";
+}
+
+function normalizePublishingSort(value: string): PublishingSort {
+  if (value === "oldest" || value === "title" || value === "pins_desc") {
+    return value;
+  }
+  return "newest";
+}
+
+function firstSearchParam(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] ?? "" : value ?? "";
 }
 
 function PublishingMetric({ label, value }: { label: string; value: string }) {
