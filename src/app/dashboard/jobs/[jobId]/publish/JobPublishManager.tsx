@@ -14,6 +14,7 @@ import {
 import { useRouter } from "next/navigation";
 import { useAppFeedback } from "@/components/ui/AppFeedbackProvider";
 import { buildCapacityAwareSchedulePreview } from "@/lib/jobs/schedulePreview";
+import { buildTemplateDiverseOrder } from "@/lib/jobs/templateDiversity";
 import type {
   AiCredentialSummary,
   PublishScheduleContext,
@@ -319,9 +320,18 @@ export function JobPublishManager({
     setScheduleContext(initialScheduleContext);
   }, [initialScheduleContext]);
 
+  const orderedPins = useMemo(
+    () =>
+      buildTemplateDiverseOrder(currentPins, {
+        getTemplateId: (pin) => pin.templateId,
+        seed: `${jobId}:publish-pin-order`,
+      }),
+    [currentPins, jobId],
+  );
+
   const selectedPins = useMemo(
-    () => currentPins.filter((pin) => selectedPinIds.includes(pin.id)),
-    [currentPins, selectedPinIds],
+    () => orderedPins.filter((pin) => selectedPinIds.includes(pin.id)),
+    [orderedPins, selectedPinIds],
   );
 
   const selectedBoards = useMemo(
@@ -1496,7 +1506,7 @@ export function JobPublishManager({
   }
 
   function selectBy(predicate: (pin: PinItem) => boolean) {
-    setSelectedPinIds(currentPins.filter(predicate).map((pin) => pin.id));
+    setSelectedPinIds(orderedPins.filter(predicate).map((pin) => pin.id));
   }
 
 function formatPreviewDate(value: Date) {
@@ -2541,7 +2551,7 @@ function formatDateLabel(value: string) {
             </div>
           </div>
           <div className="mt-4 space-y-4">
-            {currentPins.map((pin) => {
+            {orderedPins.map((pin) => {
               const copy = copyByPinId.get(pin.id);
               const isSelected = selectedPinIds.includes(pin.id);
 

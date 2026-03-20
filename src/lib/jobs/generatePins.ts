@@ -36,6 +36,7 @@ import {
   waitForPublerJobCompletion,
 } from "@/lib/publer/publerClient";
 import { buildSchedulePreview } from "@/lib/jobs/schedulePreview";
+import { buildTemplateDiverseOrder } from "@/lib/jobs/templateDiversity";
 import { renderPin } from "@/lib/renderer/renderPin";
 import {
   getIntegrationSettingsForUserId,
@@ -566,11 +567,22 @@ export async function createAssistedGenerationPlans(input: {
     }),
   );
 
+  const orderedPreparedPlans = buildTemplateDiverseOrder(
+    preparedPlans.filter(
+      (preparedPlan): preparedPlan is NonNullable<typeof preparedPlans[number]> => Boolean(preparedPlan),
+    ),
+    {
+      getTemplateId: (preparedPlan) => preparedPlan.templateId,
+      seed: `${job.id}:assisted-plan-order`,
+    },
+  ).map((preparedPlan, index) => ({
+    ...preparedPlan,
+    sortOrder: baseSortOrder + index,
+  }));
+
   const templatesToUpsert = Array.from(
     new Map(
-      preparedPlans
-        .filter((preparedPlan): preparedPlan is NonNullable<typeof preparedPlans[number]> => Boolean(preparedPlan))
-        .map((preparedPlan) => [preparedPlan.template.id, preparedPlan.template]),
+      orderedPreparedPlans.map((preparedPlan) => [preparedPlan.template.id, preparedPlan.template]),
     ).values(),
   );
 
@@ -593,26 +605,24 @@ export async function createAssistedGenerationPlans(input: {
         },
       }),
     ),
-    ...preparedPlans
-      .filter((preparedPlan): preparedPlan is NonNullable<typeof preparedPlans[number]> => Boolean(preparedPlan))
-      .map((preparedPlan) =>
-        prisma.generationPlan.create({
-          data: {
-            jobId: job.id,
-            mode: GenerationPlanMode.ASSISTED_AUTO,
-            templateId: preparedPlan.templateId,
-            sortOrder: preparedPlan.sortOrder,
-            status: GenerationPlanStatus.READY,
-            notes: preparedPlan.notes,
-            imageAssignments: {
-              create: preparedPlan.assignedImages.map((image, slotIndex) => ({
-                sourceImageId: image.id,
-                slotIndex,
-              })),
-            },
+    ...orderedPreparedPlans.map((preparedPlan) =>
+      prisma.generationPlan.create({
+        data: {
+          jobId: job.id,
+          mode: GenerationPlanMode.ASSISTED_AUTO,
+          templateId: preparedPlan.templateId,
+          sortOrder: preparedPlan.sortOrder,
+          status: GenerationPlanStatus.READY,
+          notes: preparedPlan.notes,
+          imageAssignments: {
+            create: preparedPlan.assignedImages.map((image, slotIndex) => ({
+              sourceImageId: image.id,
+              slotIndex,
+            })),
           },
-        }),
-      ),
+        },
+      }),
+    ),
     prisma.generationJob.update({
       where: { id: job.id },
       data: {
