@@ -464,12 +464,22 @@ function resolvePosterColors(
   const posterBackground = boldCategory
     ? tintTowardsWhite(mixHex(palette.canvas, palette.band, 0.12), 0.96)
     : "#fffdf9";
+  const primaryAccent = ensureContrastTone(
+    boldCategory ? mixHex(palette.footer, palette.number, 0.08) : palette.footer,
+    posterBackground,
+    4.2,
+  );
+  const secondaryAccent = ensureContrastTone(
+    boldCategory ? mixHex(palette.divider, palette.footer, 0.14) : palette.divider,
+    posterBackground,
+    3.2,
+  );
 
   const darkInkBase = ensureContrastTone(
     category === "dark-drama"
       ? deepenHex(mixHex(palette.domain, palette.title, 0.42), 0.3)
       : boldCategory
-        ? deepenHex(mixHex(palette.title, palette.domain, 0.18), 0.18)
+        ? deepenHex(mixHex(palette.footer, palette.canvas, 0.18), 0.34)
         : deepenHex(mixHex(palette.domain, palette.title, 0.52), 0.18),
     posterBackground,
     5.6,
@@ -477,7 +487,7 @@ function resolvePosterColors(
 
   const dividerColor = ensureContrastTone(
     boldCategory
-      ? deepenHex(mixHex(palette.divider, palette.band, 0.18), 0.12)
+      ? secondaryAccent
       : deepenHex(mixHex(palette.domain, palette.title, 0.42), 0.24),
     posterBackground,
     3.2,
@@ -485,7 +495,7 @@ function resolvePosterColors(
 
   const mainTitleColor = ensureContrastTone(
     boldCategory
-      ? deepenHex(mixHex(palette.title, palette.domain, 0.12), 0.12)
+      ? primaryAccent
       : dividerColor,
     posterBackground,
     4.8,
@@ -495,7 +505,7 @@ function resolvePosterColors(
     category === "dark-drama"
       ? mixHex(palette.number, "#ff8f52", 0.18)
       : boldCategory
-        ? mixHex(palette.number, palette.band, 0.08)
+        ? primaryAccent
         : mixHex(palette.number, palette.footer, 0.24),
     posterBackground,
     3.4,
@@ -503,7 +513,7 @@ function resolvePosterColors(
 
   const closerColor = ensureContrastTone(
     boldCategory
-      ? mixHex(palette.number, palette.title, 0.14)
+      ? secondaryAccent
       : mixHex(palette.number, "#ee8750", 0.2),
     posterBackground,
     3.4,
@@ -511,20 +521,20 @@ function resolvePosterColors(
 
   const subtitleColor = ensureContrastTone(
     boldCategory
-      ? mixHex(palette.subtitle, palette.domain, 0.14)
+      ? darkInkBase
       : tintTowardsWhite(darkInkBase, 0.08),
     posterBackground,
     3.8,
   );
 
   const pillBase = boldCategory
-    ? deepenHex(mixHex(palette.band, palette.domain, 0.38), 0.3)
+    ? deepenHex(mixHex(palette.footer, palette.band, 0.08), 0.04)
     : category === "dark-drama"
       ? deepenHex(mixHex(palette.domain, palette.footer, 0.48), 0.24)
       : deepenHex(mixHex(palette.domain, palette.title, 0.4), 0.28);
 
   const pillBorder = boldCategory
-    ? tintTowardsWhite(mixHex(palette.number, palette.band, 0.26), 0.12)
+    ? tintTowardsWhite(mixHex(palette.divider, palette.band, 0.22), 0.04)
     : tintTowardsWhite(mixHex(palette.divider, "#fff7ea", 0.4), 0.08);
 
   return {
@@ -538,7 +548,11 @@ function resolvePosterColors(
     dividerColor,
     domainPillBackground: pillBase,
     domainPillBorder: pillBorder,
-    domainTextColor: "#fffdf8",
+    domainTextColor: ensureContrastTone(
+      boldCategory ? palette.domain : "#fffdf8",
+      pillBase,
+      5.4,
+    ),
   };
 }
 
