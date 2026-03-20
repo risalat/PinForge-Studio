@@ -75,7 +75,7 @@ export async function syncPublerPublicationRecordsForUser(
   });
 
   const isBackfill = syncState.mode === PUBLICATION_SYNC_MODE.BACKFILL;
-  const startPage = syncState.nextPage;
+  const startPage = Math.max(syncState.nextPage, 1);
   const pageBudget = isBackfill ? BACKFILL_PAGES_PER_RUN : INCREMENTAL_PAGES_PER_RUN;
   const incrementalWindow = isBackfill
     ? null
@@ -121,7 +121,7 @@ export async function syncPublerPublicationRecordsForUser(
       created += pageOutcome.created;
       updated += pageOutcome.updated;
 
-      const reachedLastPage = didReachLastPage(result, pageNumber);
+      const reachedLastPage = didReachLastPage(result, pageNumber, POSTS_PER_PAGE);
       if (isBackfill && reachedLastPage) {
         await markBackfillCompleted(userId, workspaceId);
         hasMore = false;
@@ -448,7 +448,7 @@ async function markBackfillCompleted(userId: string, workspaceId: string) {
     },
     data: {
       mode: PUBLICATION_SYNC_MODE.INCREMENTAL,
-      nextPage: 0,
+      nextPage: 1,
       lastCompletedAt: new Date(),
       lastRunAt: new Date(),
       lastError: null,
@@ -465,7 +465,7 @@ async function markIncrementalCompleted(userId: string, workspaceId: string) {
       },
     },
     data: {
-      nextPage: 0,
+      nextPage: 1,
       lastCompletedAt: new Date(),
       lastRunAt: new Date(),
       lastError: null,
@@ -500,9 +500,10 @@ function endOfDay(value: Date) {
 function didReachLastPage(
   result: Awaited<ReturnType<PublerClient["getPostsPage"]>>,
   requestedPage: number,
+  pageSize: number,
 ) {
   if (result.totalPages === null) {
-    return false;
+    return result.posts.length !== pageSize;
   }
 
   if (result.page !== null) {
