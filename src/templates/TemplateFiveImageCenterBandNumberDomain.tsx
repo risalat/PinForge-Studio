@@ -47,6 +47,7 @@ export function TemplateFiveImageCenterBandNumberDomain({
   images,
   domain,
   itemNumber,
+  titleLocked,
   visualPreset,
   colorPreset,
 }: TemplateRenderProps) {
@@ -56,8 +57,8 @@ export function TemplateFiveImageCenterBandNumberDomain({
   const imageSet = normalizeImages(images, 5);
   const cleanedDomain = domain.replace(/^https?:\/\//, "").replace(/^www\./, "");
   const displayNumber = typeof itemNumber === "number" && itemNumber > 0 ? itemNumber : 24;
-  const compactTitle = compactCenterBandTitle(title);
-  const titleLines = splitCenterBandTitle(compactTitle);
+  const compactTitle = titleLocked ? normalizeLockedCenterBandTitle(title) : compactCenterBandTitle(title);
+  const titleLines = splitCenterBandTitle(compactTitle, titleLocked);
   const colors = resolveTemplateColors(category, preset.palette);
 
   const topGutter = 6;
@@ -326,15 +327,17 @@ function compactCenterBandTitle(input: string) {
   return FALLBACK_TITLE;
 }
 
-function splitCenterBandTitle(title: string) {
-  return balanceThreeLines(title.split(/\s+/).filter(Boolean));
+function splitCenterBandTitle(title: string, titleLocked?: boolean) {
+  return balanceThreeLines(title.split(/\s+/).filter(Boolean), titleLocked);
 }
 
-function balanceThreeLines(words: string[]) {
+function balanceThreeLines(words: string[], titleLocked?: boolean) {
   if (words.length <= 3) {
     return {
       script: words[0] ?? "Lovely",
-      lower: [words[1] ?? "Bedroom", words[2] ?? "Ideas"] as [string, string],
+      lower: titleLocked
+        ? [words[1] ?? "", words[2] ?? ""] as [string, string]
+        : [words[1] ?? "Bedroom", words[2] ?? "Ideas"] as [string, string],
     };
   }
 
@@ -378,6 +381,11 @@ function balanceThreeLines(words: string[]) {
   }
 
   return best;
+}
+
+function normalizeLockedCenterBandTitle(input: string) {
+  const safeTitle = input.trim() || FALLBACK_TITLE;
+  return safeTitle.split(/\s+/).filter(Boolean).slice(0, 6).join(" ");
 }
 
 function resolveTemplateColors(

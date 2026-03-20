@@ -34,6 +34,7 @@ export function TemplateHeroTwoSplitText({
   images,
   domain,
   itemNumber,
+  titleLocked,
   visualPreset,
   colorPreset,
 }: TemplateRenderProps) {
@@ -41,7 +42,7 @@ export function TemplateHeroTwoSplitText({
   const imageSet = normalizeImages(images, 3);
   const cleanedDomain = domain.replace(/^https?:\/\//, "").replace(/^www\./, "");
   const displayNumber = typeof itemNumber === "number" && itemNumber > 0 ? itemNumber : 15;
-  const compactTitle = compactHeroTwoSplitTextTitle(title);
+  const compactTitle = titleLocked ? normalizeLockedHeroTitle(title) : compactHeroTwoSplitTextTitle(title);
   const titleLines = splitTitleIntoThreeLines(toTitleCase(compactTitle));
 
   const divider = 14;
@@ -247,6 +248,11 @@ function splitTitleIntoThreeLines(title: string) {
   }
 
   return bestSplit;
+}
+
+function normalizeLockedHeroTitle(title: string) {
+  const safeTitle = title.trim() || "Breathtaking Lake House Exterior Ideas";
+  return safeTitle.split(/\s+/).filter(Boolean).slice(0, 8).join(" ");
 }
 
 function toTitleCase(value: string) {

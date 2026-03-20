@@ -39,13 +39,14 @@ export function TemplateNineImageGridOverlayNumberFooter({
   images,
   domain,
   itemNumber,
+  titleLocked,
   visualPreset,
   colorPreset,
 }: TemplateRenderProps) {
   const preset = getSplitVerticalVisualPreset(visualPreset ?? colorPreset);
   const imageSet = normalizeImages(images, 9);
   const cleanedDomain = domain.replace(/^https?:\/\//, "").replace(/^www\./, "");
-  const compactTitle = compactOverlayTitle(title);
+  const compactTitle = titleLocked ? normalizeLockedOverlayTitle(title) : compactOverlayTitle(title);
   const displayNumber = typeof itemNumber === "number" && itemNumber > 0 ? itemNumber : 25;
   const frameInset = 10;
   const gutter = 8;
@@ -308,6 +309,11 @@ function compactOverlayTitle(title: string) {
   }
 
   return words.slice(0, 5).join(" ");
+}
+
+function normalizeLockedOverlayTitle(title: string) {
+  const safeTitle = title.trim() || "Mailbox Decor Ideas";
+  return safeTitle.split(/\s+/).filter(Boolean).slice(0, 8).join(" ");
 }
 
 function getOneLineTitleLetterSpacing(title: string) {

@@ -10,6 +10,7 @@ import { TemplateFourImageGridTitleFooter } from "@/templates/TemplateFourImageG
 import { TemplateFourImageGridCenterBandTitleDomain } from "@/templates/TemplateFourImageGridCenterBandTitleDomain";
 import { TemplateFiveImageCenterBandNumberDomain } from "@/templates/TemplateFiveImageCenterBandNumberDomain";
 import { TemplateHeroArchSidebarTriptych } from "@/templates/TemplateHeroArchSidebarTriptych";
+import { TemplateThreeImageCenterPosterNumberFooter } from "@/templates/TemplateThreeImageCenterPosterNumberFooter";
 import { TemplateFourImageSplitBandNumber } from "@/templates/TemplateFourImageSplitBandNumber";
 import { TemplateTwoImageSlantBandNumberDomain } from "@/templates/TemplateTwoImageSlantBandNumberDomain";
 import { TemplateHeroTextTripleSplitFooter } from "@/templates/TemplateHeroTextTripleSplitFooter";
@@ -25,6 +26,7 @@ import {
   sampleTemplateDataFourImageGridCenterBandTitleDomain,
   sampleTemplateDataFiveImageCenterBandNumberDomain,
   sampleTemplateDataHeroArchSidebarTriptych,
+  sampleTemplateDataThreeImageCenterPosterNumberFooter,
   sampleTemplateDataFourImageSplitBandNumber,
   sampleTemplateDataTwoImageSlantBandNumberDomain,
   sampleTemplateDataHeroTwoSplitText,
@@ -222,6 +224,21 @@ export const TEMPLATE_CONFIGS: Record<string, TemplateConfig> = {
       footer: true,
     },
   },
+  "three-image-center-poster-number-footer": {
+    id: "three-image-center-poster-number-footer",
+    name: "Three Image Center Poster Number Footer",
+    componentKey: "TemplateThreeImageCenterPosterNumberFooter",
+    previewPath: "/preview/three-image-center-poster-number-footer",
+    locked: false,
+    canvas: { width: 1080, height: 1920 },
+    imageSlotCount: 3,
+    textFields: ["title", "subtitle", "itemNumber", "domain", "visualPreset"],
+    features: {
+      overlay: true,
+      numberTreatment: "hero",
+      footer: true,
+    },
+  },
   "four-image-split-band-number": {
     id: "four-image-split-band-number",
     name: "Four Image Split Band Number",
@@ -345,6 +362,7 @@ const TEMPLATE_COMPONENTS: Record<
   "four-image-grid-center-band-title-domain": TemplateFourImageGridCenterBandTitleDomain,
   "five-image-center-band-number-domain": TemplateFiveImageCenterBandNumberDomain,
   "hero-arch-sidebar-triptych": TemplateHeroArchSidebarTriptych,
+  "three-image-center-poster-number-footer": TemplateThreeImageCenterPosterNumberFooter,
   "four-image-split-band-number": TemplateFourImageSplitBandNumber,
   "two-image-slant-band-number-domain": TemplateTwoImageSlantBandNumberDomain,
   "hero-text-triple-split-footer": TemplateHeroTextTripleSplitFooter,
@@ -415,6 +433,10 @@ export function getSampleTemplateProps(templateId: string) {
 
   if (templateId === "hero-arch-sidebar-triptych") {
     return sampleTemplateDataHeroArchSidebarTriptych;
+  }
+
+  if (templateId === "three-image-center-poster-number-footer") {
+    return sampleTemplateDataThreeImageCenterPosterNumberFooter;
   }
 
   if (templateId === "four-image-split-band-number") {

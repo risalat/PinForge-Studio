@@ -2114,6 +2114,7 @@ const TEMPLATE_PRESET_CATEGORY_ALLOWLIST: Record<string, TemplateVisualPresetCat
   "four-image-grid-title-footer": ["editorial-soft", "pastel-soft", "earthy-warm", "dark-drama", "feminine-bold"],
   "five-image-center-band-number-domain": ["editorial-soft", "pastel-soft", "earthy-warm", "dark-drama", "graphic-pop", "feminine-bold"],
   "hero-arch-sidebar-triptych": ["editorial-soft", "pastel-soft", "earthy-warm", "dark-drama", "graphic-pop", "fresh-vivid", "feminine-bold"],
+  "three-image-center-poster-number-footer": ["editorial-soft", "pastel-soft", "earthy-warm", "dark-drama", "graphic-pop", "feminine-bold"],
   "two-image-slant-band-number-domain": ["editorial-soft", "pastel-soft", "earthy-warm", "dark-drama", "graphic-pop", "feminine-bold"],
   "hero-text-triple-split-footer": ["editorial-soft", "pastel-soft", "earthy-warm", "dark-drama", "feminine-bold"],
   "six-image-triple-split-slant-hero-footer": ["editorial-soft", "pastel-soft", "earthy-warm", "dark-drama", "feminine-bold"],

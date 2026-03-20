@@ -47,6 +47,8 @@ export async function getRenderPayload(
     return {
       title: renderContext.title?.trim() || job.articleTitleSnapshot,
       subtitle: renderContext.subtitle?.trim() || undefined,
+      titleLocked: renderContext.titleLocked ?? false,
+      subtitleLocked: renderContext.subtitleLocked ?? false,
       itemNumber:
         typeof renderContext.itemNumber === "number"
           ? renderContext.itemNumber

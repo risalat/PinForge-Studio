@@ -34,6 +34,7 @@ export function TemplateFourImageGridCenterBandTitleDomain({
   images,
   domain,
   itemNumber,
+  titleLocked,
   visualPreset,
   colorPreset,
 }: TemplateRenderProps) {
@@ -43,8 +44,8 @@ export function TemplateFourImageGridCenterBandTitleDomain({
   const imageSet = normalizeImages(images);
   const cleanedDomain = domain.replace(/^https?:\/\//, "").replace(/^www\./, "");
   const displayNumber = typeof itemNumber === "number" && itemNumber > 0 ? itemNumber : null;
-  const compactTitle = compactCenterBandTitle(title);
-  const lines = splitCenterBandTitle(compactTitle, displayNumber);
+  const compactTitle = titleLocked ? normalizeLockedCenterBandTitle(title) : compactCenterBandTitle(title);
+  const lines = splitCenterBandTitle(compactTitle, titleLocked ? null : displayNumber, titleLocked);
 
   const gutter = 6;
   const tileWidth = Math.floor((1080 - gutter) / 2);
@@ -164,22 +165,29 @@ function compactCenterBandTitle(input: string) {
   return toTitleCase(pool.slice(0, Math.min(5, pool.length)).join(" "));
 }
 
-function splitCenterBandTitle(title: string, itemNumber: number | null) {
+function normalizeLockedCenterBandTitle(input: string) {
+  const safeTitle = input.trim() || FALLBACK_TITLE;
+  return safeTitle.split(/\s+/).filter(Boolean).slice(0, 6).join(" ");
+}
+
+function splitCenterBandTitle(title: string, itemNumber: number | null, titleLocked?: boolean) {
   const words = title.split(/\s+/).filter(Boolean);
   const displayWords =
     itemNumber && !startsWithMatchingNumber(words, itemNumber)
       ? [String(itemNumber), ...words]
       : words;
-  return balanceThreeLines(displayWords);
+  return balanceThreeLines(displayWords, titleLocked);
 }
 
-function balanceThreeLines(words: string[]) {
+function balanceThreeLines(words: string[], titleLocked?: boolean) {
   if (words.length <= 3) {
-    return [
-      words[0] ?? "Colorful",
-      words[1] ?? "Front Porch",
-      words[2] ?? "Ideas",
-    ];
+    return titleLocked
+      ? [words[0] ?? "", words[1] ?? "", words[2] ?? ""]
+      : [
+          words[0] ?? "Colorful",
+          words[1] ?? "Front Porch",
+          words[2] ?? "Ideas",
+        ];
   }
 
   let best = [

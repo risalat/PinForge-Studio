@@ -38,13 +38,12 @@ const TEMPLATE_TYPOGRAPHY = {
 } as const;
 
 const FALLBACK_TITLE = "Cozy Small Porch Ideas";
-const STOPWORDS = new Set(["a", "an", "and", "for", "of", "the", "to", "with", "your"]);
-
 export function TemplateTwoImageSlantBandNumberDomain({
   title,
   images,
   domain,
   itemNumber,
+  titleLocked,
   visualPreset,
   colorPreset,
 }: TemplateRenderProps) {
@@ -54,7 +53,8 @@ export function TemplateTwoImageSlantBandNumberDomain({
   const imageSet = normalizeImages(images, 3);
   const cleanedDomain = domain.replace(/^https?:\/\//, "").replace(/^www\./, "");
   const displayNumber = typeof itemNumber === "number" && itemNumber > 0 ? itemNumber : 95;
-  const titleLines = splitSlantBandTitle(compactSlantBandTitle(title), displayNumber);
+  const displayTitle = titleLocked ? normalizeLockedSlantBandTitle(title) : compactSlantBandTitle(title);
+  const titleLines = splitSlantBandTitle(displayTitle, displayNumber);
   const colors = resolveTemplateColors(category, preset.palette);
 
   const topImageHeight = 944;
@@ -266,11 +266,7 @@ function compactSlantBandTitle(input: string) {
   const safeTitle = input.trim() || FALLBACK_TITLE;
   const words = safeTitle.split(/\s+/).filter(Boolean);
   const withoutWeakClause = cutWeakClauseWords(words);
-  const filtered = withoutWeakClause.filter((word) => {
-    const normalized = normalizeWord(word);
-    return normalized !== "" && !STOPWORDS.has(normalized);
-  });
-  const pool = filtered.length >= 4 ? filtered : withoutWeakClause;
+  const pool = withoutWeakClause.length > 0 ? withoutWeakClause : words;
   const bounded = pool.slice(0, Math.min(6, pool.length));
 
   if (bounded.length >= 4) {
@@ -290,6 +286,11 @@ function compactSlantBandTitle(input: string) {
   }
 
   return FALLBACK_TITLE;
+}
+
+function normalizeLockedSlantBandTitle(input: string) {
+  const safeTitle = input.trim() || FALLBACK_TITLE;
+  return safeTitle.split(/\s+/).filter(Boolean).slice(0, 6).join(" ");
 }
 
 function splitSlantBandTitle(title: string, itemNumber: number) {
@@ -520,10 +521,6 @@ function cutWeakClauseWords(words: string[]) {
 function startsWithMatchingNumber(words: string[], itemNumber: number) {
   const firstWord = words[0]?.replace(/[^0-9]/g, "") ?? "";
   return firstWord !== "" && Number.parseInt(firstWord, 10) === itemNumber;
-}
-
-function normalizeWord(word: string) {
-  return word.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
 function toTitleCase(value: string) {

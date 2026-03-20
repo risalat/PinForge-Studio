@@ -9,6 +9,7 @@ import {
   Lora,
   Manrope,
   Parisienne,
+  Poppins,
   Satisfy,
   Space_Grotesk,
 } from "next/font/google";
@@ -78,6 +79,12 @@ const parisienne = Parisienne({
   weight: ["400"],
 });
 
+const poppins = Poppins({
+  variable: "--font-poppins",
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800"],
+});
+
 export const metadata: Metadata = {
   title: "PinForge Studio",
   description: "Pinterest pin rendering and scheduling scaffold for PinForge.",
@@ -91,7 +98,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${literaturnaya.variable} ${segoeScript.variable} ${spaceGrotesk.variable} ${alata.variable} ${antonio.variable} ${cormorantGaramond.variable} ${libreBaskerville.variable} ${lora.variable} ${manrope.variable} ${leagueSpartan.variable} ${satisfy.variable} ${parisienne.variable} antialiased`}
+        className={`${literaturnaya.variable} ${segoeScript.variable} ${spaceGrotesk.variable} ${alata.variable} ${antonio.variable} ${cormorantGaramond.variable} ${libreBaskerville.variable} ${lora.variable} ${manrope.variable} ${leagueSpartan.variable} ${satisfy.variable} ${parisienne.variable} ${poppins.variable} antialiased`}
       >
         {children}
       </body>

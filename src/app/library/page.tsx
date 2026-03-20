@@ -167,6 +167,8 @@ function getTemplateDescription(templateId: string) {
       return "Two-over-three image collage with a warm center band, boxed hero number, stacked title lines, and a centered domain pill.";
     case "hero-arch-sidebar-triptych":
       return "Poster-style layout with a tall editorial sidebar, a framed arched hero image, and a three-image lower strip.";
+    case "three-image-center-poster-number-footer":
+      return "Top hero photo plus lower split images with a centered white poster card, oversized count, stacked poster headline, and dark footer pill.";
     case "two-image-slant-band-number-domain":
       return "Hero image plus lower split collage with a diagonal white title banner, separate number badge, script opener, and rounded domain pill.";
     case "hero-text-triple-split-footer":
@@ -208,6 +210,8 @@ function getTemplateUsage(templateId: string) {
       return "Use for decor and inspiration roundups where five image slots plus a boxed count create a richer listicle package.";
     case "hero-arch-sidebar-triptych":
       return "Use for high-contrast editorial roundup pins where a single hero image should dominate and the title needs a distinct sidebar treatment.";
+    case "three-image-center-poster-number-footer":
+      return "Use for listicle pins that need a centered poster-card treatment with a visible count, compact four-word headline, and a supporting subtitle line.";
     case "two-image-slant-band-number-domain":
       return "Use for decorative listicle pins where a soft script opener, bold lower title, and split lower image pair create stronger visual movement.";
     case "hero-text-triple-split-footer":

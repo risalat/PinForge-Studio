@@ -50,6 +50,7 @@ export function TemplateFourImageSplitBandNumber({
   title,
   images,
   itemNumber,
+  titleLocked,
   visualPreset,
   colorPreset,
 }: TemplateRenderProps) {
@@ -58,7 +59,8 @@ export function TemplateFourImageSplitBandNumber({
   const presetCategory = presetId ? getTemplateVisualPresetCategory(presetId) : "editorial-soft";
   const imageSet = normalizeImages(images);
   const displayNumber = typeof itemNumber === "number" && itemNumber > 0 ? itemNumber : 23;
-  const [lineOne, lineTwo] = splitIntoOneAndTwoWords(compactTitleToThreeWords(title));
+  const displayTitle = titleLocked ? normalizeLockedSplitBandTitle(title) : compactTitleToThreeWords(title);
+  const [lineOne, lineTwo] = splitIntoOneAndTwoWords(displayTitle, titleLocked);
 
   const gutter = 6;
   const topRowHeight = 764;
@@ -300,10 +302,16 @@ function normalizeImages(images: string[]) {
   ];
 }
 
-function splitIntoOneAndTwoWords(title: string) {
+function splitIntoOneAndTwoWords(title: string, titleLocked?: boolean) {
   const words = title.split(/\s+/).filter(Boolean);
   if (words.length < 3) {
-    return ["CLASSY", "BEDROOM IDEAS"];
+    return titleLocked
+      ? [words[0]?.toUpperCase() ?? "", words.slice(1).join(" ").toUpperCase()]
+      : ["CLASSY", "BEDROOM IDEAS"];
+  }
+
+  if (titleLocked) {
+    return [words[0].toUpperCase(), words.slice(1).join(" ").toUpperCase()];
   }
 
   return [words[0].toUpperCase(), `${words[1]} ${words[2]}`.toUpperCase()];
@@ -349,6 +357,11 @@ function compactTitleToThreeWords(input: string) {
   }
 
   return FALLBACK_TITLE;
+}
+
+function normalizeLockedSplitBandTitle(input: string) {
+  const safeTitle = input.trim() || FALLBACK_TITLE;
+  return safeTitle.split(/\s+/).filter(Boolean).slice(0, 6).join(" ");
 }
 
 function normalizeWord(word: string) {

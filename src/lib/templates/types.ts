@@ -109,6 +109,8 @@ export type TemplateRenderProps = {
   itemNumber?: number;
   images: string[];
   domain: string;
+  titleLocked?: boolean;
+  subtitleLocked?: boolean;
   visualPreset?: TemplateVisualPresetId;
   colorPreset?: TemplateColorPreset;
 };

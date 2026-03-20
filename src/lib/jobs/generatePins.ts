@@ -755,10 +755,16 @@ export async function updateGenerationPlanRenderContext(input: {
   const next = {
     ...existing,
     title: input.title !== undefined ? parseEditablePinTitle(input.title) || undefined : existing.title,
+    titleLocked:
+      input.title !== undefined ? Boolean(parseEditablePinTitle(input.title)?.trim()) : existing.titleLocked,
     subtitle:
       input.subtitle !== undefined
         ? parseEditablePinSubtitle(input.subtitle) || undefined
         : existing.subtitle,
+    subtitleLocked:
+      input.subtitle !== undefined
+        ? Boolean(parseEditablePinSubtitle(input.subtitle)?.trim())
+        : existing.subtitleLocked,
     itemNumber:
       input.itemNumber !== undefined
         ? parseEditableItemNumber(input.itemNumber)
@@ -2251,6 +2257,8 @@ async function generateRenderCopyForPlan(
   const supportsSubtitle = templateConfig.textFields.includes("subtitle");
   const numberTreatment = templateConfig.features.numberTreatment;
   const itemNumber = existing.itemNumber ?? job.listCountHint ?? job.sourceImages.length;
+  const titleLocked = existing.titleLocked ?? Boolean(existing.title?.trim());
+  const subtitleLocked = existing.subtitleLocked ?? Boolean(existing.subtitle?.trim());
   let title = existing.title?.trim();
   let subtitle = existing.subtitle?.trim();
 
@@ -2294,6 +2302,8 @@ async function generateRenderCopyForPlan(
     articleTitle: job.articleTitleSnapshot,
     supportsSubtitle,
     numberTreatment,
+    titleLocked,
+    subtitleLocked,
   });
 
   const visualPreset =
@@ -2353,9 +2363,7 @@ function buildRenderCopyRequest(
     return {
       ...titleRequest,
       locked_title: pin.lockedTitle?.trim() || undefined,
-      subtitle_style_hint: pin.templateSupportsSubtitle
-        ? "Very short editorial kicker, 3 to 5 words."
-        : "No subtitle slot. Keep any secondary angle out of the artwork title.",
+      subtitle_style_hint: getSubtitleStyleHint(pin.templateId, pin.templateSupportsSubtitle),
       template_id: pin.templateId,
       template_name: pin.templateName,
       template_supports_subtitle: pin.templateSupportsSubtitle,
@@ -2546,22 +2554,36 @@ function shapeRenderCopyForTemplate(input: {
   articleTitle: string;
   supportsSubtitle: boolean;
   numberTreatment: TemplateNumberTreatment;
+  titleLocked?: boolean;
+  subtitleLocked?: boolean;
 }) {
   let title = normalizeRenderText(input.title);
   let subtitle: string | undefined = normalizeRenderText(input.subtitle) || undefined;
 
   if (input.supportsSubtitle) {
-    const split = splitRenderTitle(title);
-    if (split) {
-      title = split.title;
-      if (shouldUseSplitSubtitle(split.subtitle, subtitle)) {
-        subtitle = split.subtitle;
+    if (!input.titleLocked) {
+      const split = splitRenderTitle(title);
+      if (split) {
+        title = split.title;
+        if (shouldUseSplitSubtitle(split.subtitle, subtitle)) {
+          subtitle = split.subtitle;
+        }
       }
     }
 
-    title = integrateItemNumberIntoRenderTitle(title, input.itemNumber, input.numberTreatment);
-    subtitle = subtitle ? normalizeSubtitleKicker(subtitle, title, input.articleTitle) : undefined;
-    title = enforceArtworkTitleRule(input.templateId, title);
+    if (!input.titleLocked) {
+      title = integrateItemNumberIntoRenderTitle(title, input.itemNumber, input.numberTreatment);
+      title = enforceArtworkTitleRule(input.templateId, title);
+    }
+
+    subtitle = subtitle
+      ? input.subtitleLocked
+        ? subtitle
+        : normalizeTemplateSubtitle(
+            input.templateId,
+            normalizeSubtitleKicker(subtitle, title, input.articleTitle),
+          )
+      : undefined;
 
     return {
       title,
@@ -2569,16 +2591,20 @@ function shapeRenderCopyForTemplate(input: {
     };
   }
 
-  title = collapseSingleFieldRenderTitle({
-    templateId: input.templateId,
-    title,
-    subtitle,
-    itemNumber: input.itemNumber,
-    numberTreatment: input.numberTreatment,
-  });
+  if (!input.titleLocked) {
+    title = collapseSingleFieldRenderTitle({
+      templateId: input.templateId,
+      title,
+      subtitle,
+      itemNumber: input.itemNumber,
+      numberTreatment: input.numberTreatment,
+    });
+
+    title = enforceArtworkTitleRule(input.templateId, title);
+  }
 
   return {
-    title: enforceArtworkTitleRule(input.templateId, title),
+    title,
     subtitle: undefined,
   };
 }
@@ -2629,6 +2655,8 @@ function getArtworkTitleRule(templateId: string) {
       return { maxWords: 5, maxChars: 36, maxLines: 3, singleLine: false };
     case "hero-arch-sidebar-triptych":
       return { maxWords: 5, maxChars: 30, maxLines: 5, singleLine: false };
+    case "three-image-center-poster-number-footer":
+      return { maxWords: 5, maxChars: 34, maxLines: 4, singleLine: false };
     case "four-image-split-band-number":
       return { maxWords: 3, maxChars: 24, maxLines: 2, singleLine: false };
     case "two-image-slant-band-number-domain":
@@ -2669,6 +2697,10 @@ function getArtworkGoal(templateId: string, templateSupportsSubtitle: boolean) {
 
   if (templateId === "hero-arch-sidebar-triptych") {
     return "Create a number-aware Pinterest artwork headline for a narrow editorial sidebar with a separate hero number circle. Use 4 to 5 strong words total, one word per line, and do not include the count in the headline itself. It should read like a premium roundup cover, not a blog sentence.";
+  }
+
+  if (templateId === "three-image-center-poster-number-footer") {
+    return "Create a number-aware Pinterest artwork headline for a centered poster card with a separate hero number and a separate subtitle line. Use 4 to 5 words total, do not include the count in the headline itself, make the first word a softer opener beside the number, use the two large middle lines for the core message, and make the final word a roundup closer like Ideas, Styles, Looks, or Colors. If there are 5 words total, the two large middle lines should carry 3 words between them. Keep the subtitle separate.";
   }
 
   if (templateId === "two-image-slant-band-number-domain") {
@@ -2721,6 +2753,11 @@ function enforceArtworkTitleRule(templateId: string, title: string) {
   if (templateId === "hero-arch-sidebar-triptych") {
     headline = ensureHeroNumberArtworkTitle(headline);
     headline = ensureFourOrFiveWordSidebarTitle(headline);
+  }
+
+  if (templateId === "three-image-center-poster-number-footer") {
+    headline = ensureHeroNumberArtworkTitle(headline);
+    headline = ensureFourOrFiveWordPosterTitle(headline);
   }
 
   if (templateId === "two-image-slant-band-number-domain") {
@@ -2783,6 +2820,44 @@ function ensureFourOrFiveWordSidebarTitle(title: string) {
   }
 
   return toTitleCase([words[0] ?? "Bedroom", "Decor", "Ideas", "Style"].join(" "));
+}
+
+function ensureFourOrFiveWordPosterTitle(title: string) {
+  const safeTitle = normalizeRenderText(title);
+  if (!safeTitle) {
+    return "Classic Fall Decor Ideas";
+  }
+
+  const words = safeTitle.split(/\s+/).filter(Boolean).slice(0, 5);
+  const bounded =
+    words.length >= 4
+      ? words
+      : words.length === 3
+        ? [...words, "Ideas"]
+        : words.length === 2
+          ? [words[0], words[1], "Decor", "Ideas"]
+          : [words[0] ?? "Classic", "Fall", "Decor", "Ideas"];
+  const closers = new Set(["ideas", "styles", "style", "looks", "colors", "decor", "tips"]);
+  const lastIndex = bounded.length - 1;
+  const lastWord = bounded[lastIndex]?.toLowerCase().replace(/[^a-z0-9]/g, "") ?? "";
+
+  if (!closers.has(lastWord)) {
+    bounded[lastIndex] = "Ideas";
+  }
+
+  return toTitleCase(bounded.join(" "));
+}
+
+function getSubtitleStyleHint(templateId: string, templateSupportsSubtitle: boolean) {
+  if (!templateSupportsSubtitle) {
+    return "No subtitle slot. Keep any secondary angle out of the artwork title.";
+  }
+
+  if (templateId === "three-image-center-poster-number-footer") {
+    return "A short poster subtitle, 4 to 6 words, supportive not repetitive.";
+  }
+
+  return "Very short editorial kicker, 3 to 5 words.";
 }
 
 function toTitleCase(value: string) {
@@ -2874,6 +2949,23 @@ function normalizeSubtitleKicker(subtitle: string, title: string, articleTitle: 
   const normalizedSubtitle = normalizeContextText(next);
   if (normalizedSubtitle === normalizedTitle) {
     return buildSubtitleFromTitle(title, articleTitle);
+  }
+
+  return next;
+}
+
+function normalizeTemplateSubtitle(templateId: string, subtitle?: string) {
+  const next = normalizeRenderText(subtitle);
+  if (!next) {
+    return undefined;
+  }
+
+  if (templateId === "three-image-center-poster-number-footer") {
+    const words = next.split(/\s+/).filter(Boolean);
+    if (words.length < 4) {
+      return "That Never Go Out Of Style";
+    }
+    return words.slice(0, 6).join(" ");
   }
 
   return next;

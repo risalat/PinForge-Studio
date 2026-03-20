@@ -176,6 +176,8 @@ function getTemplateDescription(templateId: string) {
       return "Two-over-three image collage with a warm center band, boxed hero number, stacked title lines, and a centered domain pill.";
     case "hero-arch-sidebar-triptych":
       return "Poster-style layout with a tall editorial sidebar, a framed arched hero image, and a three-image lower strip.";
+    case "three-image-center-poster-number-footer":
+      return "Centered poster-card layout with one top hero photo, two lower supporting photos, a strong hero number, and a footer domain pill.";
     case "four-image-split-band-number":
       return "Four-image split collage with a dark center band, centered hero number badge, and a locked two-line 1-word/2-word headline.";
     case "two-image-slant-band-number-domain":
@@ -221,6 +223,8 @@ function getTemplateUsage(templateId: string) {
       return "Best for decor or inspiration roundups that need a fuller five-image collage with the number and headline anchored in a calm center band.";
     case "hero-arch-sidebar-triptych":
       return "Best for premium roundup pins where one dominant hero image should feel like a magazine cover and the supporting images act as a finishing strip.";
+    case "three-image-center-poster-number-footer":
+      return "Best for number-led decor roundups where the artwork title should feel like a printed poster card rather than a normal text band.";
     case "four-image-split-band-number":
       return "Best for short, punchy three-word listicle titles where the first word needs to dominate the center strip.";
     case "two-image-slant-band-number-domain":

@@ -125,6 +125,19 @@ export const sampleTemplateDataHeroArchSidebarTriptych: TemplateRenderProps = {
   visualPreset: "sunset-punch",
 };
 
+export const sampleTemplateDataThreeImageCenterPosterNumberFooter: TemplateRenderProps = {
+  title: "Classic Fall Porch Decor Ideas",
+  subtitle: "That Never Goes Out Of Style",
+  images: [
+    "/sample-images/8.jpg",
+    "/sample-images/3.jpg",
+    "/sample-images/2.jpg",
+  ],
+  domain: "mightypaint.com",
+  itemNumber: 41,
+  visualPreset: "cobalt-coral",
+};
+
 export const sampleTemplateDataFourImageSplitBandNumber: TemplateRenderProps = {
   title: "Classy Bedroom Ideas",
   images: [

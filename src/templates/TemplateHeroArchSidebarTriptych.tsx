@@ -33,13 +33,14 @@ const TEMPLATE_TYPOGRAPHY = {
 } as const;
 
 const FALLBACK_TITLE = "Bedroom Decor Ideas You'll Copy";
-const STOPWORDS = new Set(["a", "an", "and", "for", "in", "of", "the", "to", "with", "your"]);
+const JOINER_WORDS = new Set(["a", "an", "and", "for", "in", "of", "the", "to", "with", "your"]);
 
 export function TemplateHeroArchSidebarTriptych({
   title,
   images,
   domain,
   itemNumber,
+  titleLocked,
   visualPreset,
   colorPreset,
 }: TemplateRenderProps) {
@@ -49,9 +50,10 @@ export function TemplateHeroArchSidebarTriptych({
   const imageSet = normalizeImages(images, 4);
   const cleanedDomain = domain.replace(/^https?:\/\//, "").replace(/^www\./, "");
   const displayNumber = typeof itemNumber === "number" && itemNumber > 0 ? itemNumber : 17;
-  const compactTitle = compactPosterTitle(title);
+  const compactTitle = titleLocked ? normalizeLockedTitle(title) : compactPosterTitle(title);
   const titleLines = splitPosterTitle(compactTitle);
   const colors = resolveTemplateColors(category, preset.palette);
+  const titleLineColors = buildSidebarLineColors(titleLines.length, colors);
 
   const frameInset = 14;
   const canvasWidth = 1080;
@@ -146,7 +148,7 @@ export function TemplateHeroArchSidebarTriptych({
           fontWeight={TEMPLATE_TYPOGRAPHY.title.fontWeight}
           letterSpacing={TEMPLATE_TYPOGRAPHY.title.letterSpacing}
           textTransform={TEMPLATE_TYPOGRAPHY.title.textTransform}
-          colors={[colors.titleLineOne, colors.titleLineTwo, colors.titleLineThree]}
+          colors={titleLineColors}
         />
       </div>
 
@@ -274,47 +276,61 @@ function normalizeImages(images: string[], count: number) {
 function compactPosterTitle(input: string) {
   const safeTitle = input.trim() || FALLBACK_TITLE;
   const words = cutWeakClauseWords(safeTitle.split(/\s+/).filter(Boolean));
-  const filtered = words.filter((word) => {
-    const normalized = normalizeWord(word);
-    return normalized !== "" && !STOPWORDS.has(normalized) && !/^\d+$/.test(normalized);
-  });
-  const pool =
-    filtered.length >= 4 ? filtered : words.filter((word) => !/^\d+$/.test(normalizeWord(word)));
-  const bounded = pool.slice(0, Math.min(5, pool.length));
+  const pool = words.filter((word) => !/^\d+$/.test(normalizeWord(word)));
+  const bounded = pool.slice(0, Math.min(6, pool.length));
+  return bounded.length > 0 ? toTitleCase(bounded.join(" ")) : FALLBACK_TITLE;
+}
 
-  if (bounded.length >= 3) {
-    return toTitleCase(bounded.join(" "));
-  }
-
-  if (bounded.length === 2) {
-    return toTitleCase([...bounded, "Ideas"].join(" "));
-  }
-
-  if (bounded.length === 1) {
-    return toTitleCase([bounded[0], "Decor", "Ideas"].join(" "));
-  }
-
-  return FALLBACK_TITLE;
+function normalizeLockedTitle(input: string) {
+  const safeTitle = input.trim() || FALLBACK_TITLE;
+  return safeTitle.split(/\s+/).filter(Boolean).slice(0, 6).join(" ");
 }
 
 function splitPosterTitle(title: string) {
   const words = title.split(/\s+/).filter(Boolean);
-
-  if (words.length <= 5) {
-    const bounded = words.slice(0, 5);
-    while (bounded.length < 4) {
-      bounded.push(bounded.length === 1 ? "Decor" : bounded.length === 2 ? "Ideas" : "Style");
-    }
-    return bounded;
+  if (words.length === 0) {
+    return ["Bedroom", "Decor", "Ideas", "You'll Copy"];
   }
 
-  return [
-    words[0] ?? "Bedroom",
-    words[1] ?? "Decor",
-    words[2] ?? "Ideas",
-    words[3] ?? "You'll",
-    words.slice(4).join(" ") || "Copy",
-  ];
+  const lines: string[] = [];
+
+  for (let index = 0; index < words.length; index += 1) {
+    const word = words[index];
+    const normalized = normalizeWord(word);
+    const nextWord = words[index + 1];
+    const nextNormalized = normalizeWord(nextWord ?? "");
+
+    if (JOINER_WORDS.has(normalized) && lines.length > 0) {
+      lines[lines.length - 1] = `${lines[lines.length - 1]} ${word}`;
+      continue;
+    }
+
+    if (nextWord && JOINER_WORDS.has(nextNormalized)) {
+      lines.push(`${word} ${nextWord}`);
+      index += 1;
+      continue;
+    }
+
+    lines.push(word);
+  }
+
+  while (lines.length > 5) {
+    const tail = lines.pop();
+    if (!tail) {
+      break;
+    }
+    lines[lines.length - 1] = `${lines[lines.length - 1]} ${tail}`;
+  }
+
+  return lines;
+}
+
+function buildSidebarLineColors(
+  count: number,
+  colors: { titleLineOne: string; titleLineTwo: string; titleLineThree: string },
+) {
+  const palette = [colors.titleLineOne, colors.titleLineTwo, colors.titleLineThree];
+  return Array.from({ length: count }, (_, index) => palette[index % palette.length]);
 }
 
 function resolveTemplateColors(

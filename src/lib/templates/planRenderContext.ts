@@ -3,6 +3,8 @@ import { templateVisualPresets, type TemplateVisualPresetId } from "@/lib/templa
 export type PlanRenderContext = {
   title?: string;
   subtitle?: string;
+  titleLocked?: boolean;
+  subtitleLocked?: boolean;
   itemNumber?: number;
   visualPreset?: TemplateVisualPresetId;
   colorPreset?: string;
@@ -29,6 +31,12 @@ export function serializePlanRenderContext(input: PlanRenderContext) {
   }
   if (input.subtitle?.trim()) {
     next.subtitle = input.subtitle.trim();
+  }
+  if (input.titleLocked) {
+    next.titleLocked = true;
+  }
+  if (input.subtitleLocked) {
+    next.subtitleLocked = true;
   }
   if (typeof input.itemNumber === "number" && Number.isFinite(input.itemNumber) && input.itemNumber > 0) {
     next.itemNumber = Math.floor(input.itemNumber);
