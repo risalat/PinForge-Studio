@@ -2659,6 +2659,8 @@ function getArtworkTitleRule(templateId: string) {
       return { maxWords: 5, maxChars: 34, maxLines: 4, singleLine: false };
     case "single-image-overlay-number-title-domain":
       return { maxWords: 5, maxChars: 38, maxLines: 2, singleLine: false };
+    case "split-vertical-title-number":
+      return { maxWords: 5, maxChars: 34, maxLines: 2, singleLine: false };
     case "four-image-split-band-number":
       return { maxWords: 3, maxChars: 24, maxLines: 2, singleLine: false };
     case "two-image-slant-band-number-domain":
@@ -2670,7 +2672,7 @@ function getArtworkTitleRule(templateId: string) {
     case "masonry-grid-number-title-footer":
       return { maxWords: 5, maxChars: 34, maxLines: 2, singleLine: false };
     case "six-image-triple-split-slant-hero-footer":
-      return { maxWords: 5, maxChars: 34, maxLines: 2, singleLine: false };
+      return { maxWords: 4, maxChars: 30, maxLines: 2, singleLine: false };
     case "single-image-header-title-domain-cta":
       return { maxWords: 7, maxChars: 52, maxLines: 3, singleLine: false };
     case "single-image-subtitle-title-cta":
@@ -2680,7 +2682,6 @@ function getArtworkTitleRule(templateId: string) {
     case "four-image-masonry-hero-number-domain-pill":
     case "split-vertical-title":
     case "split-vertical-title-no-subtitle":
-    case "split-vertical-title-number":
     case "hero-text-triple-split-footer":
       return { maxWords: 6, maxChars: 42, maxLines: 2, singleLine: false };
     default:
@@ -2709,12 +2710,20 @@ function getArtworkGoal(templateId: string, templateSupportsSubtitle: boolean) {
     return "Create a simple number-aware Pinterest artwork headline for a single-image overlay with a separate hero number. Use 3 to 5 strong words total, do not include the count in the headline itself, and keep it readable in a large two-line title strip. Favor clean roundup wording instead of long article phrases.";
   }
 
+  if (templateId === "split-vertical-title-number") {
+    return "Create a number-aware Pinterest artwork headline for a split-image design with a separate hero number badge. Use 3 to 5 strong words total, do not include the count in the headline itself, and make it read like a roundup cover rather than a command or blog sentence.";
+  }
+
   if (templateId === "two-image-slant-band-number-domain") {
     return "Create a decorative Pinterest artwork headline for a diagonal banner with a separate number badge. Use 4 to 6 strong words total, keep it number-aware, and favor a soft two-word opener followed by two stronger title lines. Avoid filler clauses and make the wording visually scannable on-image rather than article-like.";
   }
 
   if (templateId === "four-image-split-band-number") {
     return "Create a short Pinterest artwork headline for a hero-number listicle band. It must read like a count-based roundup, not a generic slogan. Use exactly 3 strong words total, with a punchy first word and a clear ideas-style finish.";
+  }
+
+  if (templateId === "six-image-triple-split-slant-hero-footer") {
+    return "Create a number-aware Pinterest artwork headline for a six-image collage with a separate count and a separate script subtitle. Use 3 to 4 strong words total, do not include the count in the headline itself, and keep the last word visually punchy for the emphasized lower line.";
   }
 
   return templateSupportsSubtitle
@@ -2770,7 +2779,15 @@ function enforceArtworkTitleRule(templateId: string, title: string) {
     headline = ensureHeroNumberArtworkTitle(headline);
   }
 
+  if (templateId === "split-vertical-title-number") {
+    headline = ensureHeroNumberArtworkTitle(headline);
+  }
+
   if (templateId === "two-image-slant-band-number-domain") {
+    headline = ensureHeroNumberArtworkTitle(headline);
+  }
+
+  if (templateId === "six-image-triple-split-slant-hero-footer") {
     headline = ensureHeroNumberArtworkTitle(headline);
   }
 

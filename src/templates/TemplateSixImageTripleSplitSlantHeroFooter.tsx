@@ -181,7 +181,7 @@ export function TemplateSixImageTripleSplitSlantHeroFooter({
         zIndex={22}
       />
 
-      <div className="absolute inset-x-0 z-30 text-center" style={{ top: 734 }}>
+      <div className="absolute inset-x-0 z-30 text-center" style={{ top: 722 }}>
         <div className="mx-auto flex max-w-[908px] flex-col items-center px-14">
           <AutoFitText
             as="p"
@@ -214,7 +214,7 @@ export function TemplateSixImageTripleSplitSlantHeroFooter({
           />
 
           <div
-            className="mt-[24px] h-[4px] w-[264px] rounded-full"
+            className="mt-[18px] h-[4px] w-[264px] rounded-full"
             style={{ backgroundColor: withAlpha(dividerColor, 0.78) }}
           />
 
@@ -225,7 +225,7 @@ export function TemplateSixImageTripleSplitSlantHeroFooter({
             maxFontSize={56}
             maxLines={2}
             lineHeight={TEMPLATE_TYPOGRAPHY.subtitle.lineHeight}
-            className="mt-[18px] max-w-[760px]"
+            className="mt-[10px] max-w-[760px]"
             textColor={subtitleColor}
             fontFamily={TEMPLATE_TYPOGRAPHY.subtitle.fontFamily}
             fontWeight={TEMPLATE_TYPOGRAPHY.subtitle.fontWeight}

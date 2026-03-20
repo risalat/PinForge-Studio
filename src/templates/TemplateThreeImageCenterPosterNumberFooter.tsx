@@ -459,52 +459,85 @@ function resolvePosterColors(
     number: string;
   },
 ) {
-  const posterBackground = "#fffdf9";
-  const darkInkBase =
+  const boldCategory =
+    category === "graphic-pop" || category === "fresh-vivid" || category === "feminine-bold";
+  const posterBackground = boldCategory
+    ? tintTowardsWhite(mixHex(palette.canvas, palette.band, 0.12), 0.96)
+    : "#fffdf9";
+
+  const darkInkBase = ensureContrastTone(
     category === "dark-drama"
-      ? deepenHex(mixHex(palette.domain, palette.title, 0.48), 0.26)
-      : category === "graphic-pop" || category === "fresh-vivid"
-        ? deepenHex(mixHex(palette.domain, palette.title, 0.54), 0.2)
-        : category === "feminine-bold"
-          ? deepenHex(mixHex(palette.domain, palette.title, 0.46), 0.2)
-          : deepenHex(mixHex(palette.domain, palette.title, 0.52), 0.18);
+      ? deepenHex(mixHex(palette.domain, palette.title, 0.42), 0.3)
+      : boldCategory
+        ? deepenHex(mixHex(palette.title, palette.domain, 0.18), 0.18)
+        : deepenHex(mixHex(palette.domain, palette.title, 0.52), 0.18),
+    posterBackground,
+    5.6,
+  );
 
-  const dividerColor =
-    category === "graphic-pop" || category === "fresh-vivid"
-      ? deepenHex(mixHex(palette.domain, palette.divider, 0.3), 0.26)
-      : deepenHex(mixHex(palette.domain, palette.title, 0.42), 0.24);
+  const dividerColor = ensureContrastTone(
+    boldCategory
+      ? deepenHex(mixHex(palette.divider, palette.band, 0.18), 0.12)
+      : deepenHex(mixHex(palette.domain, palette.title, 0.42), 0.24),
+    posterBackground,
+    3.2,
+  );
 
-  const numberColor =
+  const mainTitleColor = ensureContrastTone(
+    boldCategory
+      ? deepenHex(mixHex(palette.title, palette.domain, 0.12), 0.12)
+      : dividerColor,
+    posterBackground,
+    4.8,
+  );
+
+  const numberColor = ensureContrastTone(
     category === "dark-drama"
-      ? mixHex(palette.number, "#ff8f52", 0.35)
-      : category === "feminine-bold"
-        ? deepenHex(mixHex(palette.number, palette.footer, 0.42), 0.04)
-        : mixHex(palette.number, palette.footer, 0.24);
+      ? mixHex(palette.number, "#ff8f52", 0.18)
+      : boldCategory
+        ? mixHex(palette.number, palette.band, 0.08)
+        : mixHex(palette.number, palette.footer, 0.24),
+    posterBackground,
+    3.4,
+  );
 
-  const closerColor =
-    category === "graphic-pop" || category === "fresh-vivid"
-      ? mixHex(palette.number, palette.footer, 0.32)
-      : mixHex(palette.number, "#ee8750", 0.2);
+  const closerColor = ensureContrastTone(
+    boldCategory
+      ? mixHex(palette.number, palette.title, 0.14)
+      : mixHex(palette.number, "#ee8750", 0.2),
+    posterBackground,
+    3.4,
+  );
 
-  const pillBase =
-    category === "dark-drama"
+  const subtitleColor = ensureContrastTone(
+    boldCategory
+      ? mixHex(palette.subtitle, palette.domain, 0.14)
+      : tintTowardsWhite(darkInkBase, 0.08),
+    posterBackground,
+    3.8,
+  );
+
+  const pillBase = boldCategory
+    ? deepenHex(mixHex(palette.band, palette.domain, 0.38), 0.3)
+    : category === "dark-drama"
       ? deepenHex(mixHex(palette.domain, palette.footer, 0.48), 0.24)
       : deepenHex(mixHex(palette.domain, palette.title, 0.4), 0.28);
+
+  const pillBorder = boldCategory
+    ? tintTowardsWhite(mixHex(palette.number, palette.band, 0.26), 0.12)
+    : tintTowardsWhite(mixHex(palette.divider, "#fff7ea", 0.4), 0.08);
 
   return {
     canvasBackground: tintTowardsWhite(palette.canvas, 0.18),
     posterBackground,
     numberColor,
     openerColor: darkInkBase,
-    mainTitleColor: dividerColor,
+    mainTitleColor,
     closerColor,
-    subtitleColor: tintTowardsWhite(darkInkBase, 0.08),
+    subtitleColor,
     dividerColor,
     domainPillBackground: pillBase,
-    domainPillBorder:
-      category === "graphic-pop" || category === "fresh-vivid"
-        ? tintTowardsWhite(mixHex(palette.number, "#fff7ea", 0.34), 0.12)
-        : tintTowardsWhite(mixHex(palette.divider, "#fff7ea", 0.4), 0.08),
+    domainPillBorder: pillBorder,
     domainTextColor: "#fffdf8",
   };
 }
@@ -527,6 +560,80 @@ function tintTowardsWhite(color: string, ratio: number) {
 
 function deepenHex(color: string, ratio: number) {
   return mixHex(color, "#000000", ratio);
+}
+
+function ensureContrastTone(colorHex: string, backgroundHex: string, minimumRatio: number) {
+  if (!isHexColor(colorHex) || !isHexColor(backgroundHex)) {
+    return colorHex;
+  }
+
+  if (getContrastRatio(colorHex, backgroundHex) >= minimumRatio) {
+    return colorHex;
+  }
+
+  const darkerCandidate = shiftTowardContrast(colorHex, backgroundHex, minimumRatio, "#000000");
+  const lighterCandidate = shiftTowardContrast(colorHex, backgroundHex, minimumRatio, "#ffffff");
+
+  if (!darkerCandidate) {
+    return lighterCandidate ?? colorHex;
+  }
+
+  if (!lighterCandidate) {
+    return darkerCandidate;
+  }
+
+  return colorDistance(colorHex, darkerCandidate) <= colorDistance(colorHex, lighterCandidate)
+    ? darkerCandidate
+    : lighterCandidate;
+}
+
+function shiftTowardContrast(
+  colorHex: string,
+  backgroundHex: string,
+  minimumRatio: number,
+  targetHex: string,
+) {
+  for (let step = 1; step <= 12; step += 1) {
+    const candidate = mixHex(colorHex, targetHex, step * 0.08);
+    if (getContrastRatio(candidate, backgroundHex) >= minimumRatio) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
+function colorDistance(leftHex: string, rightHex: string) {
+  const left = hexToRgb(leftHex);
+  const right = hexToRgb(rightHex);
+
+  return Math.sqrt(
+    Math.pow(left.r - right.r, 2) +
+      Math.pow(left.g - right.g, 2) +
+      Math.pow(left.b - right.b, 2),
+  );
+}
+
+function getContrastRatio(foregroundHex: string, backgroundHex: string) {
+  const foreground = getRelativeLuminance(foregroundHex);
+  const background = getRelativeLuminance(backgroundHex);
+  const lighter = Math.max(foreground, background);
+  const darker = Math.min(foreground, background);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+function getRelativeLuminance(hex: string) {
+  const { r, g, b } = hexToRgb(hex);
+  const [rs, gs, bs] = [r, g, b]
+    .map((value) => value / 255)
+    .map((value) =>
+      value <= 0.03928 ? value / 12.92 : Math.pow((value + 0.055) / 1.055, 2.4),
+    );
+  return 0.2126 * rs + 0.7152 * gs + 0.0722 * bs;
+}
+
+function isHexColor(value: string) {
+  return /^#[0-9a-fA-F]{6}$/.test(value);
 }
 
 function hexToRgb(value: string) {
