@@ -9,6 +9,7 @@ import { TemplateFourImageGridNumberTitleDomain } from "@/templates/TemplateFour
 import { TemplateFourImageGridTitleFooter } from "@/templates/TemplateFourImageGridTitleFooter";
 import { TemplateFourImageGridCenterBandTitleDomain } from "@/templates/TemplateFourImageGridCenterBandTitleDomain";
 import { TemplateFiveImageCenterBandNumberDomain } from "@/templates/TemplateFiveImageCenterBandNumberDomain";
+import { TemplateHeroArchSidebarTriptych } from "@/templates/TemplateHeroArchSidebarTriptych";
 import { TemplateFourImageSplitBandNumber } from "@/templates/TemplateFourImageSplitBandNumber";
 import { TemplateTwoImageSlantBandNumberDomain } from "@/templates/TemplateTwoImageSlantBandNumberDomain";
 import { TemplateHeroTextTripleSplitFooter } from "@/templates/TemplateHeroTextTripleSplitFooter";
@@ -23,6 +24,7 @@ import {
   sampleTemplateDataFourImageGridTitleFooter,
   sampleTemplateDataFourImageGridCenterBandTitleDomain,
   sampleTemplateDataFiveImageCenterBandNumberDomain,
+  sampleTemplateDataHeroArchSidebarTriptych,
   sampleTemplateDataFourImageSplitBandNumber,
   sampleTemplateDataTwoImageSlantBandNumberDomain,
   sampleTemplateDataHeroTwoSplitText,
@@ -205,6 +207,21 @@ export const TEMPLATE_CONFIGS: Record<string, TemplateConfig> = {
       footer: true,
     },
   },
+  "hero-arch-sidebar-triptych": {
+    id: "hero-arch-sidebar-triptych",
+    name: "Hero Arch Sidebar Triptych",
+    componentKey: "TemplateHeroArchSidebarTriptych",
+    previewPath: "/preview/hero-arch-sidebar-triptych",
+    locked: true,
+    canvas: { width: 1080, height: 1920 },
+    imageSlotCount: 4,
+    textFields: ["title", "itemNumber", "domain", "visualPreset"],
+    features: {
+      overlay: true,
+      numberTreatment: "hero",
+      footer: true,
+    },
+  },
   "four-image-split-band-number": {
     id: "four-image-split-band-number",
     name: "Four Image Split Band Number",
@@ -327,6 +344,7 @@ const TEMPLATE_COMPONENTS: Record<
   "four-image-grid-title-footer": TemplateFourImageGridTitleFooter,
   "four-image-grid-center-band-title-domain": TemplateFourImageGridCenterBandTitleDomain,
   "five-image-center-band-number-domain": TemplateFiveImageCenterBandNumberDomain,
+  "hero-arch-sidebar-triptych": TemplateHeroArchSidebarTriptych,
   "four-image-split-band-number": TemplateFourImageSplitBandNumber,
   "two-image-slant-band-number-domain": TemplateTwoImageSlantBandNumberDomain,
   "hero-text-triple-split-footer": TemplateHeroTextTripleSplitFooter,
@@ -393,6 +411,10 @@ export function getSampleTemplateProps(templateId: string) {
 
   if (templateId === "five-image-center-band-number-domain") {
     return sampleTemplateDataFiveImageCenterBandNumberDomain;
+  }
+
+  if (templateId === "hero-arch-sidebar-triptych") {
+    return sampleTemplateDataHeroArchSidebarTriptych;
   }
 
   if (templateId === "four-image-split-band-number") {

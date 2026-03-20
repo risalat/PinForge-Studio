@@ -2617,6 +2617,8 @@ function getArtworkTitleRule(templateId: string) {
       return { maxWords: 4, maxChars: 28, maxLines: 1, singleLine: true };
     case "hero-two-split-text":
       return { maxWords: 5, maxChars: 36, maxLines: 3, singleLine: false };
+    case "hero-arch-sidebar-triptych":
+      return { maxWords: 5, maxChars: 30, maxLines: 5, singleLine: false };
     case "four-image-split-band-number":
       return { maxWords: 3, maxChars: 24, maxLines: 2, singleLine: false };
     case "two-image-slant-band-number-domain":
@@ -2653,6 +2655,10 @@ function getArtworkGoal(templateId: string, templateSupportsSubtitle: boolean) {
 
   if (templateId === "five-image-center-band-number-domain") {
     return "Create a number-aware Pinterest artwork headline for a center band with a separate ellipse number badge. Use 4 to 6 strong words total, do not include the count in the headline itself, and favor a softer 1 to 2 word opener followed by two bolder lower lines. Keep it decor-editorial, compact, and visually scannable.";
+  }
+
+  if (templateId === "hero-arch-sidebar-triptych") {
+    return "Create a number-aware Pinterest artwork headline for a narrow editorial sidebar with a separate hero number circle. Use 4 to 5 strong words total, one word per line, and do not include the count in the headline itself. It should read like a premium roundup cover, not a blog sentence.";
   }
 
   if (templateId === "two-image-slant-band-number-domain") {
@@ -2702,6 +2708,11 @@ function enforceArtworkTitleRule(templateId: string, title: string) {
     headline = ensureHeroNumberArtworkTitle(headline);
   }
 
+  if (templateId === "hero-arch-sidebar-triptych") {
+    headline = ensureHeroNumberArtworkTitle(headline);
+    headline = ensureFourOrFiveWordSidebarTitle(headline);
+  }
+
   if (templateId === "two-image-slant-band-number-domain") {
     headline = ensureHeroNumberArtworkTitle(headline);
   }
@@ -2740,6 +2751,28 @@ function ensureHeroNumberArtworkTitle(title: string) {
   const strongLead = pool[0] ?? "Cozy";
   const strongMiddle = pool[1] ?? "Porch";
   return toTitleCase([strongLead, strongMiddle, "Ideas"].join(" "));
+}
+
+function ensureFourOrFiveWordSidebarTitle(title: string) {
+  const safeTitle = normalizeRenderText(title);
+  if (!safeTitle) {
+    return "Bedroom Decor Ideas You'll Love";
+  }
+
+  const words = safeTitle.split(/\s+/).filter(Boolean).slice(0, 5);
+  if (words.length >= 4) {
+    return toTitleCase(words.join(" "));
+  }
+
+  if (words.length === 3) {
+    return toTitleCase([...words, "Style"].join(" "));
+  }
+
+  if (words.length === 2) {
+    return toTitleCase([...words, "Ideas", "Style"].join(" "));
+  }
+
+  return toTitleCase([words[0] ?? "Bedroom", "Decor", "Ideas", "Style"].join(" "));
 }
 
 function toTitleCase(value: string) {

@@ -112,6 +112,19 @@ export const sampleTemplateDataFiveImageCenterBandNumberDomain: TemplateRenderPr
   visualPreset: "peony-punch",
 };
 
+export const sampleTemplateDataHeroArchSidebarTriptych: TemplateRenderProps = {
+  title: "Bedroom Decor Ideas You'll Copy",
+  images: [
+    "/sample-images/8.jpg",
+    "/sample-images/1.jpg",
+    "/sample-images/2.jpg",
+    "/sample-images/4.jpg",
+  ],
+  domain: "mightypaint.com",
+  itemNumber: 17,
+  visualPreset: "sunset-punch",
+};
+
 export const sampleTemplateDataFourImageSplitBandNumber: TemplateRenderProps = {
   title: "Classy Bedroom Ideas",
   images: [
