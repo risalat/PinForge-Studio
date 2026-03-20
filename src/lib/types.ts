@@ -102,6 +102,8 @@ export interface PublishScheduleContext {
   dailyPublishTarget: number;
   todayScheduledCount: number;
   upcomingQueueDays: PublishQueueDaySummary[];
+  scheduledCountsByDate: Record<string, number>;
+  occupiedMinutesByDate: Record<string, number[]>;
   queueAwareSuggestedFirstPublishAt: string | null;
   queueSuggestionReason: string | null;
   hasPendingSchedule: boolean;

@@ -474,14 +474,21 @@ export function JobPublishManager({
         intervalMinutes: intervalDays * 24 * 60,
         jitterMinutes: jitterDays * 24 * 60,
         targetPerDay: scheduleContext.dailyPublishTarget,
-        existingScheduledCountsByDate: Object.fromEntries(
-          scheduleContext.upcomingQueueDays.map((day) => [day.date, day.scheduledCount]),
-        ),
+        existingScheduledCountsByDate: scheduleContext.scheduledCountsByDate,
+        existingScheduledMinutesByDate: scheduleContext.occupiedMinutesByDate,
       });
     } catch {
       return [];
     }
-  }, [firstPublishAt, intervalDays, jitterDays, scheduleContext.dailyPublishTarget, scheduleContext.upcomingQueueDays, selectedPins]);
+  }, [
+    firstPublishAt,
+    intervalDays,
+    jitterDays,
+    scheduleContext.dailyPublishTarget,
+    scheduleContext.scheduledCountsByDate,
+    scheduleContext.occupiedMinutesByDate,
+    selectedPins,
+  ]);
 
   const schedulePreviewRows = useMemo(
     () =>
@@ -534,6 +541,50 @@ export function JobPublishManager({
   const canUseSelectedAiCredential = Boolean(
     selectedAiCredential && selectedAiCredential.canUseApiKey,
   );
+
+  const refreshScheduleContext = useCallback(async () => {
+    if (!workspaceId) {
+      const emptyContext = buildEmptyScheduleContext("");
+      setScheduleContext(emptyContext);
+      return emptyContext;
+    }
+
+    setIsLoadingScheduleContext(true);
+
+    try {
+      const response = await fetch(
+        `/api/dashboard/jobs/${jobId}/publish/schedule-context?workspaceId=${encodeURIComponent(workspaceId)}`,
+        {
+          method: "GET",
+          cache: "no-store",
+        },
+      );
+      const data = (await response.json()) as {
+        ok?: boolean;
+        error?: string;
+        scheduleContext?: PublishScheduleContext;
+      };
+
+      if (!response.ok || !data.ok || !data.scheduleContext) {
+        throw new Error(data.error ?? "Unable to load schedule context.");
+      }
+
+      setScheduleContext(data.scheduleContext);
+      return data.scheduleContext;
+    } catch {
+      const fallbackContext = buildEmptyScheduleContext(workspaceId);
+      setScheduleContext((current) => ({
+        ...fallbackContext,
+        latestScheduledAt: current.latestScheduledAt,
+        latestPublishedAt: current.latestPublishedAt,
+        anchorAt: current.anchorAt,
+        anchorSource: current.anchorSource,
+      }));
+      return null;
+    } finally {
+      setIsLoadingScheduleContext(false);
+    }
+  }, [jobId, workspaceId]);
 
   useEffect(() => {
     const savedSelection = readPersistedPublishSelection(jobId);
@@ -819,26 +870,9 @@ export function JobPublishManager({
 
     const loadScheduleContext = async () => {
       try {
-        setIsLoadingScheduleContext(true);
-        const response = await fetch(
-          `/api/dashboard/jobs/${jobId}/publish/schedule-context?workspaceId=${encodeURIComponent(workspaceId)}`,
-          {
-            method: "GET",
-            cache: "no-store",
-          },
-        );
-        const data = (await response.json()) as {
-          ok?: boolean;
-          error?: string;
-          scheduleContext?: PublishScheduleContext;
-        };
-
-        if (!response.ok || !data.ok || !data.scheduleContext) {
-          throw new Error(data.error ?? "Unable to load schedule context.");
-        }
-
-        if (!isCancelled) {
-          setScheduleContext(data.scheduleContext);
+        const nextContext = await refreshScheduleContext();
+        if (!isCancelled && nextContext) {
+          setScheduleContext(nextContext);
         }
       } catch {
         if (!isCancelled) {
@@ -846,10 +880,6 @@ export function JobPublishManager({
             ...current,
             workspaceId,
           }));
-        }
-      } finally {
-        if (!isCancelled) {
-          setIsLoadingScheduleContext(false);
         }
       }
     };
@@ -859,7 +889,7 @@ export function JobPublishManager({
     return () => {
       isCancelled = true;
     };
-  }, [jobId, workspaceId]);
+  }, [refreshScheduleContext, workspaceId]);
 
   useEffect(() => {
     if (hasEditedFirstPublishAt || !scheduleContext.recommendedFirstPublishAt) {
@@ -1363,11 +1393,18 @@ export function JobPublishManager({
             }
           }
           if (pins && action === "schedule") {
+            const nextScheduleContext = await refreshScheduleContext().catch(() => null);
             const failedPinIds = Array.from(
               new Set((result?.failures ?? []).map((failure) => failure.pinId)),
             );
             if (failedPinIds.length > 0) {
               setSelectedPinIds(failedPinIds);
+              setHasEditedFirstPublishAt(false);
+              if (nextScheduleContext?.recommendedFirstPublishAt) {
+                setFirstPublishAt(
+                  formatDateTimeLocalValue(nextScheduleContext.recommendedFirstPublishAt),
+                );
+              }
             }
           }
         }
@@ -1560,6 +1597,12 @@ function formatDateLabel(value: string) {
         firstPublishAt,
         intervalMinutes: intervalDays * 24 * 60,
         jitterMinutes: jitterDays * 24 * 60,
+        schedulePlan: schedulePreview.map((item) => ({
+          pinId: item.pinId,
+          scheduledFor: item.scheduledFor.toISOString(),
+          boardId:
+            schedulePreviewRows.find((row) => row.pinId === item.pinId)?.assignedBoardId,
+        })),
         workspaceId,
         accountId,
         boardIds: selectedBoardIds,
@@ -3307,6 +3350,8 @@ function buildEmptyScheduleContext(workspaceId: string): PublishScheduleContext 
     dailyPublishTarget: 20,
     todayScheduledCount: 0,
     upcomingQueueDays: [],
+    scheduledCountsByDate: {},
+    occupiedMinutesByDate: {},
     queueAwareSuggestedFirstPublishAt: null,
     queueSuggestionReason: null,
     hasPendingSchedule: false,

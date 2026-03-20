@@ -1,4 +1,5 @@
 import { PublicationRecordState, ScheduleRunItemStatus } from "@prisma/client";
+import { buildCapacityAwareSchedulePreview } from "@/lib/jobs/schedulePreview";
 import { prisma } from "@/lib/prisma";
 import { getWorkspaceProfileForUserId } from "@/lib/settings/integrationSettings";
 import type { PublishQueueDaySummary } from "@/lib/types";
@@ -10,6 +11,7 @@ type QueueCapacityModel = {
   targetPerDay: number;
   todayDate: string;
   countsByDate: Map<string, number>;
+  occupiedMinutesByDate: Map<string, number[]>;
 };
 
 export async function getPublishQueueCapacitySummary(input: {
@@ -30,6 +32,8 @@ export async function getPublishQueueCapacitySummary(input: {
       days: input.days ?? 7,
       todayDate: model.todayDate,
     }),
+    scheduledCountsByDate: Object.fromEntries(model.countsByDate),
+    occupiedMinutesByDate: Object.fromEntries(model.occupiedMinutesByDate),
     nextAvailableDate: findNextAvailableDate({
       countsByDate: model.countsByDate,
       targetPerDay: model.targetPerDay,
@@ -38,17 +42,23 @@ export async function getPublishQueueCapacitySummary(input: {
   };
 }
 
-export async function findNextPublishDateWithCapacity(input: {
+export async function findNextPublishSlotWithCapacity(input: {
   userId: string;
   workspaceId?: string;
   fromDate: Date;
 }) {
   const model = await loadPublishQueueCapacityModel(input);
-  return findNextAvailableDate({
-    countsByDate: model.countsByDate,
+  const preview = buildCapacityAwareSchedulePreview({
+    pinIds: ["__recommended__"],
+    firstPublishAt: input.fromDate,
+    intervalMinutes: 0,
+    jitterMinutes: 0,
     targetPerDay: model.targetPerDay,
-    fromDate: input.fromDate,
+    existingScheduledCountsByDate: Object.fromEntries(model.countsByDate),
+    existingScheduledMinutesByDate: Object.fromEntries(model.occupiedMinutesByDate),
   });
+
+  return preview[0]?.scheduledFor ?? null;
 }
 
 async function loadPublishQueueCapacityModel(input: {
@@ -100,6 +110,7 @@ async function loadPublishQueueCapacityModel(input: {
   ]);
 
   const countsByDate = new Map<string, number>();
+  const occupiedMinutesByDate = new Map<string, number[]>();
   const syncedGeneratedPinIds = new Set(
     publicationRecords
       .map((record) => record.generatedPinId)
@@ -110,7 +121,9 @@ async function loadPublishQueueCapacityModel(input: {
     if (!record.scheduledAt) {
       continue;
     }
-    incrementCount(countsByDate, toUtcDateKey(record.scheduledAt));
+    const dateKey = toUtcDateKey(record.scheduledAt);
+    incrementCount(countsByDate, dateKey);
+    recordOccupiedMinute(occupiedMinutesByDate, dateKey, getUtcMinuteOfDay(record.scheduledAt));
   }
 
   const dedupedLocalPins = new Map<string, Date>();
@@ -126,13 +139,16 @@ async function loadPublishQueueCapacityModel(input: {
   }
 
   for (const scheduledFor of dedupedLocalPins.values()) {
-    incrementCount(countsByDate, toUtcDateKey(scheduledFor));
+    const dateKey = toUtcDateKey(scheduledFor);
+    incrementCount(countsByDate, dateKey);
+    recordOccupiedMinute(occupiedMinutesByDate, dateKey, getUtcMinuteOfDay(scheduledFor));
   }
 
   return {
     targetPerDay,
     todayDate: toUtcDateKey(new Date()),
     countsByDate,
+    occupiedMinutesByDate,
   } satisfies QueueCapacityModel;
 }
 
@@ -184,6 +200,19 @@ function incrementCount(countsByDate: Map<string, number>, dateKey: string) {
   countsByDate.set(dateKey, (countsByDate.get(dateKey) ?? 0) + 1);
 }
 
+function recordOccupiedMinute(
+  occupiedMinutesByDate: Map<string, number[]>,
+  dateKey: string,
+  minuteOfDay: number,
+) {
+  const current = occupiedMinutesByDate.get(dateKey) ?? [];
+  current.push(minuteOfDay);
+  occupiedMinutesByDate.set(
+    dateKey,
+    Array.from(new Set(current)).sort((left, right) => left - right),
+  );
+}
+
 function startOfUtcDay(value: Date) {
   return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
 }
@@ -194,4 +223,8 @@ function addUtcDays(value: Date, days: number) {
 
 export function toUtcDateKey(value: Date) {
   return value.toISOString().slice(0, 10);
+}
+
+function getUtcMinuteOfDay(value: Date) {
+  return value.getUTCHours() * 60 + value.getUTCMinutes();
 }

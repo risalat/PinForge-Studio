@@ -35,8 +35,9 @@ import {
   uploadMediaWithQueueHandling,
   waitForPublerJobCompletion,
 } from "@/lib/publer/publerClient";
-import { buildSchedulePreview } from "@/lib/jobs/schedulePreview";
+import { buildCapacityAwareSchedulePreview } from "@/lib/jobs/schedulePreview";
 import { buildTemplateDiverseOrder } from "@/lib/jobs/templateDiversity";
+import { getPublishQueueCapacitySummary } from "@/lib/jobs/publishQueueCapacity";
 import { renderPin } from "@/lib/renderer/renderPin";
 import {
   getIntegrationSettingsForUserId,
@@ -1642,11 +1643,20 @@ export async function scheduleJobPins(input: {
     });
   }
 
-  const fallbackPreviewItems = buildSchedulePreview({
+  const queueCapacity = await getPublishQueueCapacitySummary({
+    userId: input.userId,
+    workspaceId,
+    fromDate: firstPublishAt,
+    days: 60,
+  });
+  const fallbackPreviewItems = buildCapacityAwareSchedulePreview({
     pinIds: selectedPins.map((pin) => pin.id),
     firstPublishAt,
     intervalMinutes: input.intervalMinutes,
     jitterMinutes: input.jitterMinutes ?? 0,
+    targetPerDay: queueCapacity.targetPerDay,
+    existingScheduledCountsByDate: queueCapacity.scheduledCountsByDate,
+    existingScheduledMinutesByDate: queueCapacity.occupiedMinutesByDate,
   });
   const previewByPinId = new Map(fallbackPreviewItems.map((item) => [item.pinId, item]));
   const overrideBoardByPinId = new Map<string, string>();

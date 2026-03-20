@@ -1,5 +1,5 @@
 import { ScheduleRunItemStatus } from "@prisma/client";
-import { findNextPublishDateWithCapacity, getPublishQueueCapacitySummary } from "@/lib/jobs/publishQueueCapacity";
+import { findNextPublishSlotWithCapacity, getPublishQueueCapacitySummary } from "@/lib/jobs/publishQueueCapacity";
 import { prisma } from "@/lib/prisma";
 import type { PublishScheduleContext } from "@/lib/types";
 
@@ -97,18 +97,17 @@ export async function getPublishScheduleContextForPost(input: {
     fromDate: recommendationBase,
     days: 10,
   });
-  const nextAvailableDate = await findNextPublishDateWithCapacity({
+  const nextAvailableSlot = await findNextPublishSlotWithCapacity({
     userId: input.userId,
     workspaceId,
     fromDate: recommendationBase,
   });
-  const queueAwareSuggestedFirstPublishAt = nextAvailableDate
-    ? mergeDateWithTime(nextAvailableDate, recommendationBase)
-    : spacingRecommendedFirstPublishAt;
+  const queueAwareSuggestedFirstPublishAt = nextAvailableSlot ?? spacingRecommendedFirstPublishAt;
   const recommendationBaseDateKey = toUtcDateKey(recommendationBase);
+  const nextAvailableDateKey = nextAvailableSlot ? toUtcDateKey(nextAvailableSlot) : null;
   const queueSuggestionReason =
-    nextAvailableDate &&
-    nextAvailableDate !== recommendationBaseDateKey
+    nextAvailableDateKey &&
+    nextAvailableDateKey !== recommendationBaseDateKey
       ? `${formatDateKey(recommendationBaseDateKey)} is already at the daily target.`
       : null;
 
@@ -124,6 +123,8 @@ export async function getPublishScheduleContextForPost(input: {
     dailyPublishTarget: queueCapacity.targetPerDay,
     todayScheduledCount: queueCapacity.todayScheduledCount,
     upcomingQueueDays: queueCapacity.upcomingDays,
+    scheduledCountsByDate: queueCapacity.scheduledCountsByDate,
+    occupiedMinutesByDate: queueCapacity.occupiedMinutesByDate,
     queueAwareSuggestedFirstPublishAt: toIsoString(queueAwareSuggestedFirstPublishAt),
     queueSuggestionReason,
     hasPendingSchedule: Boolean(latestScheduledAt),
@@ -150,21 +151,6 @@ function addDays(value: Date, days: number) {
 
 function toIsoString(value: Date | null) {
   return value ? value.toISOString() : null;
-}
-
-function mergeDateWithTime(dateKey: string, timeSource: Date) {
-  const [year, month, day] = dateKey.split("-").map(Number);
-  return new Date(
-    Date.UTC(
-      year,
-      month - 1,
-      day,
-      timeSource.getUTCHours(),
-      timeSource.getUTCMinutes(),
-      timeSource.getUTCSeconds(),
-      timeSource.getUTCMilliseconds(),
-    ),
-  );
 }
 
 function toUtcDateKey(value: Date) {

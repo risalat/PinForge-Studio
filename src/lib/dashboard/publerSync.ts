@@ -10,7 +10,7 @@ const BACKFILL_PAGES_PER_RUN = 1;
 const INCREMENTAL_PAGES_PER_RUN = 1;
 const FULL_SYNC_STATES = ["scheduled", "published", "published_posted"];
 const INCREMENTAL_LOOKBACK_DAYS = 45;
-const INCREMENTAL_FUTURE_WINDOW_DAYS = 120;
+const INCREMENTAL_FUTURE_WINDOW_DAYS = 730;
 const WRITE_BATCH_SIZE = 20;
 
 const PUBLICATION_RECORD_STATE = {
@@ -155,11 +155,6 @@ export async function syncPublerPublicationRecordsForUser(
         });
         break;
       }
-    }
-
-    if (!isBackfill) {
-      hasMore = false;
-      nextPage = null;
     }
 
     return {
