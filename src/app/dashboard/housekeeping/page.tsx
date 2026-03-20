@@ -7,7 +7,7 @@ export default function DashboardHousekeepingPage() {
       <section className="grid gap-4 xl:grid-cols-3">
         <MetricCard label="Storage audit" value="Ready" />
         <MetricCard label="Temp cleanup" value="Ready" />
-        <MetricCard label="Mode" value="Manual" />
+        <MetricCard label="Canonical repair" value="Ready" />
       </section>
 
       <HousekeepingManager databaseReady={isDatabaseConfigured()} />

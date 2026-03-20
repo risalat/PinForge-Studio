@@ -26,12 +26,22 @@ type TempCleanupResult = {
   staleKeys: string[];
 };
 
+type CanonicalPostRepairResult = {
+  scannedPosts: number;
+  canonicalGroupsTouched: number;
+  canonicalizedPosts: number;
+  deletedDuplicatePosts: number;
+  updatedGenerationJobs: number;
+  updatedPublicationRecords: number;
+};
+
 export function HousekeepingManager({ databaseReady }: { databaseReady: boolean }) {
   const [days, setDays] = useState(7);
   const [auditResult, setAuditResult] = useState<StorageAuditResult | null>(null);
   const [cleanupResult, setCleanupResult] = useState<TempCleanupResult | null>(null);
+  const [canonicalRepairResult, setCanonicalRepairResult] = useState<CanonicalPostRepairResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [activeAction, setActiveAction] = useState<"audit" | "preview" | "delete" | null>(null);
+  const [activeAction, setActiveAction] = useState<"audit" | "preview" | "delete" | "canonical-repair" | null>(null);
 
   async function runStorageAudit() {
     setActiveAction("audit");
@@ -96,6 +106,36 @@ export function HousekeepingManager({ databaseReady }: { databaseReady: boolean 
     }
   }
 
+  async function runCanonicalRepair() {
+    if (!window.confirm("Run canonical post repair now? This will merge duplicate posts by canonical URL.")) {
+      return;
+    }
+
+    setActiveAction("canonical-repair");
+
+    try {
+      setError(null);
+      const response = await fetch("/api/dashboard/housekeeping/canonical-post-repair", {
+        method: "POST",
+      });
+      const data = (await response.json()) as {
+        ok?: boolean;
+        error?: string;
+        result?: CanonicalPostRepairResult;
+      };
+
+      if (!response.ok || !data.ok || !data.result) {
+        throw new Error(data.error ?? "Unable to repair canonical posts.");
+      }
+
+      setCanonicalRepairResult(data.result);
+    } catch (repairError) {
+      setError(repairError instanceof Error ? repairError.message : "Unable to repair canonical posts.");
+    } finally {
+      setActiveAction(null);
+    }
+  }
+
   return (
     <div className="space-y-6">
       {error ? (
@@ -104,7 +144,7 @@ export function HousekeepingManager({ databaseReady }: { databaseReady: boolean 
         </div>
       ) : null}
 
-      <section className="grid gap-4 xl:grid-cols-2">
+      <section className="grid gap-4 xl:grid-cols-3">
         <div className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-5 shadow-[var(--dashboard-shadow-sm)]">
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -234,6 +274,45 @@ export function HousekeepingManager({ databaseReady }: { databaseReady: boolean 
                     ) : null}
                   </div>
                 )}
+              </div>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-5 shadow-[var(--dashboard-shadow-sm)]">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
+                Canonical repair
+              </p>
+              <h2 className="mt-2 text-xl font-bold">Merge duplicate posts</h2>
+              <p className="mt-2 text-sm text-[var(--dashboard-subtle)]">
+                Run after Publer sync when you want to consolidate duplicate article URLs into a single canonical post record.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={runCanonicalRepair}
+              disabled={!databaseReady || Boolean(activeAction)}
+              className="rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+            >
+              <BusyActionLabel
+                busy={activeAction === "canonical-repair"}
+                label="Run repair"
+                busyLabel="Repairing..."
+                inverse
+              />
+            </button>
+          </div>
+          {canonicalRepairResult ? (
+            <div className="mt-5 space-y-4">
+              <div className="grid gap-3 md:grid-cols-2">
+                <Metric label="Scanned" value={String(canonicalRepairResult.scannedPosts)} />
+                <Metric label="Groups touched" value={String(canonicalRepairResult.canonicalGroupsTouched)} />
+                <Metric label="Posts fixed" value={String(canonicalRepairResult.canonicalizedPosts)} />
+                <Metric label="Duplicates deleted" value={String(canonicalRepairResult.deletedDuplicatePosts)} />
+                <Metric label="Jobs updated" value={String(canonicalRepairResult.updatedGenerationJobs)} />
+                <Metric label="Publer records updated" value={String(canonicalRepairResult.updatedPublicationRecords)} />
               </div>
             </div>
           ) : null}

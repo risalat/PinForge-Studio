@@ -3,7 +3,7 @@ import { resolveCanonicalPost } from "@/lib/posts/canonicalPost";
 import { prisma } from "@/lib/prisma";
 import { createPublerClient, type PublerClient, type PublerPost } from "@/lib/publer/publerClient";
 import { getIntegrationSettingsForUserId } from "@/lib/settings/integrationSettings";
-import { normalizeArticleUrl } from "@/lib/types";
+import { buildArticleUrlCandidates, normalizeArticleUrl, resolveDomain } from "@/lib/types";
 
 const POSTS_PER_PAGE = 50;
 const BACKFILL_PAGES_PER_RUN = 1;
@@ -275,7 +275,67 @@ async function upsertPublerPostsForUser(input: {
       })
     : [];
   const matchedPostIdSet = new Set(matchedPosts.map((post) => post.id));
-  const postIdByUrl = new Map<string, string>();
+  const normalizedUrlEntries = syncablePosts.map((post) => ({
+    post,
+    normalizedUrl: normalizeArticleUrl(post.url),
+    candidateUrls: buildArticleUrlCandidates(post.url),
+  }));
+  const allCandidateUrls = Array.from(
+    new Set(normalizedUrlEntries.flatMap((entry) => entry.candidateUrls)),
+  );
+  const candidatePosts = allCandidateUrls.length
+    ? await prisma.post.findMany({
+        where: {
+          url: {
+            in: allCandidateUrls,
+          },
+        },
+        select: {
+          id: true,
+          url: true,
+          title: true,
+          domain: true,
+          createdAt: true,
+        },
+        orderBy: {
+          createdAt: "asc",
+        },
+      })
+    : [];
+  const candidatePostsByUrl = new Map(candidatePosts.map((post) => [post.url, post]));
+  const postsToCreate = normalizedUrlEntries.filter((entry) =>
+    entry.candidateUrls.every((candidateUrl) => !candidatePostsByUrl.has(candidateUrl)),
+  );
+
+  if (postsToCreate.length > 0) {
+    await prisma.post.createMany({
+      data: postsToCreate.map((entry) => ({
+        url: entry.normalizedUrl,
+        title: getPublicationTitle(entry.post),
+        domain: resolveDomain({ postUrl: entry.normalizedUrl }),
+      })),
+      skipDuplicates: true,
+    });
+
+    const createdPosts = await prisma.post.findMany({
+      where: {
+        url: {
+          in: postsToCreate.map((entry) => entry.normalizedUrl),
+        },
+      },
+      select: {
+        id: true,
+        url: true,
+        title: true,
+        domain: true,
+        createdAt: true,
+      },
+    });
+
+    for (const createdPost of createdPosts) {
+      candidatePostsByUrl.set(createdPost.url, createdPost);
+    }
+  }
 
   let created = 0;
   let updated = 0;
@@ -283,21 +343,32 @@ async function upsertPublerPostsForUser(input: {
   const createPayloads: Prisma.PublicationRecordCreateManyInput[] = [];
   const updateOperations: Prisma.PrismaPromise<unknown>[] = [];
 
-  for (const post of syncablePosts) {
-    const postUrl = normalizeArticleUrl(post.url);
+  for (const entry of normalizedUrlEntries) {
+    const post = entry.post;
+    const postUrl = entry.normalizedUrl;
     const matchedPin = pinMatchByPostId.get(post.id);
     let resolvedPostId =
       matchedPin?.postId && matchedPostIdSet.has(matchedPin.postId)
         ? matchedPin.postId
-        : postIdByUrl.get(postUrl);
+        : undefined;
 
     if (!resolvedPostId && postUrl) {
-      const resolvedPost = await resolveCanonicalPost({
-        url: postUrl,
-        title: getPublicationTitle(post),
-      });
-      resolvedPostId = resolvedPost.id;
-      postIdByUrl.set(postUrl, resolvedPost.id);
+      const candidateMatches = entry.candidateUrls
+        .map((candidateUrl) => candidatePostsByUrl.get(candidateUrl))
+        .filter((value): value is NonNullable<typeof value> => Boolean(value));
+      const canonicalMatch = candidateMatches.find((candidate) => candidate.url === postUrl) ?? null;
+      const directMatch = canonicalMatch ?? candidateMatches[0] ?? null;
+
+      if (directMatch && directMatch.url === postUrl) {
+        resolvedPostId = directMatch.id;
+      } else if (directMatch) {
+        const resolvedPost = await resolveCanonicalPost({
+          url: postUrl,
+          title: getPublicationTitle(post),
+        });
+        resolvedPostId = resolvedPost.id;
+        candidatePostsByUrl.set(resolvedPost.url, resolvedPost);
+      }
     }
 
     if (!resolvedPostId) {
