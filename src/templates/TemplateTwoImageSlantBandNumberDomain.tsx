@@ -274,7 +274,7 @@ function compactSlantBandTitle(input: string) {
   }
 
   if (bounded.length === 3) {
-    return toTitleCase([...bounded, "Ideas"].join(" "));
+    return toTitleCase(bounded.join(" "));
   }
 
   if (bounded.length === 2) {
@@ -324,9 +324,9 @@ function splitSlantBandTitle(title: string, itemNumber: number) {
 
   if (displayWords.length === 3) {
     return {
-      script: toTitleCase(displayWords.slice(0, 2).join(" ")),
-      blockOne: displayWords[2].toUpperCase(),
-      blockTwo: "IDEAS",
+      script: toTitleCase(displayWords[0]),
+      blockOne: displayWords[1].toUpperCase(),
+      blockTwo: displayWords[2].toUpperCase(),
     };
   }
 

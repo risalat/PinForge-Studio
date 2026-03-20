@@ -313,7 +313,7 @@ function compactCenterBandTitle(input: string) {
   }
 
   if (bounded.length === 3) {
-    return toTitleCase([...bounded, "Ideas"].join(" "));
+    return toTitleCase(bounded.join(" "));
   }
 
   if (bounded.length === 2) {

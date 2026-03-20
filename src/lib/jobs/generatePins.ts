@@ -2705,7 +2705,7 @@ function getArtworkGoal(templateId: string, templateSupportsSubtitle: boolean) {
   }
 
   if (templateId === "five-image-center-band-number-domain") {
-    return "Create a number-aware Pinterest artwork headline for a center band with a separate ellipse number badge. Use 4 to 6 strong words total, do not include the count in the headline itself, and favor a softer 1 to 2 word opener followed by two bolder lower lines. Keep it decor-editorial, compact, and visually scannable.";
+    return "Create a number-aware Pinterest artwork headline for a center band with a separate ellipse number badge. It must be 4 to 6 strong words total, never fewer than 4 words, and should not include the count in the headline itself. Favor a softer 1 to 2 word opener followed by two bolder lower lines. Keep it decor-editorial, compact, and visually scannable.";
   }
 
   if (templateId === "hero-arch-sidebar-triptych") {
@@ -2725,7 +2725,7 @@ function getArtworkGoal(templateId: string, templateSupportsSubtitle: boolean) {
   }
 
   if (templateId === "two-image-slant-band-number-domain") {
-    return "Create a decorative Pinterest artwork headline for a diagonal banner with a separate number badge. Use 4 to 6 strong words total, keep it number-aware, and favor a soft two-word opener followed by two stronger title lines. Avoid filler clauses and make the wording visually scannable on-image rather than article-like.";
+    return "Create a decorative Pinterest artwork headline for a diagonal banner with a separate number badge. It must be 4 to 6 words total, never fewer than 4 words, and should not include the count in the headline itself. Favor a soft one- or two-word opener followed by two stronger title lines. Avoid filler clauses and make the wording visually scannable on-image rather than article-like.";
   }
 
   if (templateId === "four-image-split-band-number") {
@@ -2773,6 +2773,7 @@ function enforceArtworkTitleRule(templateId: string, title: string) {
 
   if (templateId === "five-image-center-band-number-domain") {
     headline = ensureHeroNumberArtworkTitle(headline);
+    headline = ensureFourToSixWordCenterBandTitle(headline);
   }
 
   if (templateId === "hero-arch-sidebar-triptych") {
@@ -2795,6 +2796,7 @@ function enforceArtworkTitleRule(templateId: string, title: string) {
 
   if (templateId === "two-image-slant-band-number-domain") {
     headline = ensureHeroNumberArtworkTitle(headline);
+    headline = ensureFourToSixWordSlantBandTitle(headline);
   }
 
   if (templateId === "six-image-triple-split-slant-hero-footer") {
@@ -2857,6 +2859,54 @@ function ensureFourOrFiveWordSidebarTitle(title: string) {
   }
 
   return toTitleCase([words[0] ?? "Bedroom", "Decor", "Ideas", "Style"].join(" "));
+}
+
+function ensureFourToSixWordCenterBandTitle(title: string) {
+  const safeTitle = normalizeRenderText(title);
+  if (!safeTitle) {
+    return "Lovely Bedroom Decor Ideas";
+  }
+
+  const words = safeTitle.split(/\s+/).filter(Boolean).slice(0, 6);
+  if (words.length >= 4) {
+    return toTitleCase(words.join(" "));
+  }
+
+  if (words.length === 3) {
+    const closers = new Set(["ideas", "style", "styles", "looks", "decor", "colors", "tips"]);
+    const lastWord = words[2]?.toLowerCase().replace(/[^a-z0-9]/g, "") ?? "";
+    return toTitleCase([...words, closers.has(lastWord) ? "Style" : "Ideas"].join(" "));
+  }
+
+  if (words.length === 2) {
+    return toTitleCase([...words, "Decor", "Ideas"].join(" "));
+  }
+
+  return toTitleCase([words[0] ?? "Lovely", "Bedroom", "Decor", "Ideas"].join(" "));
+}
+
+function ensureFourToSixWordSlantBandTitle(title: string) {
+  const safeTitle = normalizeRenderText(title);
+  if (!safeTitle) {
+    return "Cozy Front Porch Ideas";
+  }
+
+  const words = safeTitle.split(/\s+/).filter(Boolean).slice(0, 6);
+  if (words.length >= 4) {
+    return toTitleCase(words.join(" "));
+  }
+
+  if (words.length === 3) {
+    const closers = new Set(["ideas", "style", "styles", "looks", "decor", "colors", "tips"]);
+    const lastWord = words[2]?.toLowerCase().replace(/[^a-z0-9]/g, "") ?? "";
+    return toTitleCase([...words, closers.has(lastWord) ? "Style" : "Ideas"].join(" "));
+  }
+
+  if (words.length === 2) {
+    return toTitleCase([...words, "Porch", "Ideas"].join(" "));
+  }
+
+  return toTitleCase([words[0] ?? "Cozy", "Front", "Porch", "Ideas"].join(" "));
 }
 
 function ensureFourOrFiveWordPosterTitle(title: string) {
