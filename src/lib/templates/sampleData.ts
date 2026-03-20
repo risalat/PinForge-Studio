@@ -47,6 +47,14 @@ export const sampleTemplateDataSingleImageTitleFooter: TemplateRenderProps = {
   visualPreset: "obsidian-punch",
 };
 
+export const sampleTemplateDataSingleImageOverlayNumberTitleDomain: TemplateRenderProps = {
+  title: "Timeless Bathroom Ideas",
+  images: ["/sample-images/8.jpg"],
+  domain: "mightypaint.com",
+  itemNumber: 23,
+  visualPreset: "olive-linen",
+};
+
 export const sampleTemplateDataFourImageMasonryHeroNumberDomainPill: TemplateRenderProps = {
   title: "Accent Wall Bedroom Ideas",
   images: [

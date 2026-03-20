@@ -2657,6 +2657,8 @@ function getArtworkTitleRule(templateId: string) {
       return { maxWords: 5, maxChars: 30, maxLines: 5, singleLine: false };
     case "three-image-center-poster-number-footer":
       return { maxWords: 5, maxChars: 34, maxLines: 4, singleLine: false };
+    case "single-image-overlay-number-title-domain":
+      return { maxWords: 5, maxChars: 38, maxLines: 2, singleLine: false };
     case "four-image-split-band-number":
       return { maxWords: 3, maxChars: 24, maxLines: 2, singleLine: false };
     case "two-image-slant-band-number-domain":
@@ -2701,6 +2703,10 @@ function getArtworkGoal(templateId: string, templateSupportsSubtitle: boolean) {
 
   if (templateId === "three-image-center-poster-number-footer") {
     return "Create a number-aware Pinterest artwork headline for a centered poster card with a separate hero number and a separate subtitle line. Use 4 to 5 words total, do not include the count in the headline itself, make the first word a softer opener beside the number, use the two large middle lines for the core message, and make the final word a roundup closer like Ideas, Styles, Looks, or Colors. If there are 5 words total, the two large middle lines should carry 3 words between them. Keep the subtitle separate.";
+  }
+
+  if (templateId === "single-image-overlay-number-title-domain") {
+    return "Create a simple number-aware Pinterest artwork headline for a single-image overlay with a separate hero number. Use 3 to 5 strong words total, do not include the count in the headline itself, and keep it readable in a large two-line title strip. Favor clean roundup wording instead of long article phrases.";
   }
 
   if (templateId === "two-image-slant-band-number-domain") {
@@ -2758,6 +2764,10 @@ function enforceArtworkTitleRule(templateId: string, title: string) {
   if (templateId === "three-image-center-poster-number-footer") {
     headline = ensureHeroNumberArtworkTitle(headline);
     headline = ensureFourOrFiveWordPosterTitle(headline);
+  }
+
+  if (templateId === "single-image-overlay-number-title-domain") {
+    headline = ensureHeroNumberArtworkTitle(headline);
   }
 
   if (templateId === "two-image-slant-band-number-domain") {

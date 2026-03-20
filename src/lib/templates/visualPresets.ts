@@ -2109,6 +2109,7 @@ const TEMPLATE_PRESET_CATEGORY_ALLOWLIST: Record<string, TemplateVisualPresetCat
   "single-image-subtitle-title-cta": ["editorial-soft", "pastel-soft", "earthy-warm", "dark-drama"],
   "single-image-header-title-domain-cta": ["editorial-soft", "pastel-soft", "earthy-warm", "dark-drama"],
   "single-image-title-footer": ["editorial-soft", "pastel-soft", "earthy-warm", "dark-drama"],
+  "single-image-overlay-number-title-domain": ["editorial-soft", "pastel-soft", "earthy-warm", "dark-drama", "graphic-pop", "feminine-bold"],
   "four-image-masonry-hero-number-domain-pill": ["editorial-soft", "pastel-soft", "earthy-warm", "dark-drama", "feminine-bold"],
   "four-image-grid-number-title-domain": ["editorial-soft", "pastel-soft", "earthy-warm", "dark-drama", "feminine-bold"],
   "four-image-grid-title-footer": ["editorial-soft", "pastel-soft", "earthy-warm", "dark-drama", "feminine-bold"],

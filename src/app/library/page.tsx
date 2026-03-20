@@ -157,6 +157,8 @@ function getTemplateDescription(templateId: string) {
       return "Single full-bleed image with a translucent top header card, editorial kicker, uppercase title, and inline domain CTA.";
     case "single-image-title-footer":
       return "Single-image layout with a white subtitle strip, deep footer title panel, and a compact read-more plus domain row.";
+    case "single-image-overlay-number-title-domain":
+      return "Single-image overlay layout with a large centered hero number, widened title strip, and compact domain line inside a soft lower panel.";
     case "four-image-masonry-hero-number-domain-pill":
       return "Four-image masonry collage with a centered number medallion, bold title card, and compact domain pill.";
     case "four-image-grid-number-title-domain":
@@ -200,6 +202,8 @@ function getTemplateUsage(templateId: string) {
       return "Use for tutorial or explainer pins where the title and CTA should sit together in a top header.";
     case "single-image-title-footer":
       return "Use for single-image editorial pins that need a strong dark footer title block.";
+    case "single-image-overlay-number-title-domain":
+      return "Use for simple numbered pins where one image does all the visual work and the title needs a larger two-line overlay treatment.";
     case "four-image-masonry-hero-number-domain-pill":
       return "Use for inspiration roundups that need a visible count and centered title block.";
     case "four-image-grid-number-title-domain":

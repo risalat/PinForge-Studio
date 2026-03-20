@@ -4,6 +4,7 @@ import { TemplateSplitVerticalTitleNumber } from "@/templates/TemplateSplitVerti
 import { TemplateSingleImageSubtitleTitleCta } from "@/templates/TemplateSingleImageSubtitleTitleCta";
 import { TemplateSingleImageHeaderTitleDomainCta } from "@/templates/TemplateSingleImageHeaderTitleDomainCta";
 import { TemplateSingleImageTitleFooter } from "@/templates/TemplateSingleImageTitleFooter";
+import { TemplateSingleImageOverlayNumberTitleDomain } from "@/templates/TemplateSingleImageOverlayNumberTitleDomain";
 import { TemplateFourImageMasonryHeroNumberDomainPill } from "@/templates/TemplateFourImageMasonryHeroNumberDomainPill";
 import { TemplateFourImageGridNumberTitleDomain } from "@/templates/TemplateFourImageGridNumberTitleDomain";
 import { TemplateFourImageGridTitleFooter } from "@/templates/TemplateFourImageGridTitleFooter";
@@ -35,6 +36,7 @@ import {
   sampleTemplateDataNineImageGridOverlayNumberFooter,
   sampleTemplateDataSingleImageHeaderTitleDomainCta,
   sampleTemplateDataSingleImageTitleFooter,
+  sampleTemplateDataSingleImageOverlayNumberTitleDomain,
   sampleTemplateDataNumber,
   sampleTemplateDataNoSubtitle,
   sampleTemplateDataSixImageTripleSplitSlantHeroFooter,
@@ -131,6 +133,21 @@ export const TEMPLATE_CONFIGS: Record<string, TemplateConfig> = {
     features: {
       overlay: true,
       numberTreatment: "none",
+      footer: true,
+    },
+  },
+  "single-image-overlay-number-title-domain": {
+    id: "single-image-overlay-number-title-domain",
+    name: "Single Image Overlay Number Title Domain",
+    componentKey: "TemplateSingleImageOverlayNumberTitleDomain",
+    previewPath: "/preview/single-image-overlay-number-title-domain",
+    locked: true,
+    canvas: { width: 1080, height: 1920 },
+    imageSlotCount: 1,
+    textFields: ["title", "itemNumber", "domain", "visualPreset"],
+    features: {
+      overlay: true,
+      numberTreatment: "hero",
       footer: true,
     },
   },
@@ -356,6 +373,7 @@ const TEMPLATE_COMPONENTS: Record<
   "single-image-subtitle-title-cta": TemplateSingleImageSubtitleTitleCta,
   "single-image-header-title-domain-cta": TemplateSingleImageHeaderTitleDomainCta,
   "single-image-title-footer": TemplateSingleImageTitleFooter,
+  "single-image-overlay-number-title-domain": TemplateSingleImageOverlayNumberTitleDomain,
   "four-image-masonry-hero-number-domain-pill": TemplateFourImageMasonryHeroNumberDomainPill,
   "four-image-grid-number-title-domain": TemplateFourImageGridNumberTitleDomain,
   "four-image-grid-title-footer": TemplateFourImageGridTitleFooter,
@@ -409,6 +427,10 @@ export function getSampleTemplateProps(templateId: string) {
 
   if (templateId === "single-image-title-footer") {
     return sampleTemplateDataSingleImageTitleFooter;
+  }
+
+  if (templateId === "single-image-overlay-number-title-domain") {
+    return sampleTemplateDataSingleImageOverlayNumberTitleDomain;
   }
 
   if (templateId === "four-image-masonry-hero-number-domain-pill") {
