@@ -2,7 +2,9 @@ import {
   validateRenderCopyBatch,
   validatePinCopyBatch,
   validatePinTitleBatch,
+  validateGroupedPinTitleBatch,
   type PinCopy,
+  type GroupedPinTitleBatchItem,
   type RenderCopyOption,
   type PinTitleOption,
 } from "@/lib/ai/validators";
@@ -49,6 +51,14 @@ export interface GeneratePinTitleRequest {
   images?: ImageContextInput[];
 }
 
+export interface GeneratePinTitleBatchRequest {
+  pins: Array<
+    GeneratePinTitleRequest & {
+      pin_id: string;
+    }
+  >;
+}
+
 export interface GeneratePinRenderCopyRequest extends GeneratePinTitleRequest {
   locked_title?: string;
   subtitle_style_hint?: string;
@@ -77,7 +87,11 @@ export interface GeneratePinDescriptionRequest {
   tone_hint?: string;
 }
 
-type GenerateMode = "studio_titles" | "studio_render_copy" | "studio_descriptions";
+type GenerateMode =
+  | "studio_titles"
+  | "studio_titles_batch"
+  | "studio_render_copy"
+  | "studio_descriptions";
 
 const OPENAI_BASE_URL = "https://api.openai.com";
 const OPENROUTER_BASE_URL = "https://openrouter.ai";
@@ -121,6 +135,13 @@ export class AIClient {
     return validatePinTitleBatch(this.extractCandidateArray(data, ["titles", "pins", "items"]));
   }
 
+  async generatePinTitleGroups(
+    payload: GeneratePinTitleBatchRequest,
+  ): Promise<GroupedPinTitleBatchItem[]> {
+    const data = await this.generateStructuredOutput("studio_titles_batch", payload);
+    return validateGroupedPinTitleBatch(this.extractCandidateArray(data, ["pins", "items", "results"]));
+  }
+
   async generatePinRenderCopy(payload: GeneratePinRenderCopyRequest): Promise<RenderCopyOption[]> {
     const data = await this.generateStructuredOutput("studio_render_copy", payload);
     return validateRenderCopyBatch(this.extractCandidateArray(data, ["items", "pins", "results"]));
@@ -133,7 +154,11 @@ export class AIClient {
 
   private async generateStructuredOutput(
     mode: GenerateMode,
-    payload: GeneratePinTitleRequest | GeneratePinRenderCopyRequest | GeneratePinDescriptionRequest,
+    payload:
+      | GeneratePinTitleRequest
+      | GeneratePinTitleBatchRequest
+      | GeneratePinRenderCopyRequest
+      | GeneratePinDescriptionRequest,
   ): Promise<unknown> {
     switch (this.config.provider) {
       case "openai":
@@ -152,7 +177,11 @@ export class AIClient {
 
   private async generateViaCustomEndpoint(
     mode: GenerateMode,
-    payload: GeneratePinTitleRequest | GeneratePinRenderCopyRequest | GeneratePinDescriptionRequest,
+    payload:
+      | GeneratePinTitleRequest
+      | GeneratePinTitleBatchRequest
+      | GeneratePinRenderCopyRequest
+      | GeneratePinDescriptionRequest,
   ): Promise<unknown> {
     const endpoint = this.config.customEndpoint?.trim() ?? "";
     if (!endpoint) {
@@ -211,7 +240,10 @@ export class AIClient {
 
   private async generateViaOpenAI(
     mode: GenerateMode,
-    payload: GeneratePinTitleRequest | GeneratePinDescriptionRequest,
+    payload:
+      | GeneratePinTitleRequest
+      | GeneratePinTitleBatchRequest
+      | GeneratePinDescriptionRequest,
   ): Promise<unknown> {
     const apiKey = this.requireApiKey("OpenAI");
     const model = this.requireModel("OpenAI");
@@ -268,7 +300,10 @@ export class AIClient {
 
   private async generateViaOpenRouter(
     mode: GenerateMode,
-    payload: GeneratePinTitleRequest | GeneratePinDescriptionRequest,
+    payload:
+      | GeneratePinTitleRequest
+      | GeneratePinTitleBatchRequest
+      | GeneratePinDescriptionRequest,
   ): Promise<unknown> {
     const apiKey = this.requireApiKey("OpenRouter");
     const model = this.requireModel("OpenRouter");
@@ -325,7 +360,10 @@ export class AIClient {
 
   private async generateViaGemini(
     mode: GenerateMode,
-    payload: GeneratePinTitleRequest | GeneratePinDescriptionRequest,
+    payload:
+      | GeneratePinTitleRequest
+      | GeneratePinTitleBatchRequest
+      | GeneratePinDescriptionRequest,
   ): Promise<unknown> {
     const apiKey = this.requireApiKey("Gemini");
     const model = this.normalizeGeminiModel(this.requireModel("Gemini"));
@@ -388,7 +426,10 @@ export class AIClient {
 
   private async generateViaKoalaChat(
     mode: GenerateMode,
-    payload: GeneratePinTitleRequest | GeneratePinDescriptionRequest,
+    payload:
+      | GeneratePinTitleRequest
+      | GeneratePinTitleBatchRequest
+      | GeneratePinDescriptionRequest,
   ): Promise<unknown> {
     const apiKey = this.requireApiKey("KoalaChat");
     const model = this.config.model?.trim() || KOALA_DEFAULT_MODEL;
@@ -527,7 +568,11 @@ export class AIClient {
 
   private buildMessages(
     mode: GenerateMode,
-    payload: GeneratePinTitleRequest | GeneratePinRenderCopyRequest | GeneratePinDescriptionRequest,
+    payload:
+      | GeneratePinTitleRequest
+      | GeneratePinTitleBatchRequest
+      | GeneratePinRenderCopyRequest
+      | GeneratePinDescriptionRequest,
   ): Array<Record<string, string>> {
     return [
       {
@@ -541,34 +586,34 @@ export class AIClient {
 
   private buildUserPrompt(
     mode: GenerateMode,
-    payload: GeneratePinTitleRequest | GeneratePinRenderCopyRequest | GeneratePinDescriptionRequest,
+    payload:
+      | GeneratePinTitleRequest
+      | GeneratePinTitleBatchRequest
+      | GeneratePinRenderCopyRequest
+      | GeneratePinDescriptionRequest,
   ) {
     if (mode === "studio_titles") {
-      const titlePayload = payload as GeneratePinTitleRequest;
+      return this.buildSingleTitlePrompt(payload as GeneratePinTitleRequest);
+    }
+
+    if (mode === "studio_titles_batch") {
+      const titleBatchPayload = payload as GeneratePinTitleBatchRequest;
       return [
-        "Generate Pinterest title variations for one specific pin.",
-        "Use the article title as the source of truth, then use the assigned image context to choose the strongest angle for this pin.",
-        "Treat headings, captions, section paths, and surrounding snippets as important signals for the pin angle.",
-        "The title should feel specific to this pin, not generic to the whole article.",
-        "Do not write one title per image. Write one strong title for the pin represented by the combined image context.",
-        "Do not invent claims that are not supported by the article title or the provided image/section context.",
-        "If a list_count_hint is provided, use numeric or list-style framing when it fits naturally.",
-        this.buildTitleStyleInstruction(titlePayload.title_style ?? "balanced"),
-        `Tone hint: ${titlePayload.tone_hint ?? "none"}`,
-        `Variation count target: ${titlePayload.variation_count ?? 3}`,
-        `Article title: ${titlePayload.article_title}`,
-        `Destination URL: ${titlePayload.destination_url}`,
-        `Global keywords: ${(titlePayload.global_keywords ?? []).join(", ") || "none"}`,
-        `Primary keyword focus: ${titlePayload.keyword_focus ?? "none"}`,
-        `Secondary keywords: ${(titlePayload.secondary_keywords ?? []).join(", ") || "none"}`,
-        `Avoid repeating these keywords if possible: ${(titlePayload.avoid_keywords ?? []).join(", ") || "none"}`,
-        `Recent accepted titles to avoid echoing: ${(titlePayload.recent_titles ?? []).join(" | ") || "none"}`,
-        `List count hint: ${titlePayload.list_count_hint ?? "none"}`,
-        "Assigned image context for this pin:",
-        JSON.stringify(titlePayload.images ?? [], null, 2),
-        'Return JSON with this shape: {"titles":[{"title":"..."}]}',
-        "Rules: title <= 100 chars, no hashtags, distinct variations, specific pin-level framing, avoid generic filler, and prefer unused keyword angles when possible.",
-      ].join("\n");
+        `Generate Pinterest title variations for ${titleBatchPayload.pins.length} specific pins in one batch.`,
+        "Treat each pin independently. Do not blend concepts, keywords, or image context across pins.",
+        "Use the article title as the source of truth for each pin, then use that pin's assigned image context to choose the strongest angle.",
+        "Return every requested pin_id exactly once.",
+        "Return JSON with this shape: {\"pins\":[{\"pin_id\":\"...\",\"titles\":[{\"title\":\"...\"}]}]}",
+        "Batch rules: title <= 100 chars, no hashtags, distinct variations per pin, specific pin-level framing, avoid generic filler, and prefer unused keyword angles when possible.",
+        ...titleBatchPayload.pins.map((pin) =>
+          [
+            `PIN ID: ${pin.pin_id}`,
+            this.buildSingleTitlePrompt(pin, {
+              returnShape: "{\"titles\":[{\"title\":\"...\"}]}",
+            }),
+          ].join("\n"),
+        ),
+      ].join("\n\n");
     }
 
     if (mode === "studio_render_copy") {
@@ -666,7 +711,11 @@ export class AIClient {
 
   private buildPromptLog(
     mode: GenerateMode,
-    payload: GeneratePinTitleRequest | GeneratePinRenderCopyRequest | GeneratePinDescriptionRequest,
+    payload:
+      | GeneratePinTitleRequest
+      | GeneratePinTitleBatchRequest
+      | GeneratePinRenderCopyRequest
+      | GeneratePinDescriptionRequest,
   ) {
     const systemPrompt = "You write Pinterest copy. Return valid JSON only. No markdown. No hashtags.";
     const userPrompt = this.buildUserPrompt(mode, payload);
@@ -675,12 +724,48 @@ export class AIClient {
 
   private buildKoalaPrompt(
     mode: GenerateMode,
-    payload: GeneratePinTitleRequest | GeneratePinRenderCopyRequest | GeneratePinDescriptionRequest,
+    payload:
+      | GeneratePinTitleRequest
+      | GeneratePinTitleBatchRequest
+      | GeneratePinRenderCopyRequest
+      | GeneratePinDescriptionRequest,
   ) {
     return [
       "Return ONLY valid JSON. No extra text. No markdown fences.",
       this.buildUserPrompt(mode, payload),
     ].join("\n\n");
+  }
+
+  private buildSingleTitlePrompt(
+    payload: GeneratePinTitleRequest,
+    options?: {
+      returnShape?: string;
+    },
+  ) {
+    return [
+      "Generate Pinterest title variations for one specific pin.",
+      "Use the article title as the source of truth, then use the assigned image context to choose the strongest angle for this pin.",
+      "Treat headings, captions, section paths, and surrounding snippets as important signals for the pin angle.",
+      "The title should feel specific to this pin, not generic to the whole article.",
+      "Do not write one title per image. Write one strong title for the pin represented by the combined image context.",
+      "Do not invent claims that are not supported by the article title or the provided image/section context.",
+      "If a list_count_hint is provided, use numeric or list-style framing when it fits naturally.",
+      this.buildTitleStyleInstruction(payload.title_style ?? "balanced"),
+      `Tone hint: ${payload.tone_hint ?? "none"}`,
+      `Variation count target: ${payload.variation_count ?? 3}`,
+      `Article title: ${payload.article_title}`,
+      `Destination URL: ${payload.destination_url}`,
+      `Global keywords: ${(payload.global_keywords ?? []).join(", ") || "none"}`,
+      `Primary keyword focus: ${payload.keyword_focus ?? "none"}`,
+      `Secondary keywords: ${(payload.secondary_keywords ?? []).join(", ") || "none"}`,
+      `Avoid repeating these keywords if possible: ${(payload.avoid_keywords ?? []).join(", ") || "none"}`,
+      `Recent accepted titles to avoid echoing: ${(payload.recent_titles ?? []).join(" | ") || "none"}`,
+      `List count hint: ${payload.list_count_hint ?? "none"}`,
+      "Assigned image context for this pin:",
+      JSON.stringify(payload.images ?? [], null, 2),
+      `Return JSON with this shape: ${options?.returnShape ?? '{"titles":[{"title":"..."}]}'}`,
+      "Rules: title <= 100 chars, no hashtags, distinct variations, specific pin-level framing, avoid generic filler, and prefer unused keyword angles when possible.",
+    ].join("\n");
   }
 
   private buildTitleStyleInstruction(style: TitleStyle) {
@@ -898,6 +983,13 @@ export async function generatePinTitle(
   config?: Partial<AIProviderConfig>,
 ) {
   return createAIClient(config).generatePinTitles(payload);
+}
+
+export async function generatePinTitleBatch(
+  payload: GeneratePinTitleBatchRequest,
+  config?: Partial<AIProviderConfig>,
+) {
+  return createAIClient(config).generatePinTitleGroups(payload);
 }
 
 export async function generatePinRenderCopy(

@@ -12,6 +12,7 @@ import {
   generatePinDescription,
   generatePinRenderCopy,
   generatePinTitle,
+  generatePinTitleBatch,
   shouldFallbackAIProviderError,
   type AIProviderConfig,
   type GeneratePinRenderCopyRequest,
@@ -1277,87 +1278,20 @@ export async function generateTitlesForJobPins(input: {
   });
   const recentTitles: string[] = [];
   const usedKeywordFocuses = new Set<string>();
+  const titleChunkSize = getPublishingTitleChunkSize(
+    aiCredentials,
+    job.titleVariationCount ?? 3,
+  );
 
-  for (const chunk of chunkArray(pinsToGenerate, 4)) {
-    const chunkPrimaryKeywords = chunk
-      .map((pin) => keywordPlan.get(pin.id)?.primaryKeyword?.trim())
-      .filter((value): value is string => Boolean(value));
-
-    const chunkResults = await Promise.all(
-      chunk.map(async (pin) => {
-        try {
-          const coordination = keywordPlan.get(pin.id);
-          const titleDrafts = await runAIWithFallbacks(
-            aiCredentials,
-            (config) =>
-              generatePinTitle(
-                buildTitleRequest(
-                  job,
-                  {
-                    templateName: pin.template.name,
-                    templateSupportsSubtitle:
-                      getTemplateConfig(pin.templateId)?.textFields.includes("subtitle") ?? false,
-                    numberTreatment:
-                      getTemplateConfig(pin.templateId)?.features.numberTreatment ?? "none",
-                    imageAssignments: pin.plan.imageAssignments,
-                    itemNumber:
-                      parsePlanRenderContext(pin.plan.notes).itemNumber ??
-                      job.listCountHint ??
-                      job.sourceImages.length,
-                  },
-                  {
-                    keywordFocus: coordination?.primaryKeyword,
-                    secondaryKeywords: coordination?.secondaryKeywords ?? [],
-                    avoidKeywords: [
-                      ...usedKeywordFocuses,
-                      ...chunkPrimaryKeywords.filter(
-                        (keyword) => keyword !== coordination?.primaryKeyword,
-                      ),
-                    ],
-                    recentTitles: recentTitles.slice(-8),
-                  },
-                ),
-                config,
-              ),
-            "Unable to generate a title.",
-          );
-          const titleCandidates = normalizeGeneratedTitleCandidates(titleDrafts);
-          const title = titleCandidates[0]?.trim();
-          if (!title) {
-            throw new Error("AI title generation returned an empty title.");
-          }
-
-          await prisma.pinCopy.upsert({
-            where: { generatedPinId: pin.id },
-            update: {
-              title,
-              titleOptions: titleCandidates,
-              titleStatus: PinCopyFieldStatus.GENERATED,
-            },
-            create: {
-              generatedPinId: pin.id,
-              title,
-              titleOptions: titleCandidates,
-              titleStatus: PinCopyFieldStatus.GENERATED,
-            },
-          });
-
-          return {
-            ok: true as const,
-            pinId: pin.id,
-            titles: titleCandidates,
-            title,
-            primaryKeyword: coordination?.primaryKeyword?.trim() || "",
-          };
-        } catch (error) {
-          return {
-            ok: false as const,
-            pinId: pin.id,
-            reason: error instanceof Error ? error.message : "Unable to generate a title.",
-          };
-        }
-      }),
-    );
+  for (const chunk of chunkArray(pinsToGenerate, titleChunkSize)) {
+    const chunkResults = await generatePublishingTitleResultsForChunk({
+      job,
+      chunk,
+      aiCredentials,
+      keywordPlan,
+      usedKeywordFocuses,
+      recentTitles,
+    });
 
     for (const item of chunkResults) {
       if (!item.ok) {
@@ -2592,6 +2526,7 @@ function shapeRenderCopyForTemplate(input: {
     if (!input.titleLocked) {
       title = integrateItemNumberIntoRenderTitle(title, input.itemNumber, input.numberTreatment);
       title = enforceArtworkTitleRule(input.templateId, title);
+      title = normalizeTemplateTitle(input.templateId, title, input.articleTitle);
     }
 
     subtitle = subtitle
@@ -2600,6 +2535,8 @@ function shapeRenderCopyForTemplate(input: {
         : normalizeTemplateSubtitle(
             input.templateId,
             normalizeSubtitleKicker(subtitle, title, input.articleTitle),
+            title,
+            input.articleTitle,
           )
       : undefined;
 
@@ -2619,6 +2556,7 @@ function shapeRenderCopyForTemplate(input: {
     });
 
     title = enforceArtworkTitleRule(input.templateId, title);
+    title = normalizeTemplateTitle(input.templateId, title, input.articleTitle);
   }
 
   return {
@@ -2690,7 +2628,7 @@ function getArtworkTitleRule(templateId: string) {
     case "masonry-grid-number-title-footer":
       return { maxWords: 5, maxChars: 34, maxLines: 2, singleLine: false };
     case "six-image-triple-split-slant-hero-footer":
-      return { maxWords: 4, maxChars: 30, maxLines: 2, singleLine: false };
+      return { maxWords: 5, maxChars: 34, maxLines: 2, singleLine: false };
     case "single-image-header-title-domain-cta":
       return { maxWords: 7, maxChars: 52, maxLines: 3, singleLine: false };
     case "single-image-subtitle-title-cta":
@@ -2725,7 +2663,7 @@ function getArtworkGoal(templateId: string, templateSupportsSubtitle: boolean) {
   }
 
   if (templateId === "single-image-overlay-number-title-domain") {
-    return "Create a simple number-aware Pinterest artwork headline for a single-image overlay with a separate hero number. Use 3 to 5 strong words total, do not include the count in the headline itself, and keep it readable in a large two-line title strip. Favor clean roundup wording instead of long article phrases.";
+    return "Create a simple number-aware Pinterest artwork headline for a single-image overlay with a separate hero number. Use 3 to 5 strong generic words total, do not include the count in the headline itself, and keep it readable in a large two-line title strip. Favor a plain roundup-style title based on the article's main topic only. Do not pivot to image-specific color, material, or micro-detail language if it narrows the article topic.";
   }
 
   if (templateId === "split-vertical-title-number") {
@@ -2741,7 +2679,7 @@ function getArtworkGoal(templateId: string, templateSupportsSubtitle: boolean) {
   }
 
   if (templateId === "six-image-triple-split-slant-hero-footer") {
-    return "Create a number-aware Pinterest artwork headline for a six-image collage with a separate count and a separate script subtitle. Use 3 to 4 strong words total, do not include the count in the headline itself, and keep the last word visually punchy for the emphasized lower line.";
+    return "Create a number-aware Pinterest artwork headline for a six-image collage with a separate count and a separate script subtitle. Use 3 to 5 strong words total, do not include the count in the headline itself, and keep the last word visually punchy for the emphasized lower line. If the title already ends with a natural roundup closer like Ideas, Looks, Decor, or Colors, keep it instead of padding another filler word.";
   }
 
   return templateSupportsSubtitle
@@ -2809,6 +2747,7 @@ function enforceArtworkTitleRule(templateId: string, title: string) {
 
   if (templateId === "six-image-triple-split-slant-hero-footer") {
     headline = ensureHeroNumberArtworkTitle(headline);
+    headline = ensureThreeToFiveWordSlantHeroFooterTitle(headline);
   }
 
   return headline;
@@ -2853,20 +2792,29 @@ function ensureFourOrFiveWordSidebarTitle(title: string) {
     return "Bedroom Decor Ideas You'll Love";
   }
 
-  const words = safeTitle.split(/\s+/).filter(Boolean).slice(0, 5);
+  const words = safeTitle.split(/\s+/).filter(Boolean).slice(0, 6);
+  const closers = new Set(["ideas", "style", "styles", "looks", "colors", "decor", "tips"]);
   if (words.length >= 4) {
     return toTitleCase(words.join(" "));
   }
 
   if (words.length === 3) {
-    return toTitleCase([...words, "Style"].join(" "));
+    const lastWord = words[2]?.toLowerCase().replace(/[^a-z0-9]/g, "") ?? "";
+    if (closers.has(lastWord)) {
+      return toTitleCase(words.join(" "));
+    }
+    return toTitleCase([...words, "Ideas"].join(" "));
   }
 
   if (words.length === 2) {
-    return toTitleCase([...words, "Ideas", "Style"].join(" "));
+    const lastWord = words[1]?.toLowerCase().replace(/[^a-z0-9]/g, "") ?? "";
+    if (closers.has(lastWord)) {
+      return toTitleCase([words[0], words[1], "Looks"].join(" "));
+    }
+    return toTitleCase([...words, "Ideas", "Looks"].join(" "));
   }
 
-  return toTitleCase([words[0] ?? "Bedroom", "Decor", "Ideas", "Style"].join(" "));
+  return toTitleCase([words[0] ?? "Bedroom", "Decor", "Ideas", "Looks"].join(" "));
 }
 
 function ensureFourToSixWordCenterBandTitle(title: string) {
@@ -2875,18 +2823,25 @@ function ensureFourToSixWordCenterBandTitle(title: string) {
     return "Lovely Bedroom Decor Ideas";
   }
 
-  const words = safeTitle.split(/\s+/).filter(Boolean).slice(0, 6);
+  const words = safeTitle.split(/\s+/).filter(Boolean).slice(0, 5);
+  const closers = new Set(["ideas", "style", "styles", "looks", "decor", "colors", "tips"]);
   if (words.length >= 4) {
     return toTitleCase(words.join(" "));
   }
 
   if (words.length === 3) {
-    const closers = new Set(["ideas", "style", "styles", "looks", "decor", "colors", "tips"]);
     const lastWord = words[2]?.toLowerCase().replace(/[^a-z0-9]/g, "") ?? "";
-    return toTitleCase([...words, closers.has(lastWord) ? "Style" : "Ideas"].join(" "));
+    if (closers.has(lastWord)) {
+      return toTitleCase(words.join(" "));
+    }
+    return toTitleCase([...words, "Ideas"].join(" "));
   }
 
   if (words.length === 2) {
+    const lastWord = words[1]?.toLowerCase().replace(/[^a-z0-9]/g, "") ?? "";
+    if (closers.has(lastWord)) {
+      return toTitleCase([words[0], words[1], "Looks"].join(" "));
+    }
     return toTitleCase([...words, "Decor", "Ideas"].join(" "));
   }
 
@@ -2915,6 +2870,37 @@ function ensureFourToSixWordSlantBandTitle(title: string) {
   }
 
   return toTitleCase([words[0] ?? "Cozy", "Front", "Porch", "Ideas"].join(" "));
+}
+
+function ensureThreeToFiveWordSlantHeroFooterTitle(title: string) {
+  const safeTitle = normalizeRenderText(title);
+  if (!safeTitle) {
+    return "Standout Front Door Ideas";
+  }
+
+  const words = safeTitle.split(/\s+/).filter(Boolean).slice(0, 5);
+  const closers = new Set(["ideas", "style", "styles", "looks", "decor", "colors", "tips"]);
+  if (words.length >= 4) {
+    return toTitleCase(words.join(" "));
+  }
+
+  if (words.length === 3) {
+    const lastWord = words[2]?.toLowerCase().replace(/[^a-z0-9]/g, "") ?? "";
+    if (closers.has(lastWord)) {
+      return toTitleCase(words.join(" "));
+    }
+    return toTitleCase([...words, "Ideas"].join(" "));
+  }
+
+  if (words.length === 2) {
+    const lastWord = words[1]?.toLowerCase().replace(/[^a-z0-9]/g, "") ?? "";
+    if (closers.has(lastWord)) {
+      return toTitleCase([words[0], words[1], "Looks"].join(" "));
+    }
+    return toTitleCase([...words, "Front", "Ideas"].join(" "));
+  }
+
+  return toTitleCase([words[0] ?? "Standout", "Front", "Door", "Ideas"].join(" "));
 }
 
 function ensureFourOrFiveWordPosterTitle(title: string) {
@@ -2950,6 +2936,10 @@ function getSubtitleStyleHint(templateId: string, templateSupportsSubtitle: bool
 
   if (templateId === "three-image-center-poster-number-footer") {
     return "A short poster subtitle, 4 to 6 words, supportive not repetitive.";
+  }
+
+   if (templateId === "six-image-triple-split-slant-hero-footer") {
+    return "A short script subtitle, 3 to 5 words, supportive not repetitive, and different from the title. Avoid numbers, avoid repeating the main title nouns, and do not sound like a cut-off article sentence.";
   }
 
   return "Very short editorial kicker, 3 to 5 words.";
@@ -3049,7 +3039,12 @@ function normalizeSubtitleKicker(subtitle: string, title: string, articleTitle: 
   return next;
 }
 
-function normalizeTemplateSubtitle(templateId: string, subtitle?: string) {
+function normalizeTemplateSubtitle(
+  templateId: string,
+  subtitle?: string,
+  title?: string,
+  articleTitle?: string,
+) {
   const next = normalizeRenderText(subtitle);
   if (!next) {
     return undefined;
@@ -3063,7 +3058,118 @@ function normalizeTemplateSubtitle(templateId: string, subtitle?: string) {
     return words.slice(0, 6).join(" ");
   }
 
+  if (templateId === "six-image-triple-split-slant-hero-footer") {
+    const fallback = buildSixImageScriptSubtitle(title ?? "", articleTitle ?? "");
+    const titleWordSet = new Set(
+      normalizeContextText(title ?? "")
+        .split(" ")
+        .map((word) => word.trim())
+        .filter((word) => word !== ""),
+    );
+    const words = next
+      .split(/\s+/)
+      .map((word) => word.trim())
+      .filter(Boolean);
+    const filtered = words.filter((word) => {
+      const normalized = word.toLowerCase().replace(/[^a-z0-9]/g, "");
+      return normalized !== "" && !/^\d+$/.test(normalized) && !titleWordSet.has(normalized);
+    });
+
+    if (filtered.length < 3) {
+      return fallback;
+    }
+
+    return toTitleCase(filtered.slice(0, 5).join(" "));
+  }
+
   return next;
+}
+
+function normalizeTemplateTitle(templateId: string, title: string, articleTitle: string) {
+  const next = normalizeRenderText(title);
+  if (!next) {
+    return next;
+  }
+
+  if (templateId === "single-image-overlay-number-title-domain") {
+    return buildGenericOverlayTopicTitle(articleTitle);
+  }
+
+  return next;
+}
+
+function buildGenericOverlayTopicTitle(articleTitle: string) {
+  const closers = new Set(["ideas", "style", "styles", "looks", "decor", "colors", "tips"]);
+  const weakWords = new Set(["a", "an", "and", "for", "in", "of", "the", "to", "with", "your"]);
+  const articleWords = normalizeRenderText(articleTitle)
+    .split(/\s+/)
+    .map((word) => word.trim())
+    .filter(Boolean)
+    .map((word) => ({
+      raw: word,
+      normalized: word.toLowerCase().replace(/[^a-z0-9]/g, ""),
+    }))
+    .filter((entry) => entry.normalized !== "" && !/^\d+$/.test(entry.normalized));
+
+  const closerIndex = articleWords.findIndex((entry) => closers.has(entry.normalized));
+  const pool = closerIndex > 0 ? articleWords.slice(0, closerIndex) : articleWords;
+  const filtered = pool.filter((entry) => !weakWords.has(entry.normalized));
+  const opener = filtered.slice(0, Math.max(0, filtered.length - 1));
+  const closer = articleWords.find((entry) => closers.has(entry.normalized))?.normalized ?? "ideas";
+  const bounded = [...opener.map((entry) => entry.raw), toTitleToken(closer)].slice(0, 5);
+
+  return toTitleCase(bounded.join(" ") || "Front Door Ideas");
+}
+
+function toTitleToken(value: string) {
+  return value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
+}
+
+function buildSixImageScriptSubtitle(title: string, articleTitle: string) {
+  const titleWordSet = new Set(
+    normalizeContextText(title)
+      .split(" ")
+      .map((word) => word.trim())
+      .filter((word) => word !== ""),
+  );
+  const weakWords = new Set([
+    "a",
+    "an",
+    "and",
+    "for",
+    "in",
+    "of",
+    "the",
+    "to",
+    "with",
+    "your",
+    "ideas",
+    "style",
+    "styles",
+    "looks",
+    "decor",
+    "colors",
+    "tips",
+  ]);
+  const articleWords = normalizeRenderText(articleTitle)
+    .split(/\s+/)
+    .map((word) => word.trim())
+    .filter(Boolean);
+  const filtered = articleWords.filter((word) => {
+    const normalized = word.toLowerCase().replace(/[^a-z0-9]/g, "");
+    return (
+      normalized !== "" &&
+      !/^\d+$/.test(normalized) &&
+      !weakWords.has(normalized) &&
+      !titleWordSet.has(normalized)
+    );
+  });
+
+  if (filtered.length >= 3) {
+    return toTitleCase(filtered.slice(0, 5).join(" "));
+  }
+
+  return "Fresh Ideas Worth Saving";
 }
 
 function shouldUseSplitSubtitle(splitSubtitle: string, currentSubtitle?: string) {
@@ -3259,6 +3365,227 @@ function chunkArray<T>(items: T[], size: number) {
   }
 
   return chunks;
+}
+
+function shouldUseBatchedPublishingTitles(configs: ResolvedAICredentialConfig[]) {
+  return configs[0]?.provider === "koala";
+}
+
+function getPublishingTitleChunkSize(
+  configs: ResolvedAICredentialConfig[],
+  titleVariationCount?: number | null,
+) {
+  if (!shouldUseBatchedPublishingTitles(configs)) {
+    return 4;
+  }
+
+  const requestedVariations = Math.max(1, titleVariationCount ?? 3);
+  if (requestedVariations >= 4) {
+    return 2;
+  }
+
+  return 3;
+}
+
+async function generatePublishingTitleResultsForChunk(input: {
+  job: WorkflowJob;
+  chunk: WorkflowJob["generatedPins"];
+  aiCredentials: ResolvedAICredentialConfig[];
+  keywordPlan: Map<
+    string,
+    {
+      primaryKeyword?: string;
+      secondaryKeywords: string[];
+    }
+  >;
+  usedKeywordFocuses: Set<string>;
+  recentTitles: string[];
+}) {
+  const requestEntries = buildPublishingTitleBatchEntries(input);
+
+  if (!shouldUseBatchedPublishingTitles(input.aiCredentials) || requestEntries.length <= 1) {
+    return Promise.all(
+      requestEntries.map((entry) =>
+        generateSinglePublishingTitleResult(entry, input.aiCredentials),
+      ),
+    );
+  }
+
+  try {
+    const groupedDrafts = await runAIWithFallbacks(
+      input.aiCredentials,
+      (config) =>
+        generatePinTitleBatch(
+          {
+            pins: requestEntries.map((entry) => ({
+              pin_id: entry.pin.id,
+              ...entry.request,
+            })),
+          },
+          config,
+        ),
+      "Unable to generate titles.",
+    );
+
+    const groupedByPinId = new Map(groupedDrafts.map((item) => [item.pin_id, item]));
+    const batchedSuccesses = new Map<
+      string,
+      Awaited<ReturnType<typeof generateSinglePublishingTitleResult>>
+    >();
+    const retryEntries: typeof requestEntries = [];
+
+    for (const entry of requestEntries) {
+      const grouped = groupedByPinId.get(entry.pin.id);
+      const titleCandidates = grouped
+        ? normalizeGeneratedTitleCandidates(grouped.titles)
+        : [];
+      const title = titleCandidates[0]?.trim();
+
+      if (!title) {
+        retryEntries.push(entry);
+        continue;
+      }
+
+      await persistGeneratedPinTitle(entry.pin.id, title, titleCandidates);
+      batchedSuccesses.set(entry.pin.id, {
+        ok: true as const,
+        pinId: entry.pin.id,
+        titles: titleCandidates,
+        title,
+        primaryKeyword: entry.primaryKeyword,
+      });
+    }
+
+    const retryResults = await Promise.all(
+      retryEntries.map((entry) =>
+        generateSinglePublishingTitleResult(entry, input.aiCredentials),
+      ),
+    );
+    const retryByPinId = new Map(retryResults.map((item) => [item.pinId, item]));
+
+    return requestEntries.map(
+      (entry) =>
+        batchedSuccesses.get(entry.pin.id) ??
+        retryByPinId.get(entry.pin.id) ?? {
+          ok: false as const,
+          pinId: entry.pin.id,
+          reason: "Unable to generate a title.",
+        },
+    );
+  } catch {
+    return Promise.all(
+      requestEntries.map((entry) =>
+        generateSinglePublishingTitleResult(entry, input.aiCredentials),
+      ),
+    );
+  }
+}
+
+function buildPublishingTitleBatchEntries(input: {
+  job: WorkflowJob;
+  chunk: WorkflowJob["generatedPins"];
+  keywordPlan: Map<
+    string,
+    {
+      primaryKeyword?: string;
+      secondaryKeywords: string[];
+    }
+  >;
+  usedKeywordFocuses: Set<string>;
+  recentTitles: string[];
+}) {
+  const chunkPrimaryKeywords = input.chunk
+    .map((pin) => input.keywordPlan.get(pin.id)?.primaryKeyword?.trim())
+    .filter((value): value is string => Boolean(value));
+
+  return input.chunk.map((pin) => {
+    const coordination = input.keywordPlan.get(pin.id);
+    const request = buildTitleRequest(
+      input.job,
+      {
+        templateName: pin.template.name,
+        templateSupportsSubtitle:
+          getTemplateConfig(pin.templateId)?.textFields.includes("subtitle") ?? false,
+        numberTreatment:
+          getTemplateConfig(pin.templateId)?.features.numberTreatment ?? "none",
+        imageAssignments: pin.plan.imageAssignments,
+        itemNumber:
+          parsePlanRenderContext(pin.plan.notes).itemNumber ??
+          input.job.listCountHint ??
+          input.job.sourceImages.length,
+      },
+      {
+        keywordFocus: coordination?.primaryKeyword,
+        secondaryKeywords: coordination?.secondaryKeywords ?? [],
+        avoidKeywords: [
+          ...input.usedKeywordFocuses,
+          ...chunkPrimaryKeywords.filter((keyword) => keyword !== coordination?.primaryKeyword),
+        ],
+        recentTitles: input.recentTitles.slice(-8),
+      },
+    );
+
+    return {
+      pin,
+      request,
+      primaryKeyword: coordination?.primaryKeyword?.trim() || "",
+    };
+  });
+}
+
+async function generateSinglePublishingTitleResult(
+  entry: ReturnType<typeof buildPublishingTitleBatchEntries>[number],
+  aiCredentials: ResolvedAICredentialConfig[],
+) {
+  try {
+    const titleDrafts = await runAIWithFallbacks(
+      aiCredentials,
+      (config) => generatePinTitle(entry.request, config),
+      "Unable to generate a title.",
+    );
+    const titleCandidates = normalizeGeneratedTitleCandidates(titleDrafts);
+    const title = titleCandidates[0]?.trim();
+    if (!title) {
+      throw new Error("AI title generation returned an empty title.");
+    }
+
+    await persistGeneratedPinTitle(entry.pin.id, title, titleCandidates);
+
+    return {
+      ok: true as const,
+      pinId: entry.pin.id,
+      titles: titleCandidates,
+      title,
+      primaryKeyword: entry.primaryKeyword,
+    };
+  } catch (error) {
+    return {
+      ok: false as const,
+      pinId: entry.pin.id,
+      reason: error instanceof Error ? error.message : "Unable to generate a title.",
+    };
+  }
+}
+
+async function persistGeneratedPinTitle(
+  pinId: string,
+  title: string,
+  titleCandidates: string[],
+) {
+  await prisma.pinCopy.upsert({
+    where: { generatedPinId: pinId },
+    update: {
+      title,
+      titleOptions: titleCandidates,
+      titleStatus: PinCopyFieldStatus.GENERATED,
+    },
+    create: {
+      generatedPinId: pinId,
+      title,
+      titleOptions: titleCandidates,
+      titleStatus: PinCopyFieldStatus.GENERATED,
+    },
+  });
 }
 
 async function runAIWithFallbacks<T>(

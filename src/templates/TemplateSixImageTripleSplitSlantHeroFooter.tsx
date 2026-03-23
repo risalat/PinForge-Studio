@@ -220,7 +220,7 @@ export function TemplateSixImageTripleSplitSlantHeroFooter({
 
           <AutoFitText
             as="p"
-            text={subtitle?.trim() || "That Wow from Every Angle"}
+            text={subtitle?.trim() || "Fresh Ideas Worth Saving"}
             minFontSize={40}
             maxFontSize={56}
             maxLines={2}

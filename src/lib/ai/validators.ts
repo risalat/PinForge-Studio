@@ -86,6 +86,15 @@ export const PinTitleBatchSchema = z
     });
   });
 
+export const GroupedPinTitleBatchItemSchema = z.object({
+  pin_id: z.string().trim().min(1, "Pin id is required."),
+  titles: PinTitleBatchSchema,
+});
+
+export const GroupedPinTitleBatchSchema = z
+  .array(GroupedPinTitleBatchItemSchema)
+  .min(1, "At least one grouped pin title item is required.");
+
 export const RenderCopyBatchSchema = z
   .array(RenderCopyOptionSchema)
   .min(1, "At least one render copy item is required.")
@@ -104,9 +113,14 @@ export const RenderCopyBatchSchema = z
 export type PinTitleOption = z.infer<typeof PinTitleOptionSchema>;
 export type RenderCopyOption = z.infer<typeof RenderCopyOptionSchema>;
 export type PinCopy = z.infer<typeof PinCopySchema>;
+export type GroupedPinTitleBatchItem = z.infer<typeof GroupedPinTitleBatchItemSchema>;
 
 export function validatePinTitleBatch(value: unknown): PinTitleOption[] {
   return PinTitleBatchSchema.parse(value);
+}
+
+export function validateGroupedPinTitleBatch(value: unknown): GroupedPinTitleBatchItem[] {
+  return GroupedPinTitleBatchSchema.parse(value);
 }
 
 export function validatePinCopyBatch(value: unknown): PinCopy[] {
