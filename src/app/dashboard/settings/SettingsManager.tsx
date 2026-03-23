@@ -19,6 +19,7 @@ const aiProviderOptions: Array<{ value: AIProvider; label: string }> = [
   { value: "gemini", label: "Google Gemini" },
   { value: "openai", label: "OpenAI" },
   { value: "openrouter", label: "OpenRouter" },
+  { value: "koala", label: "KoalaChat" },
   { value: "custom_endpoint", label: "Custom endpoint" },
 ];
 

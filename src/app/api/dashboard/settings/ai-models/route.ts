@@ -7,7 +7,7 @@ import { isDatabaseConfigured } from "@/lib/env";
 import { getIntegrationSettings, resolveAiCredentialForUserId } from "@/lib/settings/integrationSettings";
 
 const schema = z.object({
-  provider: z.enum(["gemini", "openai", "openrouter", "custom_endpoint"]),
+  provider: z.enum(["gemini", "openai", "openrouter", "koala", "custom_endpoint"]),
   credentialId: z.string().optional(),
   apiKey: z.string().optional(),
   model: z.string().optional(),

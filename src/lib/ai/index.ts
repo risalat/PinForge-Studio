@@ -6,9 +6,15 @@ import {
   type RenderCopyOption,
   type PinTitleOption,
 } from "@/lib/ai/validators";
+import { AIProviderError } from "@/lib/ai/providerError";
+import {
+  callKoalaChat,
+  KOALA_CHAT_MODELS,
+  KOALA_DEFAULT_MODEL,
+} from "@/lib/ai/providers/koalaChat";
 import type { TemplateNumberTreatment } from "@/lib/templates/types";
 
-export type AIProvider = "custom_endpoint" | "openai" | "gemini" | "openrouter";
+export type AIProvider = "custom_endpoint" | "openai" | "gemini" | "openrouter" | "koala";
 export type TitleStyle = "balanced" | "seo" | "curiosity" | "benefit";
 
 export interface AIProviderConfig {
@@ -102,6 +108,8 @@ export class AIClient {
         return this.listOpenRouterModels();
       case "gemini":
         return this.listGeminiModels();
+      case "koala":
+        return this.listKoalaModels();
       case "custom_endpoint":
       default:
         return [];
@@ -134,6 +142,8 @@ export class AIClient {
         return this.generateViaOpenRouter(mode, payload);
       case "gemini":
         return this.generateViaGemini(mode, payload);
+      case "koala":
+        return this.generateViaKoalaChat(mode, payload);
       case "custom_endpoint":
       default:
         return this.generateViaCustomEndpoint(mode, payload);
@@ -142,7 +152,7 @@ export class AIClient {
 
   private async generateViaCustomEndpoint(
     mode: GenerateMode,
-    payload: GeneratePinTitleRequest | GeneratePinDescriptionRequest,
+    payload: GeneratePinTitleRequest | GeneratePinRenderCopyRequest | GeneratePinDescriptionRequest,
   ): Promise<unknown> {
     const endpoint = this.config.customEndpoint?.trim() ?? "";
     if (!endpoint) {
@@ -151,23 +161,52 @@ export class AIClient {
       );
     }
 
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        mode,
-        payload,
-      }),
-    });
+    const prompt = this.buildUserPrompt(mode, payload);
 
-    if (!response.ok) {
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode,
+          payload,
+        }),
+      });
+
       const text = await response.text();
-      throw new Error(
-        `AI copy generation failed (${response.status} ${response.statusText}): ${text}`,
-      );
-    }
+      if (!response.ok) {
+        throw new AIProviderError({
+          provider: "custom_endpoint",
+          statusCode: response.status,
+          responseBody: text,
+          message: `AI copy generation failed (${response.status} ${response.statusText}): ${text}`,
+        });
+      }
 
-    return response.json();
+      const parsed = JSON.parse(text);
+      this.logAICall({
+        provider: "custom_endpoint",
+        mode,
+        prompt,
+        model: this.config.model?.trim() ?? "",
+        rawResponse: text,
+        parsedOutput: parsed,
+        success: true,
+      });
+      return parsed;
+    } catch (error) {
+      this.logAICall({
+        provider: "custom_endpoint",
+        mode,
+        prompt,
+        model: this.config.model?.trim() ?? "",
+        rawResponse: error instanceof AIProviderError ? error.responseBody ?? null : null,
+        parsedOutput: null,
+        success: false,
+        errorMessage: error instanceof Error ? error.message : "Unknown custom endpoint error.",
+      });
+      throw error;
+    }
   }
 
   private async generateViaOpenAI(
@@ -176,31 +215,55 @@ export class AIClient {
   ): Promise<unknown> {
     const apiKey = this.requireApiKey("OpenAI");
     const model = this.requireModel("OpenAI");
+    const prompt = this.buildPromptLog(mode, payload);
 
-    const response = await fetch(`${OPENAI_BASE_URL}/v1/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        temperature: 0.4,
-        response_format: { type: "json_object" },
-        messages: this.buildMessages(mode, payload),
-      }),
-    });
+    try {
+      const response = await fetch(`${OPENAI_BASE_URL}/v1/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model,
+          temperature: 0.4,
+          response_format: { type: "json_object" },
+          messages: this.buildMessages(mode, payload),
+        }),
+      });
 
-    if (!response.ok) {
       const text = await response.text();
-      throw new Error(
-        `OpenAI copy generation failed (${response.status} ${response.statusText}): ${text}`,
-      );
-    }
+      if (!response.ok) {
+        throw new AIProviderError({
+          provider: "openai",
+          statusCode: response.status,
+          responseBody: text,
+          message: `OpenAI copy generation failed (${response.status} ${response.statusText}): ${text}`,
+        });
+      }
 
-    const json = (await response.json()) as Record<string, unknown>;
-    const content = this.extractChatContent(json);
-    return this.parseJsonText(content);
+      const json = JSON.parse(text) as Record<string, unknown>;
+      const content = this.extractChatContent(json);
+      return this.parseJsonTextWithLogging({
+        provider: "openai",
+        mode,
+        prompt,
+        model,
+        rawResponse: content,
+      });
+    } catch (error) {
+      this.logAICall({
+        provider: "openai",
+        mode,
+        prompt,
+        model,
+        rawResponse: error instanceof AIProviderError ? error.responseBody ?? null : null,
+        parsedOutput: null,
+        success: false,
+        errorMessage: error instanceof Error ? error.message : "Unknown OpenAI error.",
+      });
+      throw error;
+    }
   }
 
   private async generateViaOpenRouter(
@@ -209,31 +272,55 @@ export class AIClient {
   ): Promise<unknown> {
     const apiKey = this.requireApiKey("OpenRouter");
     const model = this.requireModel("OpenRouter");
+    const prompt = this.buildPromptLog(mode, payload);
 
-    const response = await fetch(`${OPENROUTER_BASE_URL}/api/v1/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        temperature: 0.4,
-        response_format: { type: "json_object" },
-        messages: this.buildMessages(mode, payload),
-      }),
-    });
+    try {
+      const response = await fetch(`${OPENROUTER_BASE_URL}/api/v1/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model,
+          temperature: 0.4,
+          response_format: { type: "json_object" },
+          messages: this.buildMessages(mode, payload),
+        }),
+      });
 
-    if (!response.ok) {
       const text = await response.text();
-      throw new Error(
-        `OpenRouter copy generation failed (${response.status} ${response.statusText}): ${text}`,
-      );
-    }
+      if (!response.ok) {
+        throw new AIProviderError({
+          provider: "openrouter",
+          statusCode: response.status,
+          responseBody: text,
+          message: `OpenRouter copy generation failed (${response.status} ${response.statusText}): ${text}`,
+        });
+      }
 
-    const json = (await response.json()) as Record<string, unknown>;
-    const content = this.extractChatContent(json);
-    return this.parseJsonText(content);
+      const json = JSON.parse(text) as Record<string, unknown>;
+      const content = this.extractChatContent(json);
+      return this.parseJsonTextWithLogging({
+        provider: "openrouter",
+        mode,
+        prompt,
+        model,
+        rawResponse: content,
+      });
+    } catch (error) {
+      this.logAICall({
+        provider: "openrouter",
+        mode,
+        prompt,
+        model,
+        rawResponse: error instanceof AIProviderError ? error.responseBody ?? null : null,
+        parsedOutput: null,
+        success: false,
+        errorMessage: error instanceof Error ? error.message : "Unknown OpenRouter error.",
+      });
+      throw error;
+    }
   }
 
   private async generateViaGemini(
@@ -242,37 +329,98 @@ export class AIClient {
   ): Promise<unknown> {
     const apiKey = this.requireApiKey("Gemini");
     const model = this.normalizeGeminiModel(this.requireModel("Gemini"));
+    const prompt = this.buildPromptLog(mode, payload);
 
-    const response = await fetch(
-      `${GEMINI_BASE_URL}/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          generationConfig: {
-            temperature: 0.4,
-            responseMimeType: "application/json",
-          },
-          contents: [
-            {
-              role: "user",
-              parts: [{ text: this.buildUserPrompt(mode, payload) }],
+    try {
+      const response = await fetch(
+        `${GEMINI_BASE_URL}/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            generationConfig: {
+              temperature: 0.4,
+              responseMimeType: "application/json",
             },
-          ],
-        }),
-      },
-    );
-
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(
-        `Gemini copy generation failed (${response.status} ${response.statusText}): ${text}`,
+            contents: [
+              {
+                role: "user",
+                parts: [{ text: this.buildUserPrompt(mode, payload) }],
+              },
+            ],
+          }),
+        },
       );
-    }
 
-    const json = (await response.json()) as Record<string, unknown>;
-    const content = this.extractGeminiContent(json);
-    return this.parseJsonText(content);
+      const text = await response.text();
+      if (!response.ok) {
+        throw new AIProviderError({
+          provider: "gemini",
+          statusCode: response.status,
+          responseBody: text,
+          message: `Gemini copy generation failed (${response.status} ${response.statusText}): ${text}`,
+        });
+      }
+
+      const json = JSON.parse(text) as Record<string, unknown>;
+      const content = this.extractGeminiContent(json);
+      return this.parseJsonTextWithLogging({
+        provider: "gemini",
+        mode,
+        prompt,
+        model,
+        rawResponse: content,
+      });
+    } catch (error) {
+      this.logAICall({
+        provider: "gemini",
+        mode,
+        prompt,
+        model,
+        rawResponse: error instanceof AIProviderError ? error.responseBody ?? null : null,
+        parsedOutput: null,
+        success: false,
+        errorMessage: error instanceof Error ? error.message : "Unknown Gemini error.",
+      });
+      throw error;
+    }
+  }
+
+  private async generateViaKoalaChat(
+    mode: GenerateMode,
+    payload: GeneratePinTitleRequest | GeneratePinDescriptionRequest,
+  ): Promise<unknown> {
+    const apiKey = this.requireApiKey("KoalaChat");
+    const model = this.config.model?.trim() || KOALA_DEFAULT_MODEL;
+    const prompt = this.buildKoalaPrompt(mode, payload);
+
+    try {
+      const result = await callKoalaChat({
+        apiKey,
+        model,
+        prompt,
+      });
+
+      return this.parseJsonTextWithLogging({
+        provider: "koala",
+        mode,
+        prompt,
+        model,
+        rawResponse: result.rawText,
+      });
+    } catch (error) {
+      this.logAICall({
+        provider: "koala",
+        mode,
+        prompt,
+        model,
+        rawResponse: error instanceof AIProviderError ? error.responseBody ?? null : null,
+        parsedOutput: null,
+        success: false,
+        errorMessage: error instanceof Error ? error.message : "Unknown KoalaChat error.",
+      });
+      throw error;
+    }
   }
 
   private async listOpenAIModels(): Promise<string[]> {
@@ -368,6 +516,13 @@ export class AIClient {
     }
 
     return [...new Set(models)].sort((a, b) => a.localeCompare(b));
+  }
+
+  private async listKoalaModels(): Promise<string[]> {
+    const configuredModel = this.config.model?.trim() ?? "";
+    return Array.from(
+      new Set([configuredModel, ...KOALA_CHAT_MODELS].filter((value) => value !== "")),
+    );
   }
 
   private buildMessages(
@@ -509,6 +664,25 @@ export class AIClient {
     ].join("\n");
   }
 
+  private buildPromptLog(
+    mode: GenerateMode,
+    payload: GeneratePinTitleRequest | GeneratePinRenderCopyRequest | GeneratePinDescriptionRequest,
+  ) {
+    const systemPrompt = "You write Pinterest copy. Return valid JSON only. No markdown. No hashtags.";
+    const userPrompt = this.buildUserPrompt(mode, payload);
+    return `SYSTEM:\n${systemPrompt}\n\nUSER:\n${userPrompt}`;
+  }
+
+  private buildKoalaPrompt(
+    mode: GenerateMode,
+    payload: GeneratePinTitleRequest | GeneratePinRenderCopyRequest | GeneratePinDescriptionRequest,
+  ) {
+    return [
+      "Return ONLY valid JSON. No extra text. No markdown fences.",
+      this.buildUserPrompt(mode, payload),
+    ].join("\n\n");
+  }
+
   private buildTitleStyleInstruction(style: TitleStyle) {
     switch (style) {
       case "seo":
@@ -602,23 +776,78 @@ export class AIClient {
     return firstText.text;
   }
 
+  private parseJsonTextWithLogging(input: {
+    provider: AIProvider;
+    mode: GenerateMode;
+    prompt: string;
+    model: string;
+    rawResponse: string;
+  }) {
+    const parsed = this.parseJsonText(input.rawResponse);
+    this.logAICall({
+      provider: input.provider,
+      mode: input.mode,
+      prompt: input.prompt,
+      model: input.model,
+      rawResponse: input.rawResponse,
+      parsedOutput: parsed,
+      success: true,
+    });
+    return parsed;
+  }
+
   private parseJsonText(text: string): unknown {
+    const normalized = text
+      .trim()
+      .replace(/^```json\s*/i, "")
+      .replace(/^```\s*/i, "")
+      .replace(/\s*```$/i, "");
+
     try {
-      return JSON.parse(text);
+      return JSON.parse(normalized);
     } catch {
-      const firstBrace = text.indexOf("{");
-      const lastBrace = text.lastIndexOf("}");
+      const firstBrace = normalized.indexOf("{");
+      const lastBrace = normalized.lastIndexOf("}");
       if (firstBrace >= 0 && lastBrace > firstBrace) {
-        return JSON.parse(text.slice(firstBrace, lastBrace + 1));
+        return JSON.parse(normalized.slice(firstBrace, lastBrace + 1));
       }
 
-      const firstBracket = text.indexOf("[");
-      const lastBracket = text.lastIndexOf("]");
+      const firstBracket = normalized.indexOf("[");
+      const lastBracket = normalized.lastIndexOf("]");
       if (firstBracket >= 0 && lastBracket > firstBracket) {
-        return JSON.parse(text.slice(firstBracket, lastBracket + 1));
+        return JSON.parse(normalized.slice(firstBracket, lastBracket + 1));
       }
       throw new Error("Model response was not valid JSON.");
     }
+  }
+
+  private logAICall(input: {
+    provider: AIProvider;
+    mode: GenerateMode;
+    prompt: string;
+    model: string;
+    rawResponse: string | null;
+    parsedOutput: unknown;
+    success: boolean;
+    errorMessage?: string;
+  }) {
+    const logPayload = {
+      provider: input.provider,
+      mode: input.mode,
+      model: input.model,
+      prompt: input.prompt,
+      rawResponse: input.rawResponse,
+      parsedOutput: input.parsedOutput,
+      success: input.success,
+      errorMessage: input.errorMessage ?? null,
+    };
+
+    if (input.success) {
+      console.info("[pinforge.ai]", JSON.stringify(logPayload));
+      return;
+    }
+
+    console.error("[pinforge.ai]", JSON.stringify(logPayload));
   }
 
   private extractModelIds(response: Record<string, unknown>): string[] {
@@ -710,3 +939,4 @@ export async function generatePinCopy(
 }
 
 export type { PinCopy, PinTitleOption, RenderCopyOption };
+export { shouldFallbackAIProviderError } from "@/lib/ai/providerError";

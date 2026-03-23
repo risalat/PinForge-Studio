@@ -29,7 +29,7 @@ const settingsSchema = z.object({
       }),
     )
     .optional(),
-  aiProvider: z.enum(["gemini", "openai", "openrouter", "custom_endpoint"]).optional(),
+  aiProvider: z.enum(["gemini", "openai", "openrouter", "koala", "custom_endpoint"]).optional(),
   aiApiKey: z.string().optional(),
   aiModel: z.string().optional(),
   aiCustomEndpoint: z.string().optional(),
@@ -38,7 +38,7 @@ const settingsSchema = z.object({
       z.object({
         id: z.string().optional(),
         label: z.string(),
-        provider: z.enum(["gemini", "openai", "openrouter", "custom_endpoint"]),
+        provider: z.enum(["gemini", "openai", "openrouter", "koala", "custom_endpoint"]),
         apiKey: z.string().optional(),
         model: z.string().optional(),
         customEndpoint: z.string().optional(),

@@ -428,6 +428,14 @@ export async function resolveAiCredentialForUserId(input: {
   userId: string;
   aiCredentialId?: string;
 }) {
+  const candidates = await resolveAiCredentialCandidatesForUserId(input);
+  return candidates[0] ?? null;
+}
+
+export async function resolveAiCredentialCandidatesForUserId(input: {
+  userId: string;
+  aiCredentialId?: string;
+}) {
   const [settings, credentials] = await Promise.all([
     prisma.userIntegrationSettings.findUnique({
       where: {
@@ -438,28 +446,43 @@ export async function resolveAiCredentialForUserId(input: {
   ]);
 
   const requestedId = input.aiCredentialId?.trim() ?? "";
-  const selectedCredential =
-    (requestedId ? credentials.find((credential) => credential.id === requestedId) : null) ??
-    pickDefaultAiCredential(credentials) ??
-    summarizeLegacyAiCredential(settings);
+  const ordered = new Map<string, StoredAiCredentialSummary>();
+  const requestedCredential = requestedId
+    ? credentials.find((credential) => credential.id === requestedId)
+    : null;
+  const defaultCredential = pickDefaultAiCredential(credentials);
+  const legacyCredential = summarizeLegacyAiCredential(settings);
 
-  if (!selectedCredential) {
-    return null;
+  for (const credential of [requestedCredential, defaultCredential, ...credentials, legacyCredential]) {
+    if (!credential) {
+      continue;
+    }
+    ordered.set(credential.id, credential);
   }
 
-  const apiKey =
-    "encryptedApiKey" in selectedCredential
-      ? decryptSecret(selectedCredential.encryptedApiKey)
-      : decryptSecret(settings?.aiApiKeyEnc);
+  return Array.from(ordered.values())
+    .map((credential) => {
+      try {
+        const apiKey =
+          "encryptedApiKey" in credential
+            ? decryptSecret(credential.encryptedApiKey)
+            : decryptSecret(settings?.aiApiKeyEnc);
 
-  return {
-    id: selectedCredential.id,
-    label: selectedCredential.label,
-    provider: selectedCredential.provider,
-    apiKey,
-    model: selectedCredential.model,
-    customEndpoint: selectedCredential.customEndpoint,
-  };
+        return {
+          id: credential.id,
+          label: credential.label,
+          provider: credential.provider,
+          apiKey,
+          model: credential.model,
+          customEndpoint: credential.customEndpoint,
+        };
+      } catch {
+        return null;
+      }
+    })
+    .filter((credential): credential is NonNullable<typeof credential> => {
+      return Boolean(credential?.apiKey.trim());
+    });
 }
 
 export async function saveWorkspaceProfileDefaults(input: {
@@ -556,6 +579,7 @@ function toAiProvider(value: string | null | undefined): AIProvider {
     value === "openai" ||
     value === "gemini" ||
     value === "openrouter" ||
+    value === "koala" ||
     value === "custom_endpoint"
   ) {
     return value;

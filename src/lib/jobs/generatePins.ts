@@ -12,7 +12,8 @@ import {
   generatePinDescription,
   generatePinRenderCopy,
   generatePinTitle,
-  type AIProvider,
+  shouldFallbackAIProviderError,
+  type AIProviderConfig,
   type GeneratePinRenderCopyRequest,
   type GeneratePinDescriptionRequest,
   type GeneratePinTitleRequest,
@@ -41,7 +42,7 @@ import { getPublishQueueCapacitySummary } from "@/lib/jobs/publishQueueCapacity"
 import { renderPin } from "@/lib/renderer/renderPin";
 import {
   getIntegrationSettingsForUserId,
-  resolveAiCredentialForUserId,
+  resolveAiCredentialCandidatesForUserId,
 } from "@/lib/settings/integrationSettings";
 import { getStorageProvider } from "@/lib/storage";
 import { buildStorageAssetUrl, resolveStoredAssetUrl } from "@/lib/storage/assetUrl";
@@ -78,6 +79,11 @@ type AssistedPresetStrategy =
   | "random_all"
   | "random_bold"
   | "random_feminine";
+
+type ResolvedAICredentialConfig = AIProviderConfig & {
+  id?: string;
+  label?: string;
+};
 
 const HERO_NUMBER_WEAK_WORDS = new Set([
   "a",
@@ -816,21 +822,19 @@ export async function generatePinsForJob(input: {
   aiCredentialId?: string;
 }) {
   const job = await getOwnedJobOrThrow(input.jobId, input.userId);
-  const [settings, aiCredential] = await Promise.all([
-    getIntegrationSettingsForUserId(input.userId),
-    resolveAiCredentialForUserId({
+  const aiCredentialConfigs = (
+    await resolveAiCredentialCandidatesForUserId({
       userId: input.userId,
       aiCredentialId: input.aiCredentialId,
-    }),
-  ]);
-  const aiConfig = aiCredential
-    ? {
-        aiProvider: aiCredential.provider,
-        aiApiKey: aiCredential.apiKey,
-        aiModel: aiCredential.model,
-        aiCustomEndpoint: aiCredential.customEndpoint,
-      }
-    : settings;
+    })
+  ).map<ResolvedAICredentialConfig>((credential) => ({
+    id: credential.id,
+    label: credential.label,
+    provider: credential.provider,
+    apiKey: credential.apiKey,
+    model: credential.model,
+    customEndpoint: credential.customEndpoint,
+  }));
   const pendingPlanStatuses = new Set<GenerationPlanStatus>([
     GenerationPlanStatus.DRAFT,
     GenerationPlanStatus.READY,
@@ -876,10 +880,15 @@ export async function generatePinsForJob(input: {
       },
     });
 
-      const recentArtworkTitles = generatedPins
-        .map((pin) => pin.pinCopy?.title?.trim())
-        .filter((value): value is string => Boolean(value));
-      const renderCopy = await generateRenderCopyForPlan(job, plan, aiConfig, recentArtworkTitles);
+    const recentArtworkTitles = generatedPins
+      .map((pin) => pin.pinCopy?.title?.trim())
+      .filter((value): value is string => Boolean(value));
+    const renderCopy = await generateRenderCopyForPlan(
+      job,
+      plan,
+      aiCredentialConfigs,
+      recentArtworkTitles,
+    );
     const nextRenderContext = serializePlanRenderContext({
       ...parsePlanRenderContext(plan.notes),
       ...renderCopy,
@@ -1242,11 +1251,11 @@ export async function generateTitlesForJobPins(input: {
   aiCredentialId?: string;
 }) {
   const job = await getOwnedJobOrThrow(input.jobId, input.userId);
-  const aiCredential = await resolveAiCredentialForUserId({
+  const aiCredentials = await resolveAiCredentialCandidatesForUserId({
     userId: input.userId,
     aiCredentialId: input.aiCredentialId,
   });
-  if (!aiCredential) {
+  if (aiCredentials.length === 0) {
     throw new Error("Save an AI credential in Integrations before generating titles.");
   }
   const selectedPins = selectPinsForWorkflowAction(job, input.generatedPinIds);
@@ -1278,39 +1287,39 @@ export async function generateTitlesForJobPins(input: {
       chunk.map(async (pin) => {
         try {
           const coordination = keywordPlan.get(pin.id);
-          const titleDrafts = await generatePinTitle(
-            buildTitleRequest(
-              job,
-              {
-                templateName: pin.template.name,
-                templateSupportsSubtitle:
-                  getTemplateConfig(pin.templateId)?.textFields.includes("subtitle") ?? false,
-                numberTreatment:
-                  getTemplateConfig(pin.templateId)?.features.numberTreatment ?? "none",
-                imageAssignments: pin.plan.imageAssignments,
-                itemNumber:
-                  parsePlanRenderContext(pin.plan.notes).itemNumber ??
-                  job.listCountHint ??
-                  job.sourceImages.length,
-              },
-              {
-                keywordFocus: coordination?.primaryKeyword,
-                secondaryKeywords: coordination?.secondaryKeywords ?? [],
-                avoidKeywords: [
-                  ...usedKeywordFocuses,
-                  ...chunkPrimaryKeywords.filter(
-                    (keyword) => keyword !== coordination?.primaryKeyword,
-                  ),
-                ],
-                recentTitles: recentTitles.slice(-8),
-              },
-            ),
-            {
-              provider: aiCredential.provider,
-              apiKey: aiCredential.apiKey,
-              model: aiCredential.model,
-              customEndpoint: aiCredential.customEndpoint,
-            },
+          const titleDrafts = await runAIWithFallbacks(
+            aiCredentials,
+            (config) =>
+              generatePinTitle(
+                buildTitleRequest(
+                  job,
+                  {
+                    templateName: pin.template.name,
+                    templateSupportsSubtitle:
+                      getTemplateConfig(pin.templateId)?.textFields.includes("subtitle") ?? false,
+                    numberTreatment:
+                      getTemplateConfig(pin.templateId)?.features.numberTreatment ?? "none",
+                    imageAssignments: pin.plan.imageAssignments,
+                    itemNumber:
+                      parsePlanRenderContext(pin.plan.notes).itemNumber ??
+                      job.listCountHint ??
+                      job.sourceImages.length,
+                  },
+                  {
+                    keywordFocus: coordination?.primaryKeyword,
+                    secondaryKeywords: coordination?.secondaryKeywords ?? [],
+                    avoidKeywords: [
+                      ...usedKeywordFocuses,
+                      ...chunkPrimaryKeywords.filter(
+                        (keyword) => keyword !== coordination?.primaryKeyword,
+                      ),
+                    ],
+                    recentTitles: recentTitles.slice(-8),
+                  },
+                ),
+                config,
+              ),
+            "Unable to generate a title.",
           );
           const titleCandidates = normalizeGeneratedTitleCandidates(titleDrafts);
           const title = titleCandidates[0]?.trim();
@@ -1459,11 +1468,11 @@ export async function generateDescriptionsForJobPins(input: {
   aiCredentialId?: string;
 }) {
   const job = await getOwnedJobOrThrow(input.jobId, input.userId);
-  const aiCredential = await resolveAiCredentialForUserId({
+  const aiCredentials = await resolveAiCredentialCandidatesForUserId({
     userId: input.userId,
     aiCredentialId: input.aiCredentialId,
   });
-  if (!aiCredential) {
+  if (aiCredentials.length === 0) {
     throw new Error("Save an AI credential in Integrations before generating descriptions.");
   }
   const selectedPins = selectPinsForWorkflowAction(job, input.generatedPinIds);
@@ -1499,23 +1508,23 @@ export async function generateDescriptionsForJobPins(input: {
 
   for (const chunk of chunkArray(pinsToGenerate, 5)) {
     try {
-      const descriptionDrafts = await generatePinDescription(
-        buildDescriptionRequest(
-          job,
-          chunk.map((pin) => pin.finalizedTitle),
-          chunk.map((pin) => ({
-            title: pin.finalizedTitle,
-            primaryKeyword: keywordPlan.get(pin.id)?.primaryKeyword,
-            secondaryKeywords: keywordPlan.get(pin.id)?.secondaryKeywords ?? [],
-          })),
-          Array.from(usedKeywordFocuses),
-        ),
-        {
-          provider: aiCredential.provider,
-          apiKey: aiCredential.apiKey,
-          model: aiCredential.model,
-          customEndpoint: aiCredential.customEndpoint,
-        },
+      const descriptionDrafts = await runAIWithFallbacks(
+        aiCredentials,
+        (config) =>
+          generatePinDescription(
+            buildDescriptionRequest(
+              job,
+              chunk.map((pin) => pin.finalizedTitle),
+              chunk.map((pin) => ({
+                title: pin.finalizedTitle,
+                primaryKeyword: keywordPlan.get(pin.id)?.primaryKeyword,
+                secondaryKeywords: keywordPlan.get(pin.id)?.secondaryKeywords ?? [],
+              })),
+              Array.from(usedKeywordFocuses),
+            ),
+            config,
+          ),
+        "Unable to generate descriptions.",
       );
 
       for (const [index, pin] of chunk.entries()) {
@@ -2250,12 +2259,7 @@ function hashString(value: string) {
 async function generateRenderCopyForPlan(
   job: WorkflowJob,
   plan: WorkflowJob["generationPlans"][number],
-  settings: {
-    aiProvider: AIProvider;
-    aiApiKey: string;
-    aiModel: string;
-    aiCustomEndpoint: string;
-  },
+  aiConfigs: ResolvedAICredentialConfig[],
   recentArtworkTitles: string[] = [],
 ) {
   const templateConfig = getTemplateConfig(plan.templateId);
@@ -2273,23 +2277,27 @@ async function generateRenderCopyForPlan(
   let subtitle = existing.subtitle?.trim();
 
   if (!title || (supportsSubtitle && !subtitle)) {
-    const renderCopy = await generatePinRenderCopy(
-      buildRenderCopyRequest(job, {
-        templateId: plan.templateId,
-        templateName: plan.template.name,
-        templateSupportsSubtitle: supportsSubtitle,
-        numberTreatment,
-        imageAssignments: plan.imageAssignments,
-        itemNumber,
-        lockedTitle: title,
-        recentTitles: recentArtworkTitles,
-      }),
-      {
-        provider: settings.aiProvider,
-        apiKey: settings.aiApiKey,
-        model: settings.aiModel,
-        customEndpoint: settings.aiCustomEndpoint,
-      },
+    if (aiConfigs.length === 0) {
+      throw new Error("Save an AI credential in Integrations before rendering pins.");
+    }
+
+    const renderCopy = await runAIWithFallbacks(
+      aiConfigs,
+      (config) =>
+        generatePinRenderCopy(
+          buildRenderCopyRequest(job, {
+            templateId: plan.templateId,
+            templateName: plan.template.name,
+            templateSupportsSubtitle: supportsSubtitle,
+            numberTreatment,
+            imageAssignments: plan.imageAssignments,
+            itemNumber,
+            lockedTitle: title,
+            recentTitles: recentArtworkTitles,
+          }),
+          config,
+        ),
+      "Unable to generate render copy.",
     );
 
     title = title || renderCopy[0]?.title?.trim();
@@ -3251,6 +3259,39 @@ function chunkArray<T>(items: T[], size: number) {
   }
 
   return chunks;
+}
+
+async function runAIWithFallbacks<T>(
+  configs: ResolvedAICredentialConfig[],
+  operation: (config: AIProviderConfig) => Promise<T>,
+  fallbackMessage: string,
+) {
+  let lastError: unknown = null;
+
+  for (const [index, config] of configs.entries()) {
+    try {
+      return await operation({
+        provider: config.provider,
+        apiKey: config.apiKey,
+        model: config.model,
+        customEndpoint: config.customEndpoint,
+      });
+    } catch (error) {
+      lastError = error;
+      const canTryAnother = index < configs.length - 1 && shouldFallbackAIProviderError(error);
+      if (canTryAnother) {
+        continue;
+      }
+
+      throw error;
+    }
+  }
+
+  if (lastError instanceof Error) {
+    throw lastError;
+  }
+
+  throw new Error(fallbackMessage);
 }
 
 function startsWithNumericCount(value: string) {
