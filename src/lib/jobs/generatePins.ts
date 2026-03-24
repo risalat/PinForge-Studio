@@ -37,6 +37,7 @@ import {
   uploadMediaWithQueueHandling,
   waitForPublerJobCompletion,
 } from "@/lib/publer/publerClient";
+import { runSerializedPublerUpload } from "@/lib/publer/uploadQueue";
 import { buildCapacityAwareSchedulePreview } from "@/lib/jobs/schedulePreview";
 import { buildTemplateDiverseOrder } from "@/lib/jobs/templateDiversity";
 import { getPublishQueueCapacitySummary } from "@/lib/jobs/publishQueueCapacity";
@@ -1132,110 +1133,134 @@ export async function uploadJobPinsToPubler(input: {
   });
   const selectedPins = selectPinsForWorkflowAction(job, input.generatedPinIds);
   const result = createStepResultAccumulator();
+  await runSerializedPublerUpload(workspaceId, async () => {
+    for (const pin of selectedPins) {
+      const pinAssetUrl = getPinAssetUrl(pin);
 
-  for (const pin of selectedPins) {
-    const pinAssetUrl = getPinAssetUrl(pin);
+      if (pin.publerMedia?.status === MediaUploadStatus.UPLOADED && pin.publerMedia.mediaId) {
+        result.skipped += 1;
+        continue;
+      }
 
-    if (pin.publerMedia?.status === MediaUploadStatus.UPLOADED && pin.publerMedia.mediaId) {
-      result.skipped += 1;
-      continue;
-    }
+      result.processed += 1;
 
-    result.processed += 1;
+      try {
+        const reusableMedia = await findReusableUploadedMedia(job.id, pin);
+        if (reusableMedia?.mediaId) {
+          await prisma.publerMedia.upsert({
+            where: { generatedPinId: pin.id },
+            update: {
+              status: MediaUploadStatus.UPLOADED,
+              sourceUrl: pinAssetUrl,
+              uploadJobId: reusableMedia.uploadJobId,
+              mediaId: reusableMedia.mediaId,
+              rawResponse: reusableMedia.rawResponse as Prisma.InputJsonValue,
+              errorMessage: null,
+            },
+            create: {
+              generatedPinId: pin.id,
+              status: MediaUploadStatus.UPLOADED,
+              sourceUrl: pinAssetUrl,
+              uploadJobId: reusableMedia.uploadJobId,
+              mediaId: reusableMedia.mediaId,
+              rawResponse: reusableMedia.rawResponse as Prisma.InputJsonValue,
+            },
+          });
 
-    try {
-      const reusableMedia = await findReusableUploadedMedia(job.id, pin);
-      if (reusableMedia?.mediaId) {
+          result.succeeded += 1;
+          continue;
+        }
+
+        const resumedUpload = await resumeExistingPublerMediaUpload({
+          pin,
+          client: publerClient,
+          sourceUrl: pinAssetUrl,
+        });
+        if (resumedUpload === "uploaded") {
+          result.succeeded += 1;
+          continue;
+        }
+
         await prisma.publerMedia.upsert({
           where: { generatedPinId: pin.id },
           update: {
-            status: MediaUploadStatus.UPLOADED,
+            status: MediaUploadStatus.UPLOADING,
             sourceUrl: pinAssetUrl,
-            uploadJobId: reusableMedia.uploadJobId,
-            mediaId: reusableMedia.mediaId,
-            rawResponse: reusableMedia.rawResponse as Prisma.InputJsonValue,
             errorMessage: null,
           },
           create: {
             generatedPinId: pin.id,
-            status: MediaUploadStatus.UPLOADED,
+            status: MediaUploadStatus.UPLOADING,
             sourceUrl: pinAssetUrl,
-            uploadJobId: reusableMedia.uploadJobId,
-            mediaId: reusableMedia.mediaId,
-            rawResponse: reusableMedia.rawResponse as Prisma.InputJsonValue,
+          },
+        });
+
+        const mediaJob = await uploadMediaWithQueueHandling({
+          client: publerClient,
+          imageUrl: pinAssetUrl,
+          options: {
+            inLibrary: true,
+            directUpload: true,
+            name: `${job.articleTitleSnapshot} (${pin.templateId})`,
+            source: job.postUrlSnapshot,
+          },
+        });
+
+        await prisma.publerMedia.update({
+          where: { generatedPinId: pin.id },
+          data: {
+            status: MediaUploadStatus.UPLOADING,
+            sourceUrl: pinAssetUrl,
+            uploadJobId: mediaJob.jobId,
+            errorMessage: null,
+          },
+        });
+
+        const mediaSnapshot = await waitForPublerJobCompletion({
+          client: publerClient,
+          jobId: mediaJob.jobId,
+        });
+
+        if (mediaSnapshot.state !== "completed" || !mediaSnapshot.mediaId) {
+          throw new Error(
+            mediaSnapshot.error ?? "Publer media upload finished without a media ID.",
+          );
+        }
+
+        await prisma.publerMedia.update({
+          where: { generatedPinId: pin.id },
+          data: {
+            status: MediaUploadStatus.UPLOADED,
+            uploadJobId: mediaJob.jobId,
+            mediaId: mediaSnapshot.mediaId,
+            rawResponse: mediaSnapshot.raw as Prisma.InputJsonValue,
+            errorMessage: null,
           },
         });
 
         result.succeeded += 1;
-        continue;
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : "Unable to upload media.";
+        result.failed += 1;
+        result.failures.push({ pinId: pin.id, reason });
+
+        await prisma.publerMedia.upsert({
+          where: { generatedPinId: pin.id },
+          update: {
+            status: MediaUploadStatus.FAILED,
+            sourceUrl: pinAssetUrl,
+            errorMessage: reason,
+          },
+          create: {
+            generatedPinId: pin.id,
+            status: MediaUploadStatus.FAILED,
+            sourceUrl: pinAssetUrl,
+            errorMessage: reason,
+          },
+        });
       }
-
-      await prisma.publerMedia.upsert({
-        where: { generatedPinId: pin.id },
-        update: {
-          status: MediaUploadStatus.UPLOADING,
-          sourceUrl: pinAssetUrl,
-          errorMessage: null,
-        },
-        create: {
-          generatedPinId: pin.id,
-          status: MediaUploadStatus.UPLOADING,
-          sourceUrl: pinAssetUrl,
-        },
-      });
-
-      const mediaJob = await uploadMediaWithQueueHandling({
-        client: publerClient,
-        imageUrl: pinAssetUrl,
-        options: {
-          inLibrary: true,
-          directUpload: true,
-          name: `${job.articleTitleSnapshot} (${pin.templateId})`,
-          source: job.postUrlSnapshot,
-        },
-      });
-      const mediaSnapshot = await waitForPublerJobCompletion({
-        client: publerClient,
-        jobId: mediaJob.jobId,
-      });
-
-      if (mediaSnapshot.state !== "completed" || !mediaSnapshot.mediaId) {
-        throw new Error(mediaSnapshot.error ?? "Publer media upload finished without a media ID.");
-      }
-
-      await prisma.publerMedia.update({
-        where: { generatedPinId: pin.id },
-        data: {
-          status: MediaUploadStatus.UPLOADED,
-          uploadJobId: mediaJob.jobId,
-          mediaId: mediaSnapshot.mediaId,
-          rawResponse: mediaSnapshot.raw as Prisma.InputJsonValue,
-          errorMessage: null,
-        },
-      });
-
-      result.succeeded += 1;
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : "Unable to upload media.";
-      result.failed += 1;
-      result.failures.push({ pinId: pin.id, reason });
-
-      await prisma.publerMedia.upsert({
-        where: { generatedPinId: pin.id },
-        update: {
-          status: MediaUploadStatus.FAILED,
-          sourceUrl: pinAssetUrl,
-          errorMessage: reason,
-        },
-        create: {
-          generatedPinId: pin.id,
-          status: MediaUploadStatus.FAILED,
-          sourceUrl: pinAssetUrl,
-          errorMessage: reason,
-        },
-      });
     }
-  }
+  });
 
   await finalizeStepOutcome(job.id, result, {
     successSync: true,
@@ -3886,6 +3911,42 @@ async function findReusableUploadedMedia(
       updatedAt: "desc",
     },
   });
+}
+
+async function resumeExistingPublerMediaUpload(input: {
+  pin: WorkflowJob["generatedPins"][number];
+  client: PublerClient;
+  sourceUrl: string;
+}) {
+  const existingMedia = input.pin.publerMedia;
+  if (
+    existingMedia?.status !== MediaUploadStatus.UPLOADING ||
+    !existingMedia.uploadJobId?.trim()
+  ) {
+    return "continue" as const;
+  }
+
+  const mediaSnapshot = await waitForPublerJobCompletion({
+    client: input.client,
+    jobId: existingMedia.uploadJobId.trim(),
+  });
+
+  if (mediaSnapshot.state === "completed" && mediaSnapshot.mediaId) {
+    await prisma.publerMedia.update({
+      where: { generatedPinId: input.pin.id },
+      data: {
+        status: MediaUploadStatus.UPLOADED,
+        sourceUrl: input.sourceUrl,
+        uploadJobId: existingMedia.uploadJobId.trim(),
+        mediaId: mediaSnapshot.mediaId,
+        rawResponse: mediaSnapshot.raw as Prisma.InputJsonValue,
+        errorMessage: null,
+      },
+    });
+    return "uploaded" as const;
+  }
+
+  return "continue" as const;
 }
 
 function getPinAssetKey(pin: Pick<WorkflowJob["generatedPins"][number], "storageKey" | "exportPath">) {

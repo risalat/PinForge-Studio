@@ -327,7 +327,7 @@ export async function uploadMediaWithQueueHandling(input: {
   imageUrl: string;
   options?: PublerMediaUploadOptions;
 }) {
-  const maxAttempts = 80;
+  const maxAttempts = 180;
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     try {
       return await input.client.uploadMediaFromUrl(input.imageUrl, input.options);
@@ -338,7 +338,7 @@ export async function uploadMediaWithQueueHandling(input: {
         throw error;
       }
 
-      await wait(3000);
+      await wait(getPublerQueueRetryDelayMs(attempt));
     }
   }
 
@@ -351,8 +351,8 @@ export async function waitForPublerJobCompletion(input: {
   maxRounds?: number;
   delayMs?: number;
 }) {
-  const maxRounds = input.maxRounds ?? 120;
-  const delayMs = input.delayMs ?? 3000;
+  const maxRounds = input.maxRounds ?? 240;
+  const delayMs = input.delayMs ?? 5000;
 
   for (let round = 0; round < maxRounds; round += 1) {
     const snapshot = await input.client.checkJobStatus(input.jobId);
@@ -724,4 +724,12 @@ function wait(milliseconds: number) {
   return new Promise<void>((resolve) => {
     setTimeout(resolve, milliseconds);
   });
+}
+
+function getPublerQueueRetryDelayMs(attempt: number) {
+  const baseDelay = 4000;
+  const maxDelay = 15000;
+  const exponentialDelay = Math.min(maxDelay, baseDelay * 2 ** Math.min(attempt, 3));
+  const jitter = Math.floor(Math.random() * 1000);
+  return exponentialDelay + jitter;
 }

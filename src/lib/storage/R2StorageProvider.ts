@@ -40,7 +40,9 @@ export class R2StorageProvider implements StorageProvider {
         Bucket: this.bucketName,
         Key: payload.key,
         Body: payload.body,
-        CacheControl: "no-store, max-age=0",
+        CacheControl: payload.key.startsWith("temp/")
+          ? "no-store, max-age=0"
+          : "public, max-age=31536000, immutable",
         ContentType: payload.contentType,
       }),
     );

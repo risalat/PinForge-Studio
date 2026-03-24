@@ -21,7 +21,9 @@ export async function GET(_request: Request, { params }: StorageRouteProps) {
       status: 200,
       headers: {
         "Content-Type": file.contentType ?? guessContentType(storageKey),
-        "Cache-Control": storageKey.startsWith("temp/") ? "no-store" : "private, max-age=300",
+        "Cache-Control": storageKey.startsWith("temp/")
+          ? "no-store"
+          : "public, max-age=31536000, immutable",
       },
     });
   } catch {
