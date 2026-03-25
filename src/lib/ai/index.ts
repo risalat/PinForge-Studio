@@ -14,6 +14,7 @@ import {
   KOALA_CHAT_MODELS,
   KOALA_DEFAULT_MODEL,
 } from "@/lib/ai/providers/koalaChat";
+import { getOperationContext } from "@/lib/observability/operationContext";
 import type { TemplateNumberTreatment } from "@/lib/templates/types";
 
 export type AIProvider = "custom_endpoint" | "openai" | "gemini" | "openrouter" | "koala";
@@ -916,10 +917,18 @@ export class AIClient {
     success: boolean;
     errorMessage?: string;
   }) {
+    const context = getOperationContext();
     const logPayload = {
       provider: input.provider,
       mode: input.mode,
       model: input.model,
+      correlationId: context?.correlationId ?? null,
+      action: context?.action ?? null,
+      userId: context?.userId ?? null,
+      jobId: context?.jobId ?? null,
+      planId: context?.planId ?? null,
+      generatedPinId: context?.generatedPinId ?? null,
+      workspaceId: context?.workspaceId ?? null,
       prompt: input.prompt,
       rawResponse: input.rawResponse,
       parsedOutput: input.parsedOutput,

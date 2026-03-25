@@ -1,3 +1,9 @@
+import {
+  logStructuredEvent,
+  normalizeErrorForLogging,
+  timeAsyncOperation,
+} from "@/lib/observability/operationContext";
+
 const PUBLER_BASE_URL = "https://app.publer.com/api/v1";
 
 export interface PublerClientConfig {
@@ -281,26 +287,36 @@ export class PublerClient {
       includeWorkspaceHeader?: boolean;
     },
   ): Promise<T> {
-    const headers = new Headers(init?.headers);
-    headers.set("Content-Type", "application/json");
-    headers.set("Authorization", `Bearer-API ${this.apiKey}`);
-    if (options?.includeWorkspaceHeader !== false && this.workspaceId) {
-      headers.set("Publer-Workspace-Id", this.workspaceId);
-    }
+    return timeAsyncOperation(
+      "publer.request",
+      {
+        path,
+        method: init?.method ?? "GET",
+        workspaceId: options?.includeWorkspaceHeader === false ? null : this.workspaceId,
+      },
+      async () => {
+        const headers = new Headers(init?.headers);
+        headers.set("Content-Type", "application/json");
+        headers.set("Authorization", `Bearer-API ${this.apiKey}`);
+        if (options?.includeWorkspaceHeader !== false && this.workspaceId) {
+          headers.set("Publer-Workspace-Id", this.workspaceId);
+        }
 
-    const response = await fetch(`${PUBLER_BASE_URL}${path}`, {
-      ...init,
-      headers,
-    });
+        const response = await fetch(`${PUBLER_BASE_URL}${path}`, {
+          ...init,
+          headers,
+        });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(
-        `Publer API request failed (${response.status} ${response.statusText}): ${errorText}`,
-      );
-    }
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(
+            `Publer API request failed (${response.status} ${response.statusText}): ${errorText}`,
+          );
+        }
 
-    return (await response.json()) as T;
+        return (await response.json()) as T;
+      },
+    );
   }
 }
 
@@ -338,7 +354,14 @@ export async function uploadMediaWithQueueHandling(input: {
         throw error;
       }
 
-      await wait(getPublerQueueRetryDelayMs(attempt));
+      const delayMs = getPublerQueueRetryDelayMs(attempt);
+      logStructuredEvent("warn", "publer.media_queue.waiting", {
+        attempt: attempt + 1,
+        delayMs,
+        imageUrl: input.imageUrl,
+        error: normalizeErrorForLogging(error),
+      });
+      await wait(delayMs);
     }
   }
 

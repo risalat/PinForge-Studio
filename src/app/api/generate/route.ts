@@ -3,6 +3,11 @@ import { z } from "zod";
 import { authenticateApiKeyRequest } from "@/lib/auth/apiKeyAuth";
 import { isDatabaseConfigured } from "@/lib/env";
 import { createIntakeJob } from "@/lib/jobs/generatePins";
+import {
+  createCorrelationId,
+  normalizeErrorForLogging,
+  runWithOperationContext,
+} from "@/lib/observability/operationContext";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -31,45 +36,71 @@ const generateSchema = z.object({
 });
 
 export async function POST(request: Request) {
-  if (!isDatabaseConfigured()) {
-    return NextResponse.json(
-      {
-        error: "DATABASE_URL is not configured. Run Prisma migrations before generating pins.",
-      },
-      { status: 500 },
-    );
-  }
+  const correlationId = createCorrelationId("api_generate");
 
-  try {
-    const auth = await authenticateApiKeyRequest(request);
-    if (!auth.ok) {
-      return auth.response;
-    }
+  return runWithOperationContext(
+    {
+      correlationId,
+      action: "api.generate.intake",
+    },
+    async () => {
+      if (!isDatabaseConfigured()) {
+        return withCorrelationHeader(
+          NextResponse.json(
+            {
+              error: "DATABASE_URL is not configured. Run Prisma migrations before generating pins.",
+            },
+            { status: 500 },
+          ),
+          correlationId,
+        );
+      }
 
-    const rawPayload = await request.json();
-    const payload = generateSchema.parse(rawPayload);
-    const result = await createIntakeJob({
-      payload,
-      userId: auth.user.id,
-    });
+      try {
+        const auth = await authenticateApiKeyRequest(request);
+        if (!auth.ok) {
+          return withCorrelationHeader(auth.response, correlationId);
+        }
 
-    return NextResponse.json({
-      ok: true,
-      jobId: result.jobId,
-      status: result.status,
-      dashboardUrl: result.dashboardUrl,
-      intakeAction: result.intakeAction,
-      message: result.message,
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown generation error";
+        const rawPayload = await request.json();
+        const payload = generateSchema.parse(rawPayload);
+        const result = await createIntakeJob({
+          payload,
+          userId: auth.user.id,
+        });
 
-    return NextResponse.json(
-      {
-        ok: false,
-        error: message,
-      },
-      { status: 500 },
-    );
-  }
+        return withCorrelationHeader(
+          NextResponse.json({
+            ok: true,
+            jobId: result.jobId,
+            status: result.status,
+            dashboardUrl: result.dashboardUrl,
+            intakeAction: result.intakeAction,
+            message: result.message,
+          }),
+          correlationId,
+        );
+      } catch (error) {
+        const normalized = normalizeErrorForLogging(error);
+
+        return withCorrelationHeader(
+          NextResponse.json(
+            {
+              ok: false,
+              error: normalized.message,
+              correlationId,
+              diagnostics: normalized,
+            },
+            { status: 500 },
+          ),
+          correlationId,
+        );
+      }
+    },
+  );
+}
+
+function withCorrelationHeader(response: NextResponse, correlationId: string) {
+  response.headers.set("X-Correlation-Id", correlationId);
+  return response;
 }

@@ -1,4 +1,5 @@
 import { ScheduleRunItemStatus } from "@prisma/client";
+import { runWithOperationContext, timeAsyncOperation } from "@/lib/observability/operationContext";
 import { prisma } from "@/lib/prisma";
 import { normalizeDomain } from "@/lib/types";
 
@@ -47,73 +48,88 @@ export async function listPostPulseRecordsForUser(
   userId: string,
   options?: { workspaceId?: string; allowedDomains?: string[] },
 ): Promise<PostPulseRecord[]> {
-  const workspaceId = options?.workspaceId?.trim() ?? "";
-  const allowedDomains = normalizeAllowedDomains(options?.allowedDomains ?? []);
-  const posts = await prisma.post.findMany({
-    where: {
-      OR: [
-        {
-          jobs: {
-            some: { userId },
-          },
-        },
-        {
-          publicationRecords: {
-            some: {
-              userId,
-              ...(workspaceId ? { providerWorkspaceId: workspaceId } : {}),
-            },
-          },
-        },
-      ],
+  return runWithOperationContext(
+    {
+      action: "dashboard.post_pulse.load",
+      userId,
+      workspaceId: options?.workspaceId?.trim() || undefined,
     },
-    orderBy: {
-      updatedAt: "desc",
-    },
-    include: {
-      jobs: {
-        where: { userId },
-        orderBy: { createdAt: "desc" },
-        include: {
-          generatedPins: {
-            orderBy: { createdAt: "desc" },
-            include: {
-              scheduleRunItems: {
-                where: {
-                  status: ScheduleRunItemStatus.SCHEDULED,
+    async () =>
+      timeAsyncOperation(
+        "dashboard.post_pulse.load",
+        {
+          userId,
+          workspaceId: options?.workspaceId?.trim() || null,
+          allowedDomainCount: options?.allowedDomains?.length ?? 0,
+        },
+        async () => {
+          const workspaceId = options?.workspaceId?.trim() ?? "";
+          const allowedDomains = normalizeAllowedDomains(options?.allowedDomains ?? []);
+          const posts = await prisma.post.findMany({
+            where: {
+              OR: [
+                {
+                  jobs: {
+                    some: { userId },
+                  },
                 },
-                orderBy: { scheduledFor: "desc" },
+                {
+                  publicationRecords: {
+                    some: {
+                      userId,
+                      ...(workspaceId ? { providerWorkspaceId: workspaceId } : {}),
+                    },
+                  },
+                },
+              ],
+            },
+            orderBy: {
+              updatedAt: "desc",
+            },
+            include: {
+              jobs: {
+                where: { userId },
+                orderBy: { createdAt: "desc" },
+                include: {
+                  generatedPins: {
+                    orderBy: { createdAt: "desc" },
+                    include: {
+                      scheduleRunItems: {
+                        where: {
+                          status: ScheduleRunItemStatus.SCHEDULED,
+                        },
+                        orderBy: { scheduledFor: "desc" },
+                        select: {
+                          id: true,
+                          scheduledFor: true,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+              publicationRecords: {
+                where: {
+                  userId,
+                  ...(workspaceId ? { providerWorkspaceId: workspaceId } : {}),
+                },
+                orderBy: [
+                  { publishedAt: "desc" },
+                  { scheduledAt: "desc" },
+                  { createdAt: "desc" },
+                ],
                 select: {
                   id: true,
-                  scheduledFor: true,
+                  state: true,
+                  scheduledAt: true,
+                  publishedAt: true,
+                  syncedAt: true,
                 },
               },
             },
-          },
-        },
-      },
-      publicationRecords: {
-        where: {
-          userId,
-          ...(workspaceId ? { providerWorkspaceId: workspaceId } : {}),
-        },
-        orderBy: [
-          { publishedAt: "desc" },
-          { scheduledAt: "desc" },
-          { createdAt: "desc" },
-        ],
-        select: {
-          id: true,
-          state: true,
-          scheduledAt: true,
-          publishedAt: true,
-          syncedAt: true,
-        },
-      },
-    },
-  });
+          });
 
-  const records = posts.map((post) => {
+          const records = posts.map((post) => {
       const jobs = post.jobs;
       const generatedPins = jobs.flatMap((job) => job.generatedPins);
       const localScheduledItems = generatedPins.flatMap((pin) => pin.scheduleRunItems);
@@ -193,14 +209,17 @@ export async function listPostPulseRecordsForUser(
         latestJobId: jobs[0]?.id ?? null,
         recentActivityDots,
       };
-    });
+          });
 
-  const filteredRecords =
-    allowedDomains.length > 0
-      ? records.filter((record) => allowedDomains.includes(normalizeDomain(record.domain)))
-      : records;
+          const filteredRecords =
+            allowedDomains.length > 0
+              ? records.filter((record) => allowedDomains.includes(normalizeDomain(record.domain)))
+              : records;
 
-  return sortPostPulseRecords(filteredRecords, "priority");
+          return sortPostPulseRecords(filteredRecords, "priority");
+        },
+      ),
+  );
 }
 
 export function buildPostPulseSummary(records: PostPulseRecord[]) {

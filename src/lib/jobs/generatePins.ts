@@ -27,6 +27,10 @@ import {
   EditablePinTitleSchema,
 } from "@/lib/ai/validators";
 import { env } from "@/lib/env";
+import {
+  runWithOperationContext,
+  timeAsyncOperation,
+} from "@/lib/observability/operationContext";
 import { resolveCanonicalPost } from "@/lib/posts/canonicalPost";
 import { prisma } from "@/lib/prisma";
 import {
@@ -823,140 +827,159 @@ export async function generatePinsForJob(input: {
   planIds?: string[];
   aiCredentialId?: string;
 }) {
-  const job = await getOwnedJobOrThrow(input.jobId, input.userId);
-  const aiCredentialConfigs = (
-    await resolveAiCredentialCandidatesForUserId({
+  return runWithOperationContext(
+    {
+      action: "workflow.generate_pins",
       userId: input.userId,
-      aiCredentialId: input.aiCredentialId,
-    })
-  ).map<ResolvedAICredentialConfig>((credential) => ({
-    id: credential.id,
-    label: credential.label,
-    provider: credential.provider,
-    apiKey: credential.apiKey,
-    model: credential.model,
-    customEndpoint: credential.customEndpoint,
-  }));
-  const pendingPlanStatuses = new Set<GenerationPlanStatus>([
-    GenerationPlanStatus.DRAFT,
-    GenerationPlanStatus.READY,
-    GenerationPlanStatus.FAILED,
-  ]);
-  const selectedPlanIds = input.planIds?.length ? new Set(input.planIds) : null;
-  const pendingPlans = job.generationPlans.filter(
-    (plan) =>
-      pendingPlanStatuses.has(plan.status) &&
-      (!selectedPlanIds || selectedPlanIds.has(plan.id)),
-  );
-
-  if (pendingPlans.length === 0) {
-    throw new Error(
-      selectedPlanIds
-        ? "Select at least one ready plan before rendering pins."
-        : "Create at least one generation plan before rendering pins.",
-    );
-  }
-
-  const generatedPins = [];
-
-  for (const plan of pendingPlans) {
-    const template = TEMPLATE_CONFIGS[plan.templateId];
-    if (!template) {
-      throw new Error(`Unknown template configuration: ${plan.templateId}`);
-    }
-
-    await prisma.template.upsert({
-      where: { id: template.id },
-      update: {
-        name: template.name,
-        componentKey: template.componentKey,
-        configJson: template as unknown as Prisma.InputJsonValue,
-        isActive: true,
-      },
-      create: {
-        id: template.id,
-        name: template.name,
-        componentKey: template.componentKey,
-        configJson: template as unknown as Prisma.InputJsonValue,
-        isActive: true,
-      },
-    });
-
-    const recentArtworkTitles = generatedPins
-      .map((pin) => pin.pinCopy?.title?.trim())
-      .filter((value): value is string => Boolean(value));
-    const renderCopy = await generateRenderCopyForPlan(
-      job,
-      plan,
-      aiCredentialConfigs,
-      recentArtworkTitles,
-    );
-    const nextRenderContext = serializePlanRenderContext({
-      ...parsePlanRenderContext(plan.notes),
-      ...renderCopy,
-    });
-    await prisma.generationPlan.update({
-      where: { id: plan.id },
-      data: {
-        notes: nextRenderContext,
-      },
-    });
-
-    const exportObject = await renderPin({
-      jobId: job.id,
-      planId: plan.id,
-      templateId: plan.templateId,
-    });
-    const exportUrl = exportObject.publicUrl ?? buildStorageAssetUrl(exportObject.key);
-
-    const pin = await prisma.generatedPin.create({
-      data: {
-        jobId: job.id,
-        planId: plan.id,
-        templateId: plan.templateId,
-        exportPath: exportUrl,
-        storageKey: exportObject.key,
-        pinCopy: {
-          create: {
-            title: renderCopy.title,
-            titleStatus: PinCopyFieldStatus.GENERATED,
-          },
-        },
-        publerMedia: {
-          create: {
-            status: MediaUploadStatus.PENDING,
-            sourceUrl: exportUrl,
-          },
-        },
-      },
-      include: {
-        pinCopy: true,
-        publerMedia: true,
-      },
-    });
-
-    await prisma.generationPlan.update({
-      where: { id: plan.id },
-      data: {
-        status: GenerationPlanStatus.GENERATED,
-      },
-    });
-
-    generatedPins.push(pin);
-  }
-
-  await prisma.generationJob.update({
-    where: { id: job.id },
-    data: {
-      status: GenerationJobStatus.PINS_GENERATED,
+      jobId: input.jobId,
     },
-  });
-  await recordJobMilestone(job.id, GenerationJobStatus.PINS_GENERATED, "Pins rendered.");
+    async () =>
+      timeAsyncOperation(
+        input.planIds?.length === 1 ? "workflow.single_pin_rerender" : "workflow.bulk_render",
+        {
+          userId: input.userId,
+          jobId: input.jobId,
+          planCount: input.planIds?.length ?? null,
+          aiCredentialId: input.aiCredentialId ?? null,
+        },
+        async () => {
+          const job = await getOwnedJobOrThrow(input.jobId, input.userId);
+          const aiCredentialConfigs = (
+            await resolveAiCredentialCandidatesForUserId({
+              userId: input.userId,
+              aiCredentialId: input.aiCredentialId,
+            })
+          ).map<ResolvedAICredentialConfig>((credential) => ({
+            id: credential.id,
+            label: credential.label,
+            provider: credential.provider,
+            apiKey: credential.apiKey,
+            model: credential.model,
+            customEndpoint: credential.customEndpoint,
+          }));
+          const pendingPlanStatuses = new Set<GenerationPlanStatus>([
+            GenerationPlanStatus.DRAFT,
+            GenerationPlanStatus.READY,
+            GenerationPlanStatus.FAILED,
+          ]);
+          const selectedPlanIds = input.planIds?.length ? new Set(input.planIds) : null;
+          const pendingPlans = job.generationPlans.filter(
+            (plan) =>
+              pendingPlanStatuses.has(plan.status) &&
+              (!selectedPlanIds || selectedPlanIds.has(plan.id)),
+          );
 
-  return {
-    jobId: job.id,
-    generatedPins,
-  };
+          if (pendingPlans.length === 0) {
+            throw new Error(
+              selectedPlanIds
+                ? "Select at least one ready plan before rendering pins."
+                : "Create at least one generation plan before rendering pins.",
+            );
+          }
+
+          const generatedPins = [];
+
+          for (const plan of pendingPlans) {
+            const template = TEMPLATE_CONFIGS[plan.templateId];
+            if (!template) {
+              throw new Error(`Unknown template configuration: ${plan.templateId}`);
+            }
+
+            await prisma.template.upsert({
+              where: { id: template.id },
+              update: {
+                name: template.name,
+                componentKey: template.componentKey,
+                configJson: template as unknown as Prisma.InputJsonValue,
+                isActive: true,
+              },
+              create: {
+                id: template.id,
+                name: template.name,
+                componentKey: template.componentKey,
+                configJson: template as unknown as Prisma.InputJsonValue,
+                isActive: true,
+              },
+            });
+
+            const recentArtworkTitles = generatedPins
+              .map((pin) => pin.pinCopy?.title?.trim())
+              .filter((value): value is string => Boolean(value));
+            const renderCopy = await generateRenderCopyForPlan(
+              job,
+              plan,
+              aiCredentialConfigs,
+              recentArtworkTitles,
+            );
+            const nextRenderContext = serializePlanRenderContext({
+              ...parsePlanRenderContext(plan.notes),
+              ...renderCopy,
+            });
+            await prisma.generationPlan.update({
+              where: { id: plan.id },
+              data: {
+                notes: nextRenderContext,
+              },
+            });
+
+            const exportObject = await renderPin({
+              jobId: job.id,
+              planId: plan.id,
+              templateId: plan.templateId,
+            });
+            const exportUrl = exportObject.publicUrl ?? buildStorageAssetUrl(exportObject.key);
+
+            const pin = await prisma.generatedPin.create({
+              data: {
+                jobId: job.id,
+                planId: plan.id,
+                templateId: plan.templateId,
+                exportPath: exportUrl,
+                storageKey: exportObject.key,
+                pinCopy: {
+                  create: {
+                    title: renderCopy.title,
+                    titleStatus: PinCopyFieldStatus.GENERATED,
+                  },
+                },
+                publerMedia: {
+                  create: {
+                    status: MediaUploadStatus.PENDING,
+                    sourceUrl: exportUrl,
+                  },
+                },
+              },
+              include: {
+                pinCopy: true,
+                publerMedia: true,
+              },
+            });
+
+            await prisma.generationPlan.update({
+              where: { id: plan.id },
+              data: {
+                status: GenerationPlanStatus.GENERATED,
+              },
+            });
+
+            generatedPins.push(pin);
+          }
+
+          await prisma.generationJob.update({
+            where: { id: job.id },
+            data: {
+              status: GenerationJobStatus.PINS_GENERATED,
+            },
+          });
+          await recordJobMilestone(job.id, GenerationJobStatus.PINS_GENERATED, "Pins rendered.");
+
+          return {
+            jobId: job.id,
+            generatedPins,
+          };
+        },
+      ),
+  );
 }
 
 export async function discardGenerationPlansForJob(input: {
@@ -1116,158 +1139,184 @@ export async function uploadJobPinsToPubler(input: {
   generatedPinIds?: string[];
   workspaceId?: string;
 }) {
-  const job = await getOwnedJobOrThrow(input.jobId, input.userId);
-  const settings = await getIntegrationSettingsForUserId(input.userId);
-  const workspaceId = await resolveAccessiblePublerWorkspaceId({
-    apiKey: settings.publerApiKey,
-    requestedWorkspaceId: input.workspaceId?.trim() || settings.publerWorkspaceId,
-  });
+  return runWithOperationContext(
+    {
+      action: "workflow.upload_media",
+      userId: input.userId,
+      jobId: input.jobId,
+    },
+    async () => {
+      const job = await getOwnedJobOrThrow(input.jobId, input.userId);
+      const settings = await getIntegrationSettingsForUserId(input.userId);
+      const workspaceId = await resolveAccessiblePublerWorkspaceId({
+        apiKey: settings.publerApiKey,
+        requestedWorkspaceId: input.workspaceId?.trim() || settings.publerWorkspaceId,
+      });
 
-  if (!workspaceId) {
-    throw new Error("Select a Publer workspace before uploading media.");
-  }
-
-  const publerClient = createPublerClient({
-    apiKey: settings.publerApiKey,
-    workspaceId,
-  });
-  const selectedPins = selectPinsForWorkflowAction(job, input.generatedPinIds);
-  const result = createStepResultAccumulator();
-  await runSerializedPublerUpload(workspaceId, async () => {
-    for (const pin of selectedPins) {
-      const pinAssetUrl = getPinAssetUrl(pin);
-
-      if (pin.publerMedia?.status === MediaUploadStatus.UPLOADED && pin.publerMedia.mediaId) {
-        result.skipped += 1;
-        continue;
-      }
-
-      result.processed += 1;
-
-      try {
-        const reusableMedia = await findReusableUploadedMedia(job.id, pin);
-        if (reusableMedia?.mediaId) {
-          await prisma.publerMedia.upsert({
-            where: { generatedPinId: pin.id },
-            update: {
-              status: MediaUploadStatus.UPLOADED,
-              sourceUrl: pinAssetUrl,
-              uploadJobId: reusableMedia.uploadJobId,
-              mediaId: reusableMedia.mediaId,
-              rawResponse: reusableMedia.rawResponse as Prisma.InputJsonValue,
-              errorMessage: null,
+      return runWithOperationContext(
+        {
+          workspaceId,
+        },
+        async () =>
+          timeAsyncOperation(
+            "workflow.publer_media_upload",
+            {
+              userId: input.userId,
+              jobId: input.jobId,
+              workspaceId,
+              pinCount: input.generatedPinIds?.length ?? null,
             },
-            create: {
-              generatedPinId: pin.id,
-              status: MediaUploadStatus.UPLOADED,
-              sourceUrl: pinAssetUrl,
-              uploadJobId: reusableMedia.uploadJobId,
-              mediaId: reusableMedia.mediaId,
-              rawResponse: reusableMedia.rawResponse as Prisma.InputJsonValue,
+            async () => {
+              if (!workspaceId) {
+                throw new Error("Select a Publer workspace before uploading media.");
+              }
+
+              const publerClient = createPublerClient({
+                apiKey: settings.publerApiKey,
+                workspaceId,
+              });
+              const selectedPins = selectPinsForWorkflowAction(job, input.generatedPinIds);
+              const result = createStepResultAccumulator();
+              await runSerializedPublerUpload(workspaceId, async () => {
+                for (const pin of selectedPins) {
+                  const pinAssetUrl = getPinAssetUrl(pin);
+
+                  if (pin.publerMedia?.status === MediaUploadStatus.UPLOADED && pin.publerMedia.mediaId) {
+                    result.skipped += 1;
+                    continue;
+                  }
+
+                  result.processed += 1;
+
+                  try {
+                    const reusableMedia = await findReusableUploadedMedia(job.id, pin);
+                    if (reusableMedia?.mediaId) {
+                      await prisma.publerMedia.upsert({
+                        where: { generatedPinId: pin.id },
+                        update: {
+                          status: MediaUploadStatus.UPLOADED,
+                          sourceUrl: pinAssetUrl,
+                          uploadJobId: reusableMedia.uploadJobId,
+                          mediaId: reusableMedia.mediaId,
+                          rawResponse: reusableMedia.rawResponse as Prisma.InputJsonValue,
+                          errorMessage: null,
+                        },
+                        create: {
+                          generatedPinId: pin.id,
+                          status: MediaUploadStatus.UPLOADED,
+                          sourceUrl: pinAssetUrl,
+                          uploadJobId: reusableMedia.uploadJobId,
+                          mediaId: reusableMedia.mediaId,
+                          rawResponse: reusableMedia.rawResponse as Prisma.InputJsonValue,
+                        },
+                      });
+
+                      result.succeeded += 1;
+                      continue;
+                    }
+
+                    const resumedUpload = await resumeExistingPublerMediaUpload({
+                      pin,
+                      client: publerClient,
+                      sourceUrl: pinAssetUrl,
+                    });
+                    if (resumedUpload === "uploaded") {
+                      result.succeeded += 1;
+                      continue;
+                    }
+
+                    await prisma.publerMedia.upsert({
+                      where: { generatedPinId: pin.id },
+                      update: {
+                        status: MediaUploadStatus.UPLOADING,
+                        sourceUrl: pinAssetUrl,
+                        errorMessage: null,
+                      },
+                      create: {
+                        generatedPinId: pin.id,
+                        status: MediaUploadStatus.UPLOADING,
+                        sourceUrl: pinAssetUrl,
+                      },
+                    });
+
+                    const mediaJob = await uploadMediaWithQueueHandling({
+                      client: publerClient,
+                      imageUrl: pinAssetUrl,
+                      options: {
+                        inLibrary: true,
+                        directUpload: true,
+                        name: `${job.articleTitleSnapshot} (${pin.templateId})`,
+                        source: job.postUrlSnapshot,
+                      },
+                    });
+
+                    await prisma.publerMedia.update({
+                      where: { generatedPinId: pin.id },
+                      data: {
+                        status: MediaUploadStatus.UPLOADING,
+                        sourceUrl: pinAssetUrl,
+                        uploadJobId: mediaJob.jobId,
+                        errorMessage: null,
+                      },
+                    });
+
+                    const mediaSnapshot = await waitForPublerJobCompletion({
+                      client: publerClient,
+                      jobId: mediaJob.jobId,
+                    });
+
+                    if (mediaSnapshot.state !== "completed" || !mediaSnapshot.mediaId) {
+                      throw new Error(
+                        mediaSnapshot.error ?? "Publer media upload finished without a media ID.",
+                      );
+                    }
+
+                    await prisma.publerMedia.update({
+                      where: { generatedPinId: pin.id },
+                      data: {
+                        status: MediaUploadStatus.UPLOADED,
+                        uploadJobId: mediaJob.jobId,
+                        mediaId: mediaSnapshot.mediaId,
+                        rawResponse: mediaSnapshot.raw as Prisma.InputJsonValue,
+                        errorMessage: null,
+                      },
+                    });
+
+                    result.succeeded += 1;
+                  } catch (error) {
+                    const reason = error instanceof Error ? error.message : "Unable to upload media.";
+                    result.failed += 1;
+                    result.failures.push({ pinId: pin.id, reason });
+
+                    await prisma.publerMedia.upsert({
+                      where: { generatedPinId: pin.id },
+                      update: {
+                        status: MediaUploadStatus.FAILED,
+                        sourceUrl: pinAssetUrl,
+                        errorMessage: reason,
+                      },
+                      create: {
+                        generatedPinId: pin.id,
+                        status: MediaUploadStatus.FAILED,
+                        sourceUrl: pinAssetUrl,
+                        errorMessage: reason,
+                      },
+                    });
+                  }
+                }
+              });
+
+              await finalizeStepOutcome(job.id, result, {
+                successSync: true,
+                failurePrefix: "Media upload",
+              });
+
+              return finalizeStepResult("Media upload", result);
             },
-          });
-
-          result.succeeded += 1;
-          continue;
-        }
-
-        const resumedUpload = await resumeExistingPublerMediaUpload({
-          pin,
-          client: publerClient,
-          sourceUrl: pinAssetUrl,
-        });
-        if (resumedUpload === "uploaded") {
-          result.succeeded += 1;
-          continue;
-        }
-
-        await prisma.publerMedia.upsert({
-          where: { generatedPinId: pin.id },
-          update: {
-            status: MediaUploadStatus.UPLOADING,
-            sourceUrl: pinAssetUrl,
-            errorMessage: null,
-          },
-          create: {
-            generatedPinId: pin.id,
-            status: MediaUploadStatus.UPLOADING,
-            sourceUrl: pinAssetUrl,
-          },
-        });
-
-        const mediaJob = await uploadMediaWithQueueHandling({
-          client: publerClient,
-          imageUrl: pinAssetUrl,
-          options: {
-            inLibrary: true,
-            directUpload: true,
-            name: `${job.articleTitleSnapshot} (${pin.templateId})`,
-            source: job.postUrlSnapshot,
-          },
-        });
-
-        await prisma.publerMedia.update({
-          where: { generatedPinId: pin.id },
-          data: {
-            status: MediaUploadStatus.UPLOADING,
-            sourceUrl: pinAssetUrl,
-            uploadJobId: mediaJob.jobId,
-            errorMessage: null,
-          },
-        });
-
-        const mediaSnapshot = await waitForPublerJobCompletion({
-          client: publerClient,
-          jobId: mediaJob.jobId,
-        });
-
-        if (mediaSnapshot.state !== "completed" || !mediaSnapshot.mediaId) {
-          throw new Error(
-            mediaSnapshot.error ?? "Publer media upload finished without a media ID.",
-          );
-        }
-
-        await prisma.publerMedia.update({
-          where: { generatedPinId: pin.id },
-          data: {
-            status: MediaUploadStatus.UPLOADED,
-            uploadJobId: mediaJob.jobId,
-            mediaId: mediaSnapshot.mediaId,
-            rawResponse: mediaSnapshot.raw as Prisma.InputJsonValue,
-            errorMessage: null,
-          },
-        });
-
-        result.succeeded += 1;
-      } catch (error) {
-        const reason = error instanceof Error ? error.message : "Unable to upload media.";
-        result.failed += 1;
-        result.failures.push({ pinId: pin.id, reason });
-
-        await prisma.publerMedia.upsert({
-          where: { generatedPinId: pin.id },
-          update: {
-            status: MediaUploadStatus.FAILED,
-            sourceUrl: pinAssetUrl,
-            errorMessage: reason,
-          },
-          create: {
-            generatedPinId: pin.id,
-            status: MediaUploadStatus.FAILED,
-            sourceUrl: pinAssetUrl,
-            errorMessage: reason,
-          },
-        });
-      }
-    }
-  });
-
-  await finalizeStepOutcome(job.id, result, {
-    successSync: true,
-    failurePrefix: "Media upload",
-  });
-
-  return finalizeStepResult("Media upload", result);
+          ),
+      );
+    },
+  );
 }
 
 export async function generateTitlesForJobPins(input: {
@@ -1276,76 +1325,95 @@ export async function generateTitlesForJobPins(input: {
   generatedPinIds?: string[];
   aiCredentialId?: string;
 }) {
-  const job = await getOwnedJobOrThrow(input.jobId, input.userId);
-  const aiCredentials = await resolveAiCredentialCandidatesForUserId({
-    userId: input.userId,
-    aiCredentialId: input.aiCredentialId,
-  });
-  if (aiCredentials.length === 0) {
-    throw new Error("Save an AI credential in Integrations before generating titles.");
-  }
-  const selectedPins = selectPinsForWorkflowAction(job, input.generatedPinIds);
-  const result = createStepResultAccumulator();
-  const generatedTitleOptions: Array<{
-    pinId: string;
-    titles: string[];
-  }> = [];
-  const keywordPlan = buildPinKeywordFocusPlan(selectedPins, job.globalKeywords);
-  const pinsToGenerate = selectedPins.filter((pin) => {
-    const existingTitle = pin.pinCopy?.title?.trim();
-    if (existingTitle && pin.pinCopy?.titleStatus === PinCopyFieldStatus.FINALIZED) {
-      result.skipped += 1;
-      return false;
-    }
+  return runWithOperationContext(
+    {
+      action: "workflow.generate_titles",
+      userId: input.userId,
+      jobId: input.jobId,
+    },
+    async () =>
+      timeAsyncOperation(
+        "workflow.publish_title_generation",
+        {
+          userId: input.userId,
+          jobId: input.jobId,
+          pinCount: input.generatedPinIds?.length ?? null,
+          aiCredentialId: input.aiCredentialId ?? null,
+        },
+        async () => {
+          const job = await getOwnedJobOrThrow(input.jobId, input.userId);
+          const aiCredentials = await resolveAiCredentialCandidatesForUserId({
+            userId: input.userId,
+            aiCredentialId: input.aiCredentialId,
+          });
+          if (aiCredentials.length === 0) {
+            throw new Error("Save an AI credential in Integrations before generating titles.");
+          }
+          const selectedPins = selectPinsForWorkflowAction(job, input.generatedPinIds);
+          const result = createStepResultAccumulator();
+          const generatedTitleOptions: Array<{
+            pinId: string;
+            titles: string[];
+          }> = [];
+          const keywordPlan = buildPinKeywordFocusPlan(selectedPins, job.globalKeywords);
+          const pinsToGenerate = selectedPins.filter((pin) => {
+            const existingTitle = pin.pinCopy?.title?.trim();
+            if (existingTitle && pin.pinCopy?.titleStatus === PinCopyFieldStatus.FINALIZED) {
+              result.skipped += 1;
+              return false;
+            }
 
-    result.processed += 1;
-    return true;
-  });
-  const recentTitles: string[] = [];
-  const usedKeywordFocuses = new Set<string>();
-  const titleChunkSize = getPublishingTitleChunkSize(
-    aiCredentials,
-    job.titleVariationCount ?? 3,
+            result.processed += 1;
+            return true;
+          });
+          const recentTitles: string[] = [];
+          const usedKeywordFocuses = new Set<string>();
+          const titleChunkSize = getPublishingTitleChunkSize(
+            aiCredentials,
+            job.titleVariationCount ?? 3,
+          );
+
+          for (const chunk of chunkArray(pinsToGenerate, titleChunkSize)) {
+            const chunkResults = await generatePublishingTitleResultsForChunk({
+              job,
+              chunk,
+              aiCredentials,
+              keywordPlan,
+              usedKeywordFocuses,
+              recentTitles,
+            });
+
+            for (const item of chunkResults) {
+              if (!item.ok) {
+                result.failed += 1;
+                result.failures.push({ pinId: item.pinId, reason: item.reason });
+                continue;
+              }
+
+              generatedTitleOptions.push({
+                pinId: item.pinId,
+                titles: item.titles,
+              });
+              recentTitles.push(item.title);
+              if (item.primaryKeyword) {
+                usedKeywordFocuses.add(item.primaryKeyword);
+              }
+              result.succeeded += 1;
+            }
+          }
+
+          await finalizeStepOutcome(job.id, result, {
+            successSync: true,
+            failurePrefix: "Title generation",
+          });
+
+          return {
+            ...finalizeStepResult("Title generation", result),
+            generatedTitleOptions,
+          };
+        },
+      ),
   );
-
-  for (const chunk of chunkArray(pinsToGenerate, titleChunkSize)) {
-    const chunkResults = await generatePublishingTitleResultsForChunk({
-      job,
-      chunk,
-      aiCredentials,
-      keywordPlan,
-      usedKeywordFocuses,
-      recentTitles,
-    });
-
-    for (const item of chunkResults) {
-      if (!item.ok) {
-        result.failed += 1;
-        result.failures.push({ pinId: item.pinId, reason: item.reason });
-        continue;
-      }
-
-      generatedTitleOptions.push({
-        pinId: item.pinId,
-        titles: item.titles,
-      });
-      recentTitles.push(item.title);
-      if (item.primaryKeyword) {
-        usedKeywordFocuses.add(item.primaryKeyword);
-      }
-      result.succeeded += 1;
-    }
-  }
-
-  await finalizeStepOutcome(job.id, result, {
-    successSync: true,
-    failurePrefix: "Title generation",
-  });
-
-  return {
-    ...finalizeStepResult("Title generation", result),
-    generatedTitleOptions,
-  };
 }
 
 export async function saveJobPinCopyEdits(input: {
@@ -1426,111 +1494,131 @@ export async function generateDescriptionsForJobPins(input: {
   generatedPinIds?: string[];
   aiCredentialId?: string;
 }) {
-  const job = await getOwnedJobOrThrow(input.jobId, input.userId);
-  const aiCredentials = await resolveAiCredentialCandidatesForUserId({
-    userId: input.userId,
-    aiCredentialId: input.aiCredentialId,
-  });
-  if (aiCredentials.length === 0) {
-    throw new Error("Save an AI credential in Integrations before generating descriptions.");
-  }
-  const selectedPins = selectPinsForWorkflowAction(job, input.generatedPinIds);
-  const result = createStepResultAccumulator();
-  const keywordPlan = buildPinKeywordFocusPlan(selectedPins, job.globalKeywords);
-  const pinsToGenerate: Array<(typeof selectedPins)[number] & { finalizedTitle: string }> = [];
-
-  for (const pin of selectedPins) {
-    const finalizedTitle = pin.pinCopy?.title?.trim();
-    if (!finalizedTitle) {
-      result.failed += 1;
-      result.failures.push({
-        pinId: pin.id,
-        reason: "Finalize or generate a title before generating descriptions.",
-      });
-      continue;
-    }
-
-    const existingDescription = pin.pinCopy?.description?.trim();
-    if (existingDescription && pin.pinCopy?.descriptionStatus === PinCopyFieldStatus.FINALIZED) {
-      result.skipped += 1;
-      continue;
-    }
-
-    result.processed += 1;
-    pinsToGenerate.push({
-      ...pin,
-      finalizedTitle,
-    });
-  }
-
-  const usedKeywordFocuses = new Set<string>();
-
-  for (const chunk of chunkArray(pinsToGenerate, 5)) {
-    try {
-      const descriptionDrafts = await runAIWithFallbacks(
-        aiCredentials,
-        (config) =>
-          generatePinDescription(
-            buildDescriptionRequest(
-              job,
-              chunk.map((pin) => pin.finalizedTitle),
-              chunk.map((pin) => ({
-                title: pin.finalizedTitle,
-                primaryKeyword: keywordPlan.get(pin.id)?.primaryKeyword,
-                secondaryKeywords: keywordPlan.get(pin.id)?.secondaryKeywords ?? [],
-              })),
-              Array.from(usedKeywordFocuses),
-            ),
-            config,
-          ),
-        "Unable to generate descriptions.",
-      );
-
-      for (const [index, pin] of chunk.entries()) {
-        const description = descriptionDrafts[index]?.description?.trim();
-        if (!description) {
-          result.failed += 1;
-          result.failures.push({
-            pinId: pin.id,
-            reason: "AI description generation returned an empty description.",
+  return runWithOperationContext(
+    {
+      action: "workflow.generate_descriptions",
+      userId: input.userId,
+      jobId: input.jobId,
+    },
+    async () =>
+      timeAsyncOperation(
+        "workflow.description_generation",
+        {
+          userId: input.userId,
+          jobId: input.jobId,
+          pinCount: input.generatedPinIds?.length ?? null,
+          aiCredentialId: input.aiCredentialId ?? null,
+        },
+        async () => {
+          const job = await getOwnedJobOrThrow(input.jobId, input.userId);
+          const aiCredentials = await resolveAiCredentialCandidatesForUserId({
+            userId: input.userId,
+            aiCredentialId: input.aiCredentialId,
           });
-          continue;
-        }
+          if (aiCredentials.length === 0) {
+            throw new Error("Save an AI credential in Integrations before generating descriptions.");
+          }
+          const selectedPins = selectPinsForWorkflowAction(job, input.generatedPinIds);
+          const result = createStepResultAccumulator();
+          const keywordPlan = buildPinKeywordFocusPlan(selectedPins, job.globalKeywords);
+          const pinsToGenerate: Array<(typeof selectedPins)[number] & { finalizedTitle: string }> = [];
 
-        await prisma.pinCopy.upsert({
-          where: { generatedPinId: pin.id },
-          update: {
-            description,
-            descriptionStatus: PinCopyFieldStatus.GENERATED,
-          },
-          create: {
-            generatedPinId: pin.id,
-            description,
-            descriptionStatus: PinCopyFieldStatus.GENERATED,
-          },
-        });
+          for (const pin of selectedPins) {
+            const finalizedTitle = pin.pinCopy?.title?.trim();
+            if (!finalizedTitle) {
+              result.failed += 1;
+              result.failures.push({
+                pinId: pin.id,
+                reason: "Finalize or generate a title before generating descriptions.",
+              });
+              continue;
+            }
 
-        const primaryKeyword = keywordPlan.get(pin.id)?.primaryKeyword?.trim();
-        if (primaryKeyword) {
-          usedKeywordFocuses.add(primaryKeyword);
-        }
-        result.succeeded += 1;
-      }
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : "Unable to generate descriptions.";
-      for (const pin of chunk) {
-        result.failed += 1;
-        result.failures.push({ pinId: pin.id, reason });
-      }
-    }
-  }
+            const existingDescription = pin.pinCopy?.description?.trim();
+            if (existingDescription && pin.pinCopy?.descriptionStatus === PinCopyFieldStatus.FINALIZED) {
+              result.skipped += 1;
+              continue;
+            }
 
-  await finalizeStepOutcome(job.id, result, {
-    successSync: true,
-    failurePrefix: "Description generation",
-  });
+            result.processed += 1;
+            pinsToGenerate.push({
+              ...pin,
+              finalizedTitle,
+            });
+          }
 
-  return finalizeStepResult("Description generation", result);
+          const usedKeywordFocuses = new Set<string>();
+
+          for (const chunk of chunkArray(pinsToGenerate, 5)) {
+            try {
+              const descriptionDrafts = await runAIWithFallbacks(
+                aiCredentials,
+                (config) =>
+                  generatePinDescription(
+                    buildDescriptionRequest(
+                      job,
+                      chunk.map((pin) => pin.finalizedTitle),
+                      chunk.map((pin) => ({
+                        title: pin.finalizedTitle,
+                        primaryKeyword: keywordPlan.get(pin.id)?.primaryKeyword,
+                        secondaryKeywords: keywordPlan.get(pin.id)?.secondaryKeywords ?? [],
+                      })),
+                      Array.from(usedKeywordFocuses),
+                    ),
+                    config,
+                  ),
+                "Unable to generate descriptions.",
+              );
+
+              for (const [index, pin] of chunk.entries()) {
+                const description = descriptionDrafts[index]?.description?.trim();
+                if (!description) {
+                  result.failed += 1;
+                  result.failures.push({
+                    pinId: pin.id,
+                    reason: "AI description generation returned an empty description.",
+                  });
+                  continue;
+                }
+
+                await prisma.pinCopy.upsert({
+                  where: { generatedPinId: pin.id },
+                  update: {
+                    description,
+                    descriptionStatus: PinCopyFieldStatus.GENERATED,
+                  },
+                  create: {
+                    generatedPinId: pin.id,
+                    description,
+                    descriptionStatus: PinCopyFieldStatus.GENERATED,
+                  },
+                });
+
+                const primaryKeyword = keywordPlan.get(pin.id)?.primaryKeyword?.trim();
+                if (primaryKeyword) {
+                  usedKeywordFocuses.add(primaryKeyword);
+                }
+                result.succeeded += 1;
+              }
+            } catch (error) {
+              const reason =
+                error instanceof Error ? error.message : "Unable to generate descriptions.";
+              for (const pin of chunk) {
+                result.failed += 1;
+                result.failures.push({ pinId: pin.id, reason });
+              }
+            }
+          }
+
+          await finalizeStepOutcome(job.id, result, {
+            successSync: true,
+            failurePrefix: "Description generation",
+          });
+
+          return finalizeStepResult("Description generation", result);
+        },
+      ),
+  );
 }
 
 export async function scheduleJobPins(input: {
@@ -1553,6 +1641,24 @@ export async function scheduleJobPins(input: {
   primaryBoardPercent?: number;
   generatedPinIds?: string[];
 }) {
+  return runWithOperationContext(
+    {
+      action: "workflow.schedule_pins",
+      userId: input.userId,
+      jobId: input.jobId,
+    },
+    async () =>
+      timeAsyncOperation(
+        "workflow.schedule_submission",
+        {
+          userId: input.userId,
+          jobId: input.jobId,
+          workspaceId: input.workspaceId?.trim() || null,
+          pinCount: input.generatedPinIds?.length ?? null,
+          intervalMinutes: input.intervalMinutes,
+          jitterMinutes: input.jitterMinutes ?? 0,
+        },
+        async () => {
   const job = await getOwnedJobOrThrow(input.jobId, input.userId);
   const settings = await getIntegrationSettingsForUserId(input.userId);
   const workspaceId = await resolveAccessiblePublerWorkspaceId({
@@ -1912,6 +2018,9 @@ export async function scheduleJobPins(input: {
     ...finalizeStepResult("Scheduling", result),
     scheduleRunId: scheduleRun.id,
   };
+        },
+      ),
+  );
 }
 
 export async function listJobsForUser(userId: string) {
@@ -1923,13 +2032,29 @@ export async function listJobsForUser(userId: string) {
 }
 
 export async function getJobForUser(jobId: string, userId: string): Promise<WorkflowJob | null> {
-  return prisma.generationJob.findFirst({
-    where: {
-      id: jobId,
+  return runWithOperationContext(
+    {
+      action: "query.job_detail_load",
       userId,
+      jobId,
     },
-    include: jobDetailInclude,
-  });
+    async () =>
+      timeAsyncOperation(
+        "query.job_detail_load",
+        {
+          userId,
+          jobId,
+        },
+        async () =>
+          prisma.generationJob.findFirst({
+            where: {
+              id: jobId,
+              userId,
+            },
+            include: jobDetailInclude,
+          }),
+      ),
+  );
 }
 
 export async function listJobCyclesForPost(userId: string, postId: string): Promise<JobCycleListItem[]> {

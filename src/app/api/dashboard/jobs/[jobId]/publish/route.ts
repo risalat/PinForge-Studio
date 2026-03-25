@@ -12,6 +12,11 @@ import {
   scheduleJobPins,
   uploadJobPinsToPubler,
 } from "@/lib/jobs/generatePins";
+import {
+  createCorrelationId,
+  normalizeErrorForLogging,
+  runWithOperationContext,
+} from "@/lib/observability/operationContext";
 import { resolveStoredAssetUrl } from "@/lib/storage/assetUrl";
 
 export const runtime = "nodejs";
@@ -75,116 +80,165 @@ type RouteProps = {
 };
 
 export async function GET(_request: Request, { params }: RouteProps) {
-  const auth = await requireAuthenticatedDashboardApiUser();
-  if (!auth.ok) {
-    return auth.response;
-  }
+  const correlationId = createCorrelationId("publish_status");
 
-  if (!isDatabaseConfigured()) {
-    return NextResponse.json({ ok: false, error: "DATABASE_URL is not configured." }, { status: 500 });
-  }
+  return runWithOperationContext(
+    {
+      correlationId,
+      action: "api.dashboard.jobs.publish.status",
+    },
+    async () => {
+      const auth = await requireAuthenticatedDashboardApiUser();
+      if (!auth.ok) {
+        return withCorrelationHeader(auth.response, correlationId);
+      }
 
-  try {
-    const { jobId } = await params;
-    const user = await getOrCreateDashboardUser();
-    const job = await getJobForUser(jobId, user.id);
-    if (!job) {
-      return NextResponse.json({ ok: false, error: "Job not found." }, { status: 404 });
-    }
+      if (!isDatabaseConfigured()) {
+        return withCorrelationHeader(
+          NextResponse.json({ ok: false, error: "DATABASE_URL is not configured." }, { status: 500 }),
+          correlationId,
+        );
+      }
 
-    return NextResponse.json({
-      ok: true,
-      jobStatus: job.status,
-      pins: job.generatedPins.map(serializePin),
-      latestScheduleRun: job.scheduleRuns[0]
-        ? {
-            id: job.scheduleRuns[0].id,
-            status: job.scheduleRuns[0].status,
-            submittedAt: job.scheduleRuns[0].submittedAt?.toISOString() ?? null,
-            completedAt: job.scheduleRuns[0].completedAt?.toISOString() ?? null,
-            errorMessage: job.scheduleRuns[0].errorMessage ?? null,
-          }
-        : null,
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Unable to load publish status.";
-    return NextResponse.json({ ok: false, error: message }, { status: 400 });
-  }
+      try {
+        const { jobId } = await params;
+        const user = await getOrCreateDashboardUser();
+        const job = await getJobForUser(jobId, user.id);
+        if (!job) {
+          return withCorrelationHeader(
+            NextResponse.json({ ok: false, error: "Job not found." }, { status: 404 }),
+            correlationId,
+          );
+        }
+
+        return withCorrelationHeader(
+          NextResponse.json({
+            ok: true,
+            jobStatus: job.status,
+            pins: job.generatedPins.map(serializePin),
+            latestScheduleRun: job.scheduleRuns[0]
+              ? {
+                  id: job.scheduleRuns[0].id,
+                  status: job.scheduleRuns[0].status,
+                  submittedAt: job.scheduleRuns[0].submittedAt?.toISOString() ?? null,
+                  completedAt: job.scheduleRuns[0].completedAt?.toISOString() ?? null,
+                  errorMessage: job.scheduleRuns[0].errorMessage ?? null,
+                }
+              : null,
+          }),
+          correlationId,
+        );
+      } catch (error) {
+        const normalized = normalizeErrorForLogging(error);
+        return withCorrelationHeader(
+          NextResponse.json(
+            { ok: false, error: normalized.message, correlationId, diagnostics: normalized },
+            { status: 400 },
+          ),
+          correlationId,
+        );
+      }
+    },
+  );
 }
 
 export async function POST(request: Request, { params }: RouteProps) {
-  const auth = await requireAuthenticatedDashboardApiUser();
-  if (!auth.ok) {
-    return auth.response;
-  }
+  const correlationId = createCorrelationId("publish_action");
 
-  if (!isDatabaseConfigured()) {
-    return NextResponse.json({ ok: false, error: "DATABASE_URL is not configured." }, { status: 500 });
-  }
+  return runWithOperationContext(
+    {
+      correlationId,
+      action: "api.dashboard.jobs.publish.action",
+    },
+    async () => {
+      const auth = await requireAuthenticatedDashboardApiUser();
+      if (!auth.ok) {
+        return withCorrelationHeader(auth.response, correlationId);
+      }
 
-  try {
-    const { jobId } = await params;
-    const payload = publishSchema.parse(await request.json());
-    const user = await getOrCreateDashboardUser();
-    let result: unknown = null;
+      if (!isDatabaseConfigured()) {
+        return withCorrelationHeader(
+          NextResponse.json({ ok: false, error: "DATABASE_URL is not configured." }, { status: 500 }),
+          correlationId,
+        );
+      }
 
-    switch (payload.action) {
-      case "upload_media":
-        result = await uploadJobPinsToPubler({
-          userId: user.id,
-          jobId,
-          generatedPinIds: payload.generatedPinIds,
-          workspaceId: payload.workspaceId,
-        });
-        break;
-      case "generate_titles":
-        result = await generateTitlesForJobPins({
-          userId: user.id,
-          jobId,
-          generatedPinIds: payload.generatedPinIds,
-          aiCredentialId: payload.aiCredentialId,
-        });
-        break;
-      case "save_copy":
-        result = await saveJobPinCopyEdits({
-          userId: user.id,
-          jobId,
-          copies: payload.copies,
-        });
-        break;
-      case "generate_descriptions":
-        result = await generateDescriptionsForJobPins({
-          userId: user.id,
-          jobId,
-          generatedPinIds: payload.generatedPinIds,
-          aiCredentialId: payload.aiCredentialId,
-        });
-        break;
-      case "schedule":
-        result = await scheduleJobPins({
-          userId: user.id,
-          jobId,
-          firstPublishAt: payload.firstPublishAt,
-          intervalMinutes: payload.intervalMinutes,
-          jitterMinutes: payload.jitterMinutes,
-          schedulePlan: payload.schedulePlan,
-          workspaceId: payload.workspaceId,
-          accountId: payload.accountId,
-          boardId: payload.boardId,
-          boardIds: payload.boardIds,
-          boardDistributionMode: payload.boardDistributionMode,
-          primaryBoardId: payload.primaryBoardId,
-          primaryBoardPercent: payload.primaryBoardPercent,
-          generatedPinIds: payload.generatedPinIds,
-        });
-        break;
-    }
+      try {
+        const { jobId } = await params;
+        const payload = publishSchema.parse(await request.json());
+        const user = await getOrCreateDashboardUser();
+        let result: unknown = null;
 
-    return NextResponse.json({ ok: true, result });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Unable to complete publish action.";
-    return NextResponse.json({ ok: false, error: message }, { status: 400 });
-  }
+        switch (payload.action) {
+          case "upload_media":
+            result = await uploadJobPinsToPubler({
+              userId: user.id,
+              jobId,
+              generatedPinIds: payload.generatedPinIds,
+              workspaceId: payload.workspaceId,
+            });
+            break;
+          case "generate_titles":
+            result = await generateTitlesForJobPins({
+              userId: user.id,
+              jobId,
+              generatedPinIds: payload.generatedPinIds,
+              aiCredentialId: payload.aiCredentialId,
+            });
+            break;
+          case "save_copy":
+            result = await saveJobPinCopyEdits({
+              userId: user.id,
+              jobId,
+              copies: payload.copies,
+            });
+            break;
+          case "generate_descriptions":
+            result = await generateDescriptionsForJobPins({
+              userId: user.id,
+              jobId,
+              generatedPinIds: payload.generatedPinIds,
+              aiCredentialId: payload.aiCredentialId,
+            });
+            break;
+          case "schedule":
+            result = await scheduleJobPins({
+              userId: user.id,
+              jobId,
+              firstPublishAt: payload.firstPublishAt,
+              intervalMinutes: payload.intervalMinutes,
+              jitterMinutes: payload.jitterMinutes,
+              schedulePlan: payload.schedulePlan,
+              workspaceId: payload.workspaceId,
+              accountId: payload.accountId,
+              boardId: payload.boardId,
+              boardIds: payload.boardIds,
+              boardDistributionMode: payload.boardDistributionMode,
+              primaryBoardId: payload.primaryBoardId,
+              primaryBoardPercent: payload.primaryBoardPercent,
+              generatedPinIds: payload.generatedPinIds,
+            });
+            break;
+        }
+
+        return withCorrelationHeader(NextResponse.json({ ok: true, result }), correlationId);
+      } catch (error) {
+        const normalized = normalizeErrorForLogging(error);
+        return withCorrelationHeader(
+          NextResponse.json(
+            { ok: false, error: normalized.message, correlationId, diagnostics: normalized },
+            { status: 400 },
+          ),
+          correlationId,
+        );
+      }
+    },
+  );
+}
+
+function withCorrelationHeader(response: NextResponse, correlationId: string) {
+  response.headers.set("X-Correlation-Id", correlationId);
+  return response;
 }
 
 function serializePin(pin: NonNullable<Awaited<ReturnType<typeof getJobForUser>>>["generatedPins"][number]) {

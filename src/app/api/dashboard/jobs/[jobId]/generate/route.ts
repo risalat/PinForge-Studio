@@ -6,6 +6,11 @@ import {
   discardGeneratedPinsForJob,
   generatePinsForJob,
 } from "@/lib/jobs/generatePins";
+import {
+  createCorrelationId,
+  normalizeErrorForLogging,
+  runWithOperationContext,
+} from "@/lib/observability/operationContext";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -17,51 +22,81 @@ type RouteProps = {
 };
 
 export async function POST(request: Request, { params }: RouteProps) {
-  const auth = await requireAuthenticatedDashboardApiUser();
-  if (!auth.ok) {
-    return auth.response;
-  }
+  const correlationId = createCorrelationId("job_generate");
 
-  if (!isDatabaseConfigured()) {
-    return NextResponse.json({ ok: false, error: "DATABASE_URL is not configured." }, { status: 500 });
-  }
+  return runWithOperationContext(
+    {
+      correlationId,
+      action: "api.dashboard.jobs.generate",
+    },
+    async () => {
+      const auth = await requireAuthenticatedDashboardApiUser();
+      if (!auth.ok) {
+        return withCorrelationHeader(auth.response, correlationId);
+      }
 
-  try {
-    const { jobId } = await params;
-    const user = await getOrCreateDashboardUser();
-    const body = (await request.json().catch(() => ({}))) as {
-      action?: "generate" | "discard_generated_pins";
-      generatedPinIds?: string[];
-      planIds?: string[];
-      aiCredentialId?: string;
-    };
+      if (!isDatabaseConfigured()) {
+        return withCorrelationHeader(
+          NextResponse.json({ ok: false, error: "DATABASE_URL is not configured." }, { status: 500 }),
+          correlationId,
+        );
+      }
 
-    if (body.action === "discard_generated_pins") {
-      const result = await discardGeneratedPinsForJob({
-        userId: user.id,
-        jobId,
-        generatedPinIds: body.generatedPinIds,
-      });
+      try {
+        const { jobId } = await params;
+        const user = await getOrCreateDashboardUser();
+        const body = (await request.json().catch(() => ({}))) as {
+          action?: "generate" | "discard_generated_pins";
+          generatedPinIds?: string[];
+          planIds?: string[];
+          aiCredentialId?: string;
+        };
 
-      return NextResponse.json({
-        ok: true,
-        discardedPinCount: result.discardedPinCount,
-      });
-    }
+        if (body.action === "discard_generated_pins") {
+          const result = await discardGeneratedPinsForJob({
+            userId: user.id,
+            jobId,
+            generatedPinIds: body.generatedPinIds,
+          });
 
-    const result = await generatePinsForJob({
-      userId: user.id,
-      jobId,
-      planIds: body.planIds,
-      aiCredentialId: body.aiCredentialId,
-    });
+          return withCorrelationHeader(
+            NextResponse.json({
+              ok: true,
+              discardedPinCount: result.discardedPinCount,
+            }),
+            correlationId,
+          );
+        }
 
-    return NextResponse.json({
-      ok: true,
-      generatedPinCount: result.generatedPins.length,
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Unable to generate pins.";
-    return NextResponse.json({ ok: false, error: message }, { status: 400 });
-  }
+        const result = await generatePinsForJob({
+          userId: user.id,
+          jobId,
+          planIds: body.planIds,
+          aiCredentialId: body.aiCredentialId,
+        });
+
+        return withCorrelationHeader(
+          NextResponse.json({
+            ok: true,
+            generatedPinCount: result.generatedPins.length,
+          }),
+          correlationId,
+        );
+      } catch (error) {
+        const normalized = normalizeErrorForLogging(error);
+        return withCorrelationHeader(
+          NextResponse.json(
+            { ok: false, error: normalized.message, correlationId, diagnostics: normalized },
+            { status: 400 },
+          ),
+          correlationId,
+        );
+      }
+    },
+  );
+}
+
+function withCorrelationHeader(response: NextResponse, correlationId: string) {
+  response.headers.set("X-Correlation-Id", correlationId);
+  return response;
 }
