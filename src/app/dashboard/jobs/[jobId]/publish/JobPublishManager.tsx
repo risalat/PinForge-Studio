@@ -24,6 +24,8 @@ import type {
 type PinItem = {
   id: string;
   templateId: string;
+  artworkReviewState: string;
+  artworkFlagReason: string | null;
   exportPath: string;
   mediaStatus: string;
   mediaId: string | null;
@@ -173,7 +175,7 @@ export function JobPublishManager({
   const [titleCandidatesByPinId, setTitleCandidatesByPinId] = useState<Record<string, string[]>>(
     () => buildTitleCandidatesByPinId(pins),
   );
-  const [selectedPinIds, setSelectedPinIds] = useState<string[]>(pins.map((pin) => pin.id));
+  const [selectedPinIds, setSelectedPinIds] = useState<string[]>(() => getDefaultSelectedPinIds(pins));
   const [firstPublishAt, setFirstPublishAt] = useState("");
   const [intervalDays, setIntervalDays] = useState(25);
   const [jitterDays, setJitterDays] = useState(5);
@@ -298,6 +300,17 @@ export function JobPublishManager({
   }, [latestScheduleRun, pins]);
 
   useEffect(() => {
+    setSelectedPinIds((current) => {
+      const validSelected = current.filter((pinId) => pins.some((pin) => pin.id === pinId));
+      if (validSelected.length > 0) {
+        return validSelected;
+      }
+
+      return getDefaultSelectedPinIds(pins);
+    });
+  }, [pins]);
+
+  useEffect(() => {
     setProfileCatalog(workspaceProfiles);
   }, [workspaceProfiles]);
 
@@ -327,6 +340,14 @@ export function JobPublishManager({
         seed: `${jobId}:publish-pin-order`,
       }),
     [currentPins, jobId],
+  );
+  const unresolvedArtworkPins = useMemo(
+    () => orderedPins.filter((pin) => isPinArtworkUnresolved(pin)),
+    [orderedPins],
+  );
+  const publishReadyArtworkPins = useMemo(
+    () => orderedPins.filter((pin) => !isPinArtworkUnresolved(pin)),
+    [orderedPins],
   );
 
   const selectedPins = useMemo(
@@ -1721,6 +1742,31 @@ function formatDateLabel(value: string) {
         </div>
       </section>
 
+      {unresolvedArtworkPins.length > 0 ? (
+        <section className="rounded-[24px] border border-[var(--dashboard-warning-border)] bg-[var(--dashboard-warning-soft)] px-5 py-4 shadow-[var(--dashboard-shadow-sm)]">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[var(--dashboard-warning-ink)]">
+                Warning only
+              </p>
+              <p className="mt-2 text-sm text-[var(--dashboard-warning-ink)]">
+                {unresolvedArtworkPins.length} pin{unresolvedArtworkPins.length === 1 ? "" : "s"} still have flagged or unfinished artwork review states. {publishReadyArtworkPins.length} usable pin{publishReadyArtworkPins.length === 1 ? "" : "s"} are selected by default so you can keep publishing moving.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <SelectionButton
+                label={`Select usable ${publishReadyArtworkPins.length}`}
+                onClick={() => setSelectedPinIds(publishReadyArtworkPins.map((pin) => pin.id))}
+              />
+              <SelectionButton
+                label={`View unresolved ${unresolvedArtworkPins.length}`}
+                onClick={() => setSelectedPinIds(unresolvedArtworkPins.map((pin) => pin.id))}
+              />
+            </div>
+          </div>
+        </section>
+      ) : null}
+
       <section id="publish-destination" className="rounded-[24px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-4 shadow-[var(--dashboard-shadow-sm)]">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
@@ -2578,7 +2624,15 @@ function formatDateLabel(value: string) {
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
+              <SelectionButton
+                label="Usable"
+                onClick={() => setSelectedPinIds(publishReadyArtworkPins.map((pin) => pin.id))}
+              />
               <SelectionButton label="All" onClick={() => setSelectedPinIds(currentPins.map((pin) => pin.id))} />
+              <SelectionButton
+                label="Artwork unresolved"
+                onClick={() => setSelectedPinIds(unresolvedArtworkPins.map((pin) => pin.id))}
+              />
               <SelectionButton
                 label="Media failed"
                 onClick={() => selectBy((pin) => pin.mediaStatus === "FAILED")}
@@ -2617,6 +2671,10 @@ function formatDateLabel(value: string) {
                       Include in next action
                     </label>
                     <div className="flex flex-wrap gap-2 text-xs font-semibold uppercase tracking-[0.14em]">
+                      <StatusChip
+                        label={`Artwork ${formatLabel(pin.artworkReviewState)}`}
+                        tone={toneForArtworkStatus(pin.artworkReviewState)}
+                      />
                       <StatusChip label={`Media ${formatLabel(pin.mediaStatus)}`} tone={toneForStatus(pin.mediaStatus)} />
                       <StatusChip label={`Title ${formatLabel(pin.titleStatus)}`} tone={toneForStatus(pin.titleStatus)} />
                       <StatusChip
@@ -2646,6 +2704,9 @@ function formatDateLabel(value: string) {
                     )}
                     <div className="space-y-3">
                       <p className="text-sm font-semibold text-[var(--dashboard-text)]">{pin.templateId}</p>
+                      {pin.artworkFlagReason ? (
+                        <p className="text-sm text-[var(--dashboard-subtle)]">{pin.artworkFlagReason}</p>
+                      ) : null}
                       {missingAssetPinIds.includes(pin.id) ? (
                         <div className="rounded-2xl border border-[var(--dashboard-danger-border)] bg-[var(--dashboard-danger-soft)] px-3 py-3 text-sm text-[var(--dashboard-danger-ink)]">
                           This pin asset is missing from storage. Discard and rerender it before upload or scheduling.
@@ -3153,6 +3214,30 @@ function toneForStatus(status: string) {
     return "warning" as const;
   }
   return "neutral" as const;
+}
+
+function toneForArtworkStatus(status: string) {
+  if (status === "NORMAL") {
+    return "good" as const;
+  }
+  if (status === "FLAGGED" || status === "RERENDER_QUEUED" || status === "RERENDERING") {
+    return "warning" as const;
+  }
+  if (status === "RERENDER_FAILED") {
+    return "bad" as const;
+  }
+  return "neutral" as const;
+}
+
+function isPinArtworkUnresolved(pin: PinItem) {
+  return ["FLAGGED", "RERENDER_QUEUED", "RERENDERING", "RERENDER_FAILED"].includes(
+    pin.artworkReviewState,
+  );
+}
+
+function getDefaultSelectedPinIds(pins: PinItem[]) {
+  const usablePins = pins.filter((pin) => !isPinArtworkUnresolved(pin));
+  return (usablePins.length > 0 ? usablePins : pins).map((pin) => pin.id);
 }
 
 function mergeCopyStateWithPins(

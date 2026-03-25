@@ -147,6 +147,8 @@ export default async function DashboardJobPublishPage({ params }: PageProps) {
           pins={job.generatedPins.map((pin) => ({
             id: pin.id,
             templateId: pin.templateId,
+            artworkReviewState: pin.plan.artworkReviewState,
+            artworkFlagReason: pin.plan.artworkFlagReason,
             exportPath: resolveStoredAssetUrl({
               storageKey: pin.storageKey,
               exportPath: pin.exportPath,

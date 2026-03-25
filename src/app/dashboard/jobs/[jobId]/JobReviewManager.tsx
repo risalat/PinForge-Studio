@@ -78,6 +78,8 @@ type FeedbackState = {
   source?: "review" | "images";
 } | null;
 
+type ReviewGridFilter = "all" | "flagged" | "rerendering" | "failed" | "recently_fixed";
+
 type ReviewActionState =
   | { kind: "save_review"; source: "review" | "images" }
   | { kind: "assisted" }
@@ -99,6 +101,7 @@ type RenderTaskState = {
   id: string;
   kind: string;
   status: string;
+  payloadJson?: Record<string, unknown> | null;
   progressJson?: {
     stage?: string;
     total?: number;
@@ -121,6 +124,8 @@ type PlanDraft = {
   itemNumber: string;
   visualPreset: string;
 };
+
+const RECENTLY_FIXED_STORAGE_KEY_PREFIX = "pinforge:review:recently-fixed:";
 
 type JobReviewManagerProps = {
   jobId: string;
@@ -219,6 +224,11 @@ export function JobReviewManager({
   const [renderProgress, setRenderProgress] = useState<RenderProgressState | null>(null);
   const [isRenderingPlans, setIsRenderingPlans] = useState(false);
   const [currentRenderTaskId, setCurrentRenderTaskId] = useState<string | null>(null);
+  const [reviewGridFilter, setReviewGridFilter] = useState<ReviewGridFilter>("all");
+  const [isPlanEditorOpen, setIsPlanEditorOpen] = useState(false);
+  const [recentlyFixedPlanIds, setRecentlyFixedPlanIds] = useState<string[]>(() =>
+    readRecentlyFixedPlanIds(jobId),
+  );
   const [activeAction, setActiveAction] = useState<ReviewActionState>(null);
 
   const selectedImages = images.filter((image) => image.isSelected);
@@ -236,6 +246,17 @@ export function JobReviewManager({
   const selectedPlanGeneratedPins = selectedPlan
     ? generatedPins.filter((pin) => pin.planId === selectedPlan.id)
     : [];
+  const generatedPinByPlanId = new Map(
+    plans.map((plan) => [
+      plan.id,
+      [...generatedPins]
+        .reverse()
+        .find((pin) => pin.planId === plan.id) ?? null,
+    ]),
+  );
+  const selectedPlanCurrentPin = selectedPlan
+    ? generatedPinByPlanId.get(selectedPlan.id) ?? null
+    : null;
   const selectedAiCredential =
     aiCredentials.find((credential) => credential.id === aiCredentialId) ?? null;
   const orderedGeneratedPins = selectedPlan
@@ -244,6 +265,46 @@ export function JobReviewManager({
         ...generatedPins.filter((pin) => pin.planId !== selectedPlan.id),
       ]
     : generatedPins;
+  const unresolvedPlans = plans.filter((plan) => isPlanUnresolved(plan.artworkReviewState));
+  const usableRenderedPins = generatedPins.filter((pin) => {
+    const plan = plans.find((candidate) => candidate.id === pin.planId);
+    return plan ? !isPlanUnresolved(plan.artworkReviewState) : true;
+  });
+  const reviewGridItems = plans.map((plan) => {
+    const draft = planDrafts.find((entry) => entry.planId === plan.id);
+    const currentPin = generatedPinByPlanId.get(plan.id) ?? null;
+    const assetMissing = currentPin ? missingAssetPinIds.includes(currentPin.id) : false;
+    const isRenderable = ["READY", "DRAFT", "FAILED"].includes(plan.status);
+    const isInRecentlyFixed = recentlyFixedPlanIds.includes(plan.id);
+
+    return {
+      plan,
+      draft,
+      currentPin,
+      assetMissing,
+      isRenderable,
+      isInRecentlyFixed,
+    };
+  });
+  const filteredReviewGridItems = reviewGridItems.filter((item) => {
+    if (reviewGridFilter === "all") {
+      return true;
+    }
+
+    if (reviewGridFilter === "flagged") {
+      return item.plan.artworkReviewState === "FLAGGED";
+    }
+
+    if (reviewGridFilter === "rerendering") {
+      return ["RERENDER_QUEUED", "RERENDERING"].includes(item.plan.artworkReviewState);
+    }
+
+    if (reviewGridFilter === "failed") {
+      return item.plan.artworkReviewState === "RERENDER_FAILED" || item.plan.status === "FAILED";
+    }
+
+    return item.isInRecentlyFixed;
+  });
   const previewPin =
     previewPinIndex !== null && previewPinIndex >= 0 && previewPinIndex < generatedPins.length
       ? generatedPins[previewPinIndex]
@@ -406,10 +467,18 @@ export function JobReviewManager({
           const failedPlans = progress.failedPlans ?? [];
           const generatedPinCount =
             typeof progress.generatedPinCount === "number" ? progress.generatedPinCount : completed;
+          const queuedPlanIds = extractTaskPlanIds(task);
           const message =
             failedPlans.length > 0
               ? `${generatedPinCount} pin${generatedPinCount === 1 ? "" : "s"} rendered. ${failedPlans.length} plan${failedPlans.length === 1 ? "" : "s"} still need attention.`
               : `${generatedPinCount} pin${generatedPinCount === 1 ? "" : "s"} rendered.`;
+          if (queuedPlanIds.length > 0) {
+            setRecentlyFixedPlanIds((current) => {
+              const next = Array.from(new Set([...current, ...queuedPlanIds]));
+              persistRecentlyFixedPlanIds(jobId, next);
+              return next;
+            });
+          }
           setGenerationFeedback({
             tone: failedPlans.length > 0 ? "error" : "success",
             message,
@@ -487,6 +556,10 @@ export function JobReviewManager({
       cancelled = true;
     };
   }, [currentRenderTaskId, jobId]);
+
+  useEffect(() => {
+    persistRecentlyFixedPlanIds(jobId, recentlyFixedPlanIds);
+  }, [jobId, recentlyFixedPlanIds]);
 
   function handleSaveReview(source: "review" | "images") {
     startTransition(async () => {
@@ -730,11 +803,19 @@ export function JobReviewManager({
           mode: "discard",
           planIds: plansToDiscard.map((plan) => plan.id),
         });
+        setRecentlyFixedPlanIds((current) => {
+          const next = current.filter((planId) => !plansToDiscard.some((plan) => plan.id === planId));
+          persistRecentlyFixedPlanIds(jobId, next);
+          return next;
+        });
         const nextSelectedPlan = plans.find(
           (plan) => !plansToDiscard.some((discardedPlan) => discardedPlan.id === plan.id),
         );
         setSelectedPlanId(nextSelectedPlan?.id ?? null);
         setSelectedPlanIds(nextSelectedPlan?.id ? [nextSelectedPlan.id] : []);
+        if (plansToDiscard.some((plan) => plan.id === selectedPlanId)) {
+          setIsPlanEditorOpen(false);
+        }
         setPlansFeedback({
           tone: "success",
           message: `${result.discardedPlanCount ?? plansToDiscard.length} plan${(result.discardedPlanCount ?? plansToDiscard.length) === 1 ? "" : "s"} discarded.`,
@@ -795,6 +876,14 @@ export function JobReviewManager({
           action: "discard_generated_pins",
           generatedPinIds: targetPinIds,
         });
+        const affectedPlanIds = Array.from(
+          new Set(targetPins.map((pin) => pin.planId)),
+        );
+        setRecentlyFixedPlanIds((current) => {
+          const next = current.filter((planId) => !affectedPlanIds.includes(planId));
+          persistRecentlyFixedPlanIds(jobId, next);
+          return next;
+        });
         const discardedCount = result.discardedPinCount ?? targetPins.length;
         setGenerationFeedback({
           tone: "success",
@@ -849,6 +938,11 @@ export function JobReviewManager({
           tone: "success",
           message: "Plan render settings saved.",
         });
+        setRecentlyFixedPlanIds((current) => {
+          const next = current.filter((entry) => entry !== planId);
+          persistRecentlyFixedPlanIds(jobId, next);
+          return next;
+        });
         notify({
           tone: "success",
           title: "Plan overrides saved",
@@ -887,6 +981,14 @@ export function JobReviewManager({
           planId,
           artworkReviewState,
         });
+        setRecentlyFixedPlanIds((current) => {
+          const next =
+            artworkReviewState === "NORMAL"
+              ? Array.from(new Set([...current, planId]))
+              : current.filter((entry) => entry !== planId);
+          persistRecentlyFixedPlanIds(jobId, next);
+          return next;
+        });
         setPlansFeedback({
           tone: "success",
           message:
@@ -919,6 +1021,30 @@ export function JobReviewManager({
       } finally {
         setActiveAction(null);
       }
+    });
+  }
+
+  function openPlanEditor(planId: string) {
+    setSelectedPlanId(planId);
+    if (!selectedPlanIds.includes(planId)) {
+      setSelectedPlanIds([planId]);
+    }
+    setIsPlanEditorOpen(true);
+  }
+
+  function handleAiRegenerateArtworkCopy(planId: string) {
+    updatePlanDraft(planId, {
+      title: "",
+      subtitle: "",
+    });
+    setGenerationFeedback({
+      tone: "success",
+      message: "Artwork copy cleared. Save overrides and rerender to let AI regenerate the title and subtitle.",
+    });
+    notify({
+      tone: "success",
+      title: "Artwork copy cleared",
+      message: "Save overrides and rerender this plan to generate fresh artwork copy.",
     });
   }
 
@@ -1479,10 +1605,264 @@ export function JobReviewManager({
           </div>
         ) : null}
 
+        {plans.length > 0 ? (
+          <>
+            {(unresolvedPlans.length > 0 || usableRenderedPins.length > 0) ? (
+              <div
+                className={`rounded-[24px] border px-5 py-4 ${
+                  unresolvedPlans.length > 0
+                    ? "border-[var(--dashboard-warning-border)] bg-[var(--dashboard-warning-soft)] text-[var(--dashboard-warning-ink)]"
+                    : "border-[var(--dashboard-success-border)] bg-[var(--dashboard-success-soft)] text-[var(--dashboard-success-ink)]"
+                }`}
+              >
+                <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold uppercase tracking-[0.16em]">
+                      {unresolvedPlans.length > 0 ? "Warning only" : "Ready to continue"}
+                    </p>
+                    <p className="mt-2 text-sm">
+                      {unresolvedPlans.length > 0
+                        ? `${unresolvedPlans.length} plan${unresolvedPlans.length === 1 ? "" : "s"} still need artwork fixes or rerendering. You can continue with ${usableRenderedPins.length} usable pin${usableRenderedPins.length === 1 ? "" : "s"} now and return later for the rest.`
+                        : `${usableRenderedPins.length} rendered pin${usableRenderedPins.length === 1 ? "" : "s"} are usable and can move into publishing.`}
+                    </p>
+                  </div>
+                  <Link
+                    href={`/dashboard/jobs/${jobId}/publish`}
+                    className="rounded-full border border-current/15 bg-white/80 px-4 py-2 text-sm font-semibold text-[var(--dashboard-text)]"
+                  >
+                    Continue to publishing
+                  </Link>
+                </div>
+              </div>
+            ) : null}
+
+            <div className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-4">
+              <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+                <div className="flex flex-wrap gap-2">
+                  <FilterChip
+                    label={`All ${plans.length}`}
+                    active={reviewGridFilter === "all"}
+                    onClick={() => setReviewGridFilter("all")}
+                  />
+                  <FilterChip
+                    label={`Flagged ${plans.filter((plan) => plan.artworkReviewState === "FLAGGED").length}`}
+                    active={reviewGridFilter === "flagged"}
+                    onClick={() => setReviewGridFilter("flagged")}
+                  />
+                  <FilterChip
+                    label={`Rerendering ${
+                      plans.filter((plan) =>
+                        ["RERENDER_QUEUED", "RERENDERING"].includes(plan.artworkReviewState),
+                      ).length
+                    }`}
+                    active={reviewGridFilter === "rerendering"}
+                    onClick={() => setReviewGridFilter("rerendering")}
+                  />
+                  <FilterChip
+                    label={`Failed ${
+                      plans.filter(
+                        (plan) =>
+                          plan.artworkReviewState === "RERENDER_FAILED" || plan.status === "FAILED",
+                      ).length
+                    }`}
+                    active={reviewGridFilter === "failed"}
+                    onClick={() => setReviewGridFilter("failed")}
+                  />
+                  <FilterChip
+                    label={`Fixed ${recentlyFixedPlanIds.length}`}
+                    active={reviewGridFilter === "recently_fixed"}
+                    onClick={() => setReviewGridFilter("recently_fixed")}
+                  />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <SelectionChip
+                    label="Select all"
+                    onClick={() => setPlanSelection(plans.map((plan) => plan.id))}
+                  />
+                  <SelectionChip
+                    label="Ready only"
+                    onClick={() => setPlanSelection(renderablePlans.map((plan) => plan.id))}
+                  />
+                  <SelectionChip
+                    label="Flagged only"
+                    onClick={() =>
+                      setPlanSelection(
+                        plans
+                          .filter((plan) => plan.artworkReviewState === "FLAGGED")
+                          .map((plan) => plan.id),
+                      )
+                    }
+                  />
+                  <SelectionChip label="Clear" onClick={() => setPlanSelection([])} />
+                </div>
+              </div>
+            </div>
+
+            {filteredReviewGridItems.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-6 text-sm text-[var(--dashboard-subtle)]">
+                No plans match the current review filter.
+              </div>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
+                {filteredReviewGridItems.map(({ plan, draft, currentPin, assetMissing, isRenderable, isInRecentlyFixed }) => {
+                  const absoluteIndex = currentPin
+                    ? generatedPins.findIndex((entry) => entry.id === currentPin.id)
+                    : -1;
+
+                  return (
+                    <article
+                      key={plan.id}
+                      className={`overflow-hidden rounded-[28px] border ${
+                        selectedPlanIds.includes(plan.id)
+                          ? "border-[var(--dashboard-accent)] bg-white shadow-[var(--dashboard-shadow-sm)]"
+                          : "border-[var(--dashboard-line)] bg-[var(--dashboard-panel)]"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-3 border-b border-[var(--dashboard-line)] px-4 py-3">
+                        <label className="flex items-center gap-2 text-sm font-semibold text-[var(--dashboard-subtle)]">
+                          <input
+                            type="checkbox"
+                            checked={selectedPlanIds.includes(plan.id)}
+                            onChange={() => togglePlanSelection(plan.id)}
+                          />
+                          Select
+                        </label>
+                        <div className="flex flex-wrap gap-2">
+                          <StatusPill label={formatLabel(plan.status)} tone={toneForPlanStatus(plan.status)} />
+                          <StatusPill
+                            label={plan.artworkReviewState === "NORMAL" ? "Usable" : formatLabel(plan.artworkReviewState)}
+                            tone={toneForArtworkReviewState(plan.artworkReviewState)}
+                          />
+                          {isInRecentlyFixed ? <StatusPill label="Fixed this session" tone="good" /> : null}
+                        </div>
+                      </div>
+                      <div className="p-4">
+                        {currentPin ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!assetMissing && absoluteIndex >= 0) {
+                                setPreviewPinIndex(absoluteIndex);
+                              } else {
+                                openPlanEditor(plan.id);
+                              }
+                            }}
+                            className="group block w-full overflow-hidden rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)]"
+                          >
+                            {assetMissing ? (
+                              <MissingAssetCard />
+                            ) : (
+                              <img
+                                src={currentPin.exportPath}
+                                alt={draft?.title || currentPin.title || plan.templateId}
+                                className="aspect-[2/3] w-full object-cover transition duration-200 group-hover:scale-[1.02]"
+                                onError={() => markPinAssetMissing(currentPin.id)}
+                              />
+                            )}
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => openPlanEditor(plan.id)}
+                            className="flex aspect-[2/3] w-full items-center justify-center rounded-2xl border border-dashed border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-6 text-center text-sm font-semibold text-[var(--dashboard-subtle)]"
+                          >
+                            No rendered output yet.
+                            <br />
+                            Open editor or queue a render.
+                          </button>
+                        )}
+
+                        <div className="mt-4 space-y-3">
+                          <div>
+                            <div className="flex items-center justify-between gap-3">
+                              <p className="text-base font-bold text-[var(--dashboard-text)]">{plan.templateId}</p>
+                              <StatusPill
+                                label={`${plan.generatedPinCount} output${plan.generatedPinCount === 1 ? "" : "s"}`}
+                                tone="neutral"
+                              />
+                            </div>
+                            <p className="mt-1 text-sm text-[var(--dashboard-subtle)]">
+                              {draft?.title?.trim() || "Auto-generate artwork title"}
+                            </p>
+                            {draft?.subtitle?.trim() ? (
+                              <p className="mt-1 text-sm text-[var(--dashboard-muted)]">{draft.subtitle}</p>
+                            ) : null}
+                            {plan.artworkFlagReason ? (
+                              <p className="mt-2 text-sm text-[var(--dashboard-subtle)]">{plan.artworkFlagReason}</p>
+                            ) : null}
+                            {plan.rerenderError ? (
+                              <p className="mt-2 text-sm text-[var(--dashboard-danger-ink)]">{plan.rerenderError}</p>
+                            ) : null}
+                          </div>
+
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => openPlanEditor(plan.id)}
+                              className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)]"
+                            >
+                              Open editor
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleSetArtworkReviewState(
+                                  plan.id,
+                                  plan.artworkReviewState === "FLAGGED" ? "NORMAL" : "FLAGGED",
+                                )
+                              }
+                              disabled={Boolean(activeAction) || isRenderingPlans}
+                              className={getButtonClass({
+                                tone: plan.artworkReviewState === "FLAGGED" ? "neutral" : "danger",
+                                busy: activeAction?.kind === "set_review_state" && activeAction.planId === plan.id,
+                              })}
+                            >
+                              <BusyActionLabel
+                                busy={activeAction?.kind === "set_review_state" && activeAction.planId === plan.id}
+                                label={plan.artworkReviewState === "FLAGGED" ? "Clear flag" : "Flag for fix"}
+                                busyLabel={plan.artworkReviewState === "FLAGGED" ? "Clearing flag..." : "Flagging..."}
+                              />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleGeneratePins([plan.id])}
+                              disabled={
+                                Boolean(activeAction) ||
+                                isRenderingPlans ||
+                                !isRenderable ||
+                                aiCredentials.length === 0 ||
+                                !selectedAiCredential?.canUseApiKey
+                              }
+                              className={getButtonClass({ tone: "accent", busy: false })}
+                            >
+                              Rerender
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                currentPin
+                                  ? handleDiscardGeneratedPins([currentPin.id])
+                                  : handleDiscardPlans([plan.id])
+                              }
+                              className={getButtonClass({ tone: "danger" })}
+                            >
+                              {currentPin ? "Discard pin" : "Discard plan"}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </>
+        ) : null}
+
         {plans.length === 0 ? (
           <p className="text-sm text-[var(--dashboard-subtle)]">No plans saved yet.</p>
         ) : (
-          <div className="grid gap-5 xl:grid-cols-[320px_minmax(0,1fr)]">
+          <div className="hidden grid gap-5 xl:grid-cols-[320px_minmax(0,1fr)]">
             <div className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
@@ -1917,6 +2297,327 @@ export function JobReviewManager({
         )}
       </section>
 
+      {selectedPlan && isPlanEditorOpen ? (
+        <div className="fixed inset-0 z-40 flex justify-end bg-[rgba(12,18,28,0.52)] backdrop-blur-sm">
+          <div className="flex h-full w-full max-w-[680px] flex-col overflow-hidden border-l border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] shadow-[var(--dashboard-shadow-md)]">
+            <div className="flex flex-wrap items-start justify-between gap-4 border-b border-[var(--dashboard-line)] px-5 py-5">
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-xl font-bold text-[var(--dashboard-text)]">{selectedPlan.templateId}</h3>
+                  <StatusPill label={formatLabel(selectedPlan.status)} tone={toneForPlanStatus(selectedPlan.status)} />
+                  <StatusPill
+                    label={
+                      selectedPlan.artworkReviewState === "NORMAL"
+                        ? "Usable"
+                        : formatLabel(selectedPlan.artworkReviewState)
+                    }
+                    tone={toneForArtworkReviewState(selectedPlan.artworkReviewState)}
+                  />
+                </div>
+                <p className="mt-2 text-sm text-[var(--dashboard-subtle)]">
+                  {formatLabel(selectedPlan.mode)} / {selectedPlan.assignments.length} source image slot
+                  {selectedPlan.assignments.length === 1 ? "" : "s"}
+                </p>
+                {selectedPlan.artworkFlagReason ? (
+                  <p className="mt-2 text-sm text-[var(--dashboard-subtle)]">{selectedPlan.artworkFlagReason}</p>
+                ) : null}
+                {selectedPlan.rerenderError ? (
+                  <p className="mt-2 text-sm text-[var(--dashboard-danger-ink)]">{selectedPlan.rerenderError}</p>
+                ) : null}
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsPlanEditorOpen(false)}
+                className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)]"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="flex-1 space-y-5 overflow-y-auto px-5 py-5">
+              <div className="flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={() => handleGeneratePins([selectedPlan.id])}
+                  disabled={
+                    Boolean(activeAction) ||
+                    isRenderingPlans ||
+                    !["READY", "DRAFT", "FAILED"].includes(selectedPlan.status) ||
+                    aiCredentials.length === 0 ||
+                    !selectedAiCredential?.canUseApiKey
+                  }
+                  className={getButtonClass({ tone: "accent", busy: isRenderingPlans })}
+                >
+                  <BusyActionLabel
+                    busy={isRenderingPlans}
+                    label="Rerender this pin"
+                    busyLabel="Queueing rerender..."
+                    inverse
+                  />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleAiRegenerateArtworkCopy(selectedPlan.id)}
+                  disabled={Boolean(activeAction) || isRenderingPlans}
+                  className={getButtonClass({ tone: "neutral" })}
+                >
+                  AI regenerate copy
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleSetArtworkReviewState(
+                      selectedPlan.id,
+                      selectedPlan.artworkReviewState === "FLAGGED" ? "NORMAL" : "FLAGGED",
+                    )
+                  }
+                  disabled={Boolean(activeAction) || isRenderingPlans}
+                  className={getButtonClass({
+                    tone: selectedPlan.artworkReviewState === "FLAGGED" ? "neutral" : "danger",
+                    busy: activeAction?.kind === "set_review_state" && activeAction.planId === selectedPlan.id,
+                  })}
+                >
+                  <BusyActionLabel
+                    busy={activeAction?.kind === "set_review_state" && activeAction.planId === selectedPlan.id}
+                    label={selectedPlan.artworkReviewState === "FLAGGED" ? "Clear flag" : "Flag for fix"}
+                    busyLabel={selectedPlan.artworkReviewState === "FLAGGED" ? "Clearing flag..." : "Flagging..."}
+                  />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSavePlanSettings(selectedPlan.id)}
+                  disabled={Boolean(activeAction) || isRenderingPlans}
+                  className={getButtonClass({
+                    tone: "neutral",
+                    busy: activeAction?.kind === "save_overrides" && activeAction.planId === selectedPlan.id,
+                  })}
+                >
+                  <BusyActionLabel
+                    busy={activeAction?.kind === "save_overrides" && activeAction.planId === selectedPlan.id}
+                    label="Save overrides"
+                    busyLabel="Saving overrides..."
+                  />
+                </button>
+              </div>
+
+              <article className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-4">
+                {selectedPlanCurrentPin ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const absoluteIndex = generatedPins.findIndex((pin) => pin.id === selectedPlanCurrentPin.id);
+                      if (absoluteIndex >= 0) {
+                        setPreviewPinIndex(absoluteIndex);
+                      }
+                    }}
+                    className="block w-full overflow-hidden rounded-2xl border border-[var(--dashboard-line)]"
+                  >
+                    <img
+                      src={selectedPlanCurrentPin.exportPath}
+                      alt={selectedPlanDraft?.title || selectedPlanCurrentPin.title || selectedPlan.templateId}
+                      className="aspect-[2/3] w-full object-cover"
+                      onError={() => markPinAssetMissing(selectedPlanCurrentPin.id)}
+                    />
+                  </button>
+                ) : (
+                  <div className="flex aspect-[2/3] w-full items-center justify-center rounded-2xl border border-dashed border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-6 text-center text-sm font-semibold text-[var(--dashboard-subtle)]">
+                    No rendered output yet for this plan.
+                  </div>
+                )}
+              </article>
+
+              <article className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
+                    Render title
+                    <input
+                      value={selectedPlanDraft?.title ?? ""}
+                      onChange={(event) => updatePlanDraft(selectedPlan.id, { title: event.target.value })}
+                      maxLength={100}
+                      placeholder="Leave blank to auto-generate before render"
+                      className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-3 py-2"
+                    />
+                  </label>
+                  <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
+                    Subtitle / kicker
+                    <input
+                      value={selectedPlanDraft?.subtitle ?? ""}
+                      onChange={(event) => updatePlanDraft(selectedPlan.id, { subtitle: event.target.value })}
+                      maxLength={40}
+                      placeholder="Leave blank to auto-generate"
+                      className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-3 py-2"
+                    />
+                  </label>
+                  <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
+                    Item number
+                    <input
+                      type="number"
+                      min={1}
+                      max={999}
+                      value={selectedPlanDraft?.itemNumber ?? ""}
+                      onChange={(event) => updatePlanDraft(selectedPlan.id, { itemNumber: event.target.value })}
+                      className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-3 py-2"
+                    />
+                  </label>
+                  <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
+                    Visual preset
+                    <select
+                      value={selectedPlanDraft?.visualPreset ?? ""}
+                      onChange={(event) => updatePlanDraft(selectedPlan.id, { visualPreset: event.target.value })}
+                      className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-3 py-2"
+                    >
+                      <option value="">Use recommended preset</option>
+                      {visualPresetCategories.map((category) => (
+                        <optgroup key={category.id} label={category.label}>
+                          {visualPresetOptions
+                            .filter((preset) => preset.categoryId === category.id)
+                            .map((preset) => (
+                              <option key={preset.id} value={preset.id}>
+                                {preset.label}
+                              </option>
+                            ))}
+                        </optgroup>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              </article>
+
+              <article className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h4 className="text-base font-bold text-[var(--dashboard-text)]">Source images</h4>
+                    <p className="mt-1 text-sm text-[var(--dashboard-subtle)]">
+                      Open any source image full size while adjusting the artwork copy.
+                    </p>
+                  </div>
+                  <Link
+                    href={templates.find((template) => template.id === selectedPlan.templateId)?.previewPath ?? "/library"}
+                    className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)]"
+                  >
+                    Preview template
+                  </Link>
+                </div>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  {selectedPlan.assignments.map((assignment) => (
+                    <button
+                      key={assignment.slotIndex}
+                      type="button"
+                      onClick={() =>
+                        setPreviewSource({
+                          url: assignment.imageUrl,
+                          label: assignment.imageLabel,
+                        })
+                      }
+                      className="overflow-hidden rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] text-left text-sm transition hover:border-[var(--dashboard-accent)]"
+                    >
+                      <div className="flex aspect-[4/3] items-center justify-center bg-[var(--dashboard-panel-alt)] p-3">
+                        <img
+                          src={assignment.imageUrl}
+                          alt={assignment.imageLabel}
+                          className="h-full w-full object-contain"
+                        />
+                      </div>
+                      <div className="p-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="font-semibold text-[var(--dashboard-text)]">Slot {assignment.slotIndex + 1}</p>
+                          <span className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--dashboard-muted)]">
+                            Full preview
+                          </span>
+                        </div>
+                        <p className="mt-2 line-clamp-2 text-sm text-[var(--dashboard-subtle)]">{assignment.imageLabel}</p>
+                        <p className="mt-2 line-clamp-1 text-xs text-[var(--dashboard-muted)]">
+                          {formatCompactUrl(assignment.imageUrl)}
+                        </p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </article>
+
+              {selectedPlanGeneratedPins.length > 0 ? (
+                <article className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h4 className="text-base font-bold text-[var(--dashboard-text)]">Generated outputs</h4>
+                      <p className="mt-1 text-sm text-[var(--dashboard-subtle)]">
+                        Review current and previous renders from this plan.
+                      </p>
+                    </div>
+                    <StatusPill
+                      label={`${selectedPlanGeneratedPins.length} from this plan`}
+                      tone="neutral"
+                    />
+                  </div>
+                  <div className="mt-4 space-y-3">
+                    {selectedPlanGeneratedPins.map((pin) => {
+                      const absoluteIndex = generatedPins.findIndex((entry) => entry.id === pin.id);
+                      const assetMissing = missingAssetPinIds.includes(pin.id);
+
+                      return (
+                        <div
+                          key={pin.id}
+                          className="grid gap-4 rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-3 sm:grid-cols-[120px_minmax(0,1fr)]"
+                        >
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!assetMissing && absoluteIndex >= 0) {
+                                setPreviewPinIndex(absoluteIndex);
+                              }
+                            }}
+                            disabled={assetMissing}
+                            className="overflow-hidden rounded-xl border border-[var(--dashboard-line)]"
+                          >
+                            {assetMissing ? (
+                              <MissingAssetCard />
+                            ) : (
+                              <img
+                                src={pin.exportPath}
+                                alt={pin.title ?? "Generated pin"}
+                                className="aspect-[2/3] w-full object-cover"
+                                onError={() => markPinAssetMissing(pin.id)}
+                              />
+                            )}
+                          </button>
+                          <div className="space-y-3 text-sm text-[var(--dashboard-subtle)]">
+                            <div className="flex flex-wrap gap-2">
+                              <StatusPill label={pin.templateId} tone="neutral" />
+                              <StatusPill label={formatLabel(pin.mediaStatus)} tone={toneForPinStatus(pin.mediaStatus)} />
+                            </div>
+                            <p>
+                              <strong className="text-[var(--dashboard-text)]">Title:</strong>{" "}
+                              {pin.title || "No saved title"}
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => absoluteIndex >= 0 && setPreviewPinIndex(absoluteIndex)}
+                                disabled={assetMissing}
+                                className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)]"
+                              >
+                                View full size
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDiscardGeneratedPins([pin.id])}
+                                className="rounded-full border border-[var(--dashboard-danger-border)] bg-[var(--dashboard-danger-soft)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-danger-ink)]"
+                              >
+                                Discard this pin
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </article>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {previewSource ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(12,18,28,0.72)] p-6 backdrop-blur-sm">
           <div className="max-h-[92vh] w-full max-w-5xl overflow-hidden rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] shadow-[var(--dashboard-shadow-md)]">
@@ -2108,6 +2809,42 @@ function StatusPill({
   );
 }
 
+function FilterChip({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-full border px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] ${
+        active
+          ? "border-[var(--dashboard-accent)] bg-[var(--dashboard-accent-soft-strong)] text-[var(--dashboard-accent-strong)]"
+          : "border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] text-[var(--dashboard-subtle)]"
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
+function SelectionChip({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-subtle)]"
+    >
+      {label}
+    </button>
+  );
+}
+
 function toneForPlanStatus(status: string) {
   if (status === "GENERATED") {
     return "good" as const;
@@ -2193,4 +2930,61 @@ function buildRenderProgressMessage(input: {
 }) {
   const currentIndex = Math.min(input.total, input.completed + 1);
   return `Rendering ${currentIndex} of ${input.total}: ${input.currentLabel}.`;
+}
+
+function isPlanUnresolved(state: string) {
+  return ["FLAGGED", "RERENDER_QUEUED", "RERENDERING", "RERENDER_FAILED"].includes(state);
+}
+
+function buildRecentlyFixedStorageKey(jobId: string) {
+  return `${RECENTLY_FIXED_STORAGE_KEY_PREFIX}${jobId}`;
+}
+
+function readRecentlyFixedPlanIds(jobId: string) {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  try {
+    const raw = window.sessionStorage.getItem(buildRecentlyFixedStorageKey(jobId));
+    if (!raw) {
+      return [];
+    }
+
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.filter((value): value is string => typeof value === "string")
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistRecentlyFixedPlanIds(jobId: string, planIds: string[]) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.sessionStorage.setItem(
+      buildRecentlyFixedStorageKey(jobId),
+      JSON.stringify(planIds),
+    );
+  } catch {
+    // Ignore session storage failures and keep the current review flow usable.
+  }
+}
+
+function extractTaskPlanIds(task: RenderTaskState) {
+  const payload = task.payloadJson;
+  if (!payload || typeof payload !== "object") {
+    return [];
+  }
+
+  const planIds = Array.isArray(payload.planIds)
+    ? payload.planIds.filter((value): value is string => typeof value === "string")
+    : [];
+  const singlePlanId = typeof payload.planId === "string" ? payload.planId : null;
+
+  return Array.from(new Set([...planIds, ...(singlePlanId ? [singlePlanId] : [])]));
 }
