@@ -1,10 +1,12 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
+import process from "node:process";
 import serverlessChromium from "@sparticuz/chromium";
 import { chromium as localChromium } from "playwright";
 import { chromium as serverlessPlaywright } from "playwright-core";
-import type { Page } from "playwright-core";
+import type { Browser, BrowserContext, Page } from "playwright-core";
 import { env } from "@/lib/env";
+import { logStructuredEvent } from "@/lib/observability/operationContext";
 import { getStorageProvider } from "@/lib/storage";
 import { getTemplateConfig } from "@/lib/templates/registry";
 
@@ -14,15 +16,44 @@ type RenderPinInput = {
   templateId: string;
 };
 
+type BrowserLaunchMode = "native" | "serverless" | "custom_executable";
+
+type SharedBrowserState = {
+  browser: Browser | null;
+  browserPromise: Promise<Browser> | null;
+  launchMode: BrowserLaunchMode | null;
+  renderCount: number;
+  lastRestartReason: string | null;
+};
+
+const sharedBrowserState: SharedBrowserState = {
+  browser: null,
+  browserPromise: null,
+  launchMode: null,
+  renderCount: 0,
+  lastRestartReason: null,
+};
+
+const MAX_RENDERS_PER_BROWSER = Number.parseInt(
+  process.env.PLAYWRIGHT_BROWSER_MAX_RENDERS ?? "24",
+  10,
+);
+const MAX_BROWSER_HEAP_MB = Number.parseInt(
+  process.env.PLAYWRIGHT_BROWSER_MAX_HEAP_MB ?? "900",
+  10,
+);
+
 export async function renderPin({ jobId, planId, templateId }: RenderPinInput) {
   const storageProvider = getStorageProvider();
   const key = createRenderedPinStorageKey(jobId, planId, templateId);
 
   for (let attempt = 1; attempt <= 3; attempt += 1) {
-    const browser = await launchBrowser();
+    const browser = await getSharedBrowser();
 
     try {
       const screenshot = await renderPinScreenshot(browser, { jobId, planId, templateId });
+      sharedBrowserState.renderCount += 1;
+      await recycleSharedBrowserIfNeeded("render_threshold");
 
       return storageProvider.upload({
         key,
@@ -30,43 +61,45 @@ export async function renderPin({ jobId, planId, templateId }: RenderPinInput) {
         contentType: "image/png",
       });
     } catch (error) {
-      if (attempt === 3 || !isRetryableRenderError(error)) {
+      const retryable = isRetryableRenderError(error);
+
+      if (retryable) {
+        await resetSharedBrowser("retryable_render_error", error);
+      }
+
+      if (attempt === 3 || !retryable) {
         throw error;
       }
 
       await waitBeforeRetry(attempt);
-    } finally {
-      await browser.close();
     }
   }
 
   throw new Error("Unable to render pin.");
 }
 
-async function renderPinScreenshot(
-  browser: Awaited<ReturnType<typeof launchBrowser>>,
-  { jobId, planId, templateId }: RenderPinInput,
-) {
+async function renderPinScreenshot(browser: Browser, { jobId, planId, templateId }: RenderPinInput) {
   const templateConfig = getTemplateConfig(templateId);
   const viewport = templateConfig?.canvas ?? { width: 1080, height: 1920 };
 
-  const page = await browser.newPage({
+  const context = await browser.newContext({
     viewport,
     deviceScaleFactor: 1,
   });
-
-  const url = `${env.appUrl}/render/${templateId}?jobId=${jobId}&planId=${planId}`;
-  await page.goto(url, {
-    waitUntil: "domcontentloaded",
-    timeout: isServerlessRuntime() ? 20_000 : 60_000,
-  });
-  await page.locator("[data-pin-canvas='true']").waitFor({ state: "visible", timeout: 15_000 });
-  await waitForStableCanvas(page);
+  const page = await context.newPage();
 
   try {
+    const url = `${env.appUrl}/render/${templateId}?jobId=${jobId}&planId=${planId}`;
+    await page.goto(url, {
+      waitUntil: "domcontentloaded",
+      timeout: isServerlessRuntime() ? 20_000 : 60_000,
+    });
+    await page.locator("[data-pin-canvas='true']").waitFor({ state: "visible", timeout: 15_000 });
+    await waitForStableCanvas(page);
+
     return await capturePinCanvas(page);
   } finally {
-    await page.close().catch(() => null);
+    await closeRenderContext(context);
   }
 }
 
@@ -146,26 +179,155 @@ async function capturePinCanvas(page: Page) {
   }
 }
 
-async function launchBrowser() {
+async function getSharedBrowser() {
+  if (sharedBrowserState.browser && sharedBrowserState.browser.isConnected()) {
+    return sharedBrowserState.browser;
+  }
+
+  if (sharedBrowserState.browserPromise) {
+    return sharedBrowserState.browserPromise;
+  }
+
+  sharedBrowserState.browserPromise = launchBrowser().then(({ browser, launchMode }) => {
+    sharedBrowserState.browser = browser;
+    sharedBrowserState.launchMode = launchMode;
+    sharedBrowserState.browserPromise = null;
+
+    browser.on("disconnected", () => {
+      if (sharedBrowserState.browser === browser) {
+        sharedBrowserState.browser = null;
+        sharedBrowserState.browserPromise = null;
+        sharedBrowserState.launchMode = null;
+        sharedBrowserState.renderCount = 0;
+        logStructuredEvent("warn", "renderer.browser.disconnected", {
+          launchMode,
+          lastRestartReason: sharedBrowserState.lastRestartReason,
+        });
+      }
+    });
+
+    logStructuredEvent("info", "renderer.browser.started", {
+      launchMode,
+      maxRendersPerBrowser: MAX_RENDERS_PER_BROWSER,
+      maxHeapMb: MAX_BROWSER_HEAP_MB,
+    });
+
+    return browser;
+  });
+
+  try {
+    return await sharedBrowserState.browserPromise;
+  } catch (error) {
+    sharedBrowserState.browserPromise = null;
+    throw error;
+  }
+}
+
+async function recycleSharedBrowserIfNeeded(reason: "render_threshold" | "memory_threshold") {
+  if (!sharedBrowserState.browser) {
+    return;
+  }
+
+  const shouldRecycleByCount =
+    Number.isFinite(MAX_RENDERS_PER_BROWSER) &&
+    MAX_RENDERS_PER_BROWSER > 0 &&
+    sharedBrowserState.renderCount >= MAX_RENDERS_PER_BROWSER;
+  const shouldRecycleByMemory =
+    Number.isFinite(MAX_BROWSER_HEAP_MB) &&
+    MAX_BROWSER_HEAP_MB > 0 &&
+    getProcessHeapUsageMb() >= MAX_BROWSER_HEAP_MB;
+
+  if (!shouldRecycleByCount && !shouldRecycleByMemory) {
+    return;
+  }
+
+  await resetSharedBrowser(shouldRecycleByMemory ? "memory_threshold" : reason);
+}
+
+async function resetSharedBrowser(
+  reason:
+    | "render_threshold"
+    | "memory_threshold"
+    | "retryable_render_error"
+    | "manual_reset",
+  error?: unknown,
+) {
+  const browser = sharedBrowserState.browser;
+  if (!browser) {
+    sharedBrowserState.browserPromise = null;
+    sharedBrowserState.launchMode = null;
+    sharedBrowserState.renderCount = 0;
+    sharedBrowserState.lastRestartReason = reason;
+    return;
+  }
+
+  logStructuredEvent("warn", "renderer.browser.restart", {
+    reason,
+    launchMode: sharedBrowserState.launchMode,
+    renderCount: sharedBrowserState.renderCount,
+    heapMb: getProcessHeapUsageMb(),
+    error:
+      error instanceof Error
+        ? {
+            name: error.name,
+            message: error.message,
+          }
+        : error
+          ? String(error)
+          : null,
+  });
+
+  sharedBrowserState.browser = null;
+  sharedBrowserState.browserPromise = null;
+  sharedBrowserState.launchMode = null;
+  sharedBrowserState.renderCount = 0;
+  sharedBrowserState.lastRestartReason = reason;
+
+  await browser.close().catch(() => null);
+}
+
+async function closeRenderContext(context: BrowserContext) {
+  await context.close().catch((error) => {
+    if (isRetryableRenderError(error)) {
+      return null;
+    }
+
+    throw error;
+  });
+}
+
+async function launchBrowser(): Promise<{
+  browser: Browser;
+  launchMode: BrowserLaunchMode;
+}> {
   const executablePath = process.env.PLAYWRIGHT_EXECUTABLE_PATH?.trim();
 
   if (executablePath) {
-    return serverlessPlaywright.launch({
-      executablePath,
-      headless: true,
-    });
+    return {
+      browser: await serverlessPlaywright.launch({
+        executablePath,
+        headless: true,
+      }),
+      launchMode: "custom_executable",
+    };
   }
 
   if (isServerlessRuntime()) {
     const chromiumInputDir = resolveChromiumInputDir();
-    return serverlessPlaywright.launch({
-      args: serverlessChromium.args,
-      executablePath: await serverlessChromium.executablePath(chromiumInputDir),
-      headless: true,
-    });
+    return {
+      browser: await serverlessPlaywright.launch({
+        args: serverlessChromium.args,
+        executablePath: await serverlessChromium.executablePath(chromiumInputDir),
+        headless: true,
+      }),
+      launchMode: "serverless",
+    };
   }
 
-  return localChromium.launch({ headless: true });
+  return {
+    browser: await localChromium.launch({ headless: true }),
+    launchMode: "native",
+  };
 }
 
 function isRetryableRenderError(error: unknown) {
@@ -204,4 +366,8 @@ function resolveChromiumInputDir() {
   }
 
   return undefined;
+}
+
+function getProcessHeapUsageMb() {
+  return Math.round(process.memoryUsage().heapUsed / (1024 * 1024));
 }
