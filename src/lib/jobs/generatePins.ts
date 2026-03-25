@@ -1263,6 +1263,8 @@ export async function uploadJobPinsToPubler(input: {
                     const mediaSnapshot = await waitForPublerJobCompletion({
                       client: publerClient,
                       jobId: mediaJob.jobId,
+                      maxRounds: 72,
+                      delayMs: 5000,
                     });
 
                     if (mediaSnapshot.state !== "completed" || !mediaSnapshot.mediaId) {

@@ -343,7 +343,7 @@ export async function uploadMediaWithQueueHandling(input: {
   imageUrl: string;
   options?: PublerMediaUploadOptions;
 }) {
-  const maxAttempts = 180;
+  const maxAttempts = 36;
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     try {
       return await input.client.uploadMediaFromUrl(input.imageUrl, input.options);
@@ -750,8 +750,8 @@ function wait(milliseconds: number) {
 }
 
 function getPublerQueueRetryDelayMs(attempt: number) {
-  const baseDelay = 4000;
-  const maxDelay = 15000;
+  const baseDelay = 3000;
+  const maxDelay = 10000;
   const exponentialDelay = Math.min(maxDelay, baseDelay * 2 ** Math.min(attempt, 3));
   const jitter = Math.floor(Math.random() * 1000);
   return exponentialDelay + jitter;
