@@ -165,6 +165,9 @@ export default async function DashboardJobDetailsPage({ params }: PageProps) {
             mode: plan.mode,
             templateId: plan.templateId,
             status: plan.status,
+            artworkReviewState: plan.artworkReviewState,
+            artworkFlagReason: plan.artworkFlagReason,
+            rerenderError: plan.rerenderError,
             generatedPinCount: plan.generatedPins.length,
             assignments: plan.imageAssignments.map((assignment) => ({
               slotIndex: assignment.slotIndex,

@@ -1,4 +1,6 @@
 import {
+  ArtworkReviewState,
+  BackgroundTaskKind,
   GenerationJobStatus,
   GenerationPlanMode,
   GenerationPlanStatus,
@@ -28,6 +30,7 @@ import {
 } from "@/lib/ai/validators";
 import { env } from "@/lib/env";
 import {
+  normalizeErrorForLogging,
   runWithOperationContext,
   timeAsyncOperation,
 } from "@/lib/observability/operationContext";
@@ -52,6 +55,12 @@ import {
 } from "@/lib/settings/integrationSettings";
 import { getStorageProvider } from "@/lib/storage";
 import { buildStorageAssetUrl, resolveStoredAssetUrl } from "@/lib/storage/assetUrl";
+import {
+  buildRenderPlansTaskDedupeKey,
+  buildRerenderPlanTaskDedupeKey,
+  enqueueBackgroundTask,
+  serializeBackgroundTaskSummary,
+} from "@/lib/tasks/backgroundTasks";
 import {
   compactHeroTwoSplitTextTitle,
   isHeroTwoSplitTextTitleWithinLimit,
@@ -89,6 +98,23 @@ type AssistedPresetStrategy =
 type ResolvedAICredentialConfig = AIProviderConfig & {
   id?: string;
   label?: string;
+};
+
+type RenderTaskProgress = {
+  stage:
+    | "queued"
+    | "running"
+    | "completed"
+    | "completed_with_failures";
+  total: number;
+  completed: number;
+  currentLabel?: string | null;
+  generatedPinCount?: number;
+  failedPlans?: Array<{
+    planId: string;
+    templateId: string;
+    error: string;
+  }>;
 };
 
 const HERO_NUMBER_WEAK_WORDS = new Set([
@@ -1003,6 +1029,15 @@ export async function updateGenerationPlanRenderContext(input: {
         plan.status === GenerationPlanStatus.GENERATED
           ? GenerationPlanStatus.READY
           : plan.status,
+      artworkReviewState:
+        plan.status === GenerationPlanStatus.GENERATED
+          ? ArtworkReviewState.FLAGGED
+          : plan.artworkReviewState,
+      artworkFlagReason:
+        plan.status === GenerationPlanStatus.GENERATED ? "Render settings updated." : plan.artworkFlagReason,
+      rerenderRequestedAt:
+        plan.status === GenerationPlanStatus.GENERATED ? new Date() : plan.rerenderRequestedAt,
+      rerenderError: null,
     },
   });
 
@@ -1028,11 +1063,122 @@ export async function updateGenerationPlanRenderContext(input: {
   );
 }
 
+export async function setGenerationPlanArtworkReviewState(input: {
+  userId: string;
+  jobId: string;
+  planId: string;
+  artworkReviewState: "NORMAL" | "FLAGGED";
+  artworkFlagReason?: string | null;
+}) {
+  const job = await getOwnedJobPlansForRender(input.jobId, input.userId, [input.planId]);
+  const plan = job.generationPlans.find((entry) => entry.id === input.planId);
+
+  if (!plan) {
+    throw new Error("Generation plan not found.");
+  }
+
+  const nextState = input.artworkReviewState;
+  const nextReason =
+    nextState === ArtworkReviewState.FLAGGED
+      ? input.artworkFlagReason?.trim() || "Flagged for artwork review."
+      : null;
+
+  await prisma.generationPlan.update({
+    where: { id: plan.id },
+    data: {
+      artworkReviewState: nextState,
+      artworkFlagReason: nextReason,
+      rerenderError: nextState === ArtworkReviewState.NORMAL ? null : plan.rerenderError,
+    },
+  });
+}
+
+export async function queuePlanRenderTask(input: {
+  userId: string;
+  jobId: string;
+  planIds?: string[];
+  aiCredentialId?: string;
+}) {
+  const job = await getOwnedJobPlansForRender(input.jobId, input.userId, input.planIds);
+  const pendingPlans = selectRenderablePlans(job, input.planIds);
+
+  if (pendingPlans.length === 0) {
+    throw new Error(
+      input.planIds?.length
+        ? "Select at least one ready plan before rendering pins."
+        : "Create at least one generation plan before rendering pins.",
+    );
+  }
+
+  const now = new Date();
+  await prisma.generationPlan.updateMany({
+    where: {
+      id: { in: pendingPlans.map((plan) => plan.id) },
+    },
+    data: {
+      artworkReviewState: ArtworkReviewState.RERENDER_QUEUED,
+      rerenderRequestedAt: now,
+      rerenderError: null,
+    },
+  });
+
+  const isSinglePlan = pendingPlans.length === 1;
+  const task = await enqueueBackgroundTask({
+    kind: isSinglePlan ? BackgroundTaskKind.RERENDER_PLAN : BackgroundTaskKind.RENDER_PLANS,
+    userId: input.userId,
+    jobId: input.jobId,
+    planId: isSinglePlan ? pendingPlans[0]?.id ?? null : null,
+    priority: 50,
+    dedupeKey: isSinglePlan
+      ? buildRerenderPlanTaskDedupeKey(pendingPlans[0]!.id)
+      : buildRenderPlansTaskDedupeKey(input.jobId, pendingPlans.map((plan) => plan.id)),
+    payloadJson: {
+      userId: input.userId,
+      jobId: input.jobId,
+      planIds: pendingPlans.map((plan) => plan.id),
+      aiCredentialId: input.aiCredentialId ?? null,
+    },
+    progressJson: {
+      stage: "queued",
+      total: pendingPlans.length,
+      completed: 0,
+      currentLabel: pendingPlans[0]?.templateId ?? null,
+      generatedPinCount: 0,
+      failedPlans: [],
+    } satisfies Prisma.InputJsonValue,
+    maxAttempts: 3,
+  });
+
+  await prisma.generationJob.update({
+    where: { id: job.id },
+    data: {
+      status: GenerationJobStatus.READY_FOR_GENERATION,
+    },
+  });
+
+  return {
+    jobId: job.id,
+    queuedPlanCount: pendingPlans.length,
+    reused: task.reused,
+    task: serializeBackgroundTaskSummary(task.task),
+  };
+}
+
 export async function generatePinsForJob(input: {
   userId: string;
   jobId: string;
   planIds?: string[];
   aiCredentialId?: string;
+}) {
+  return queuePlanRenderTask(input);
+}
+
+export async function renderPlansForJobTask(input: {
+  userId: string;
+  jobId: string;
+  planIds?: string[];
+  aiCredentialId?: string | null;
+  onProgress?: (progress: RenderTaskProgress) => Promise<void>;
 }) {
   return runWithOperationContext(
     {
@@ -1051,10 +1197,20 @@ export async function generatePinsForJob(input: {
         },
         async () => {
           const job = await getOwnedJobPlansForRender(input.jobId, input.userId, input.planIds);
+          const pendingPlans = selectRenderablePlans(job, input.planIds);
+
+          if (pendingPlans.length === 0) {
+            throw new Error(
+              input.planIds?.length
+                ? "Select at least one ready plan before rendering pins."
+                : "Create at least one generation plan before rendering pins.",
+            );
+          }
+
           const aiCredentialConfigs = (
             await resolveAiCredentialCandidatesForUserId({
               userId: input.userId,
-              aiCredentialId: input.aiCredentialId,
+              aiCredentialId: input.aiCredentialId ?? undefined,
             })
           ).map<ResolvedAICredentialConfig>((credential) => ({
             id: credential.id,
@@ -1064,128 +1220,226 @@ export async function generatePinsForJob(input: {
             model: credential.model,
             customEndpoint: credential.customEndpoint,
           }));
-          const pendingPlanStatuses = new Set<GenerationPlanStatus>([
-            GenerationPlanStatus.DRAFT,
-            GenerationPlanStatus.READY,
-            GenerationPlanStatus.FAILED,
-          ]);
-          const selectedPlanIds = input.planIds?.length ? new Set(input.planIds) : null;
-          const pendingPlans = job.generationPlans.filter(
-            (plan) =>
-              pendingPlanStatuses.has(plan.status) &&
-              (!selectedPlanIds || selectedPlanIds.has(plan.id)),
-          );
 
-          if (pendingPlans.length === 0) {
-            throw new Error(
-              selectedPlanIds
-                ? "Select at least one ready plan before rendering pins."
-                : "Create at least one generation plan before rendering pins.",
-            );
-          }
+          await prisma.generationPlan.updateMany({
+            where: {
+              id: { in: pendingPlans.map((plan) => plan.id) },
+            },
+            data: {
+              artworkReviewState: ArtworkReviewState.RERENDERING,
+              rerenderError: null,
+            },
+          });
 
-          const generatedPins = [];
+          await input.onProgress?.({
+            stage: "running",
+            total: pendingPlans.length,
+            completed: 0,
+            currentLabel: pendingPlans[0]?.templateId ?? null,
+            generatedPinCount: 0,
+            failedPlans: [],
+          });
 
-          for (const plan of pendingPlans) {
-            const template = TEMPLATE_CONFIGS[plan.templateId];
-            if (!template) {
-              throw new Error(`Unknown template configuration: ${plan.templateId}`);
-            }
+          const generatedPins: Array<{
+            id: string;
+            planId: string;
+            templateId: string;
+            pinCopy?: { title?: string | null } | null;
+          }> = [];
+          const failedPlans: Array<{
+            planId: string;
+            templateId: string;
+            error: string;
+          }> = [];
 
-            await prisma.template.upsert({
-              where: { id: template.id },
-              update: {
-                name: template.name,
-                componentKey: template.componentKey,
-                configJson: template as unknown as Prisma.InputJsonValue,
-                isActive: true,
-              },
-              create: {
-                id: template.id,
-                name: template.name,
-                componentKey: template.componentKey,
-                configJson: template as unknown as Prisma.InputJsonValue,
-                isActive: true,
-              },
+          for (const [index, plan] of pendingPlans.entries()) {
+            await input.onProgress?.({
+              stage: "running",
+              total: pendingPlans.length,
+              completed: index,
+              currentLabel: plan.templateId,
+              generatedPinCount: generatedPins.length,
+              failedPlans,
             });
 
-            const recentArtworkTitles = generatedPins
-              .map((pin) => pin.pinCopy?.title?.trim())
-              .filter((value): value is string => Boolean(value));
-            const renderCopy = await generateRenderCopyForPlan(
-              job,
-              plan,
-              aiCredentialConfigs,
-              recentArtworkTitles,
-            );
-            const nextRenderContext = serializePlanRenderContext({
-              ...parsePlanRenderContext(plan.notes),
-              ...renderCopy,
-            });
-            await prisma.generationPlan.update({
-              where: { id: plan.id },
-              data: {
-                notes: nextRenderContext,
-              },
-            });
+            try {
+              const template = TEMPLATE_CONFIGS[plan.templateId];
+              if (!template) {
+                throw new Error(`Unknown template configuration: ${plan.templateId}`);
+              }
 
-            const exportObject = await renderPin({
-              jobId: job.id,
-              planId: plan.id,
-              templateId: plan.templateId,
-            });
-            const exportUrl = exportObject.publicUrl ?? buildStorageAssetUrl(exportObject.key);
+              await prisma.template.upsert({
+                where: { id: template.id },
+                update: {
+                  name: template.name,
+                  componentKey: template.componentKey,
+                  configJson: template as unknown as Prisma.InputJsonValue,
+                  isActive: true,
+                },
+                create: {
+                  id: template.id,
+                  name: template.name,
+                  componentKey: template.componentKey,
+                  configJson: template as unknown as Prisma.InputJsonValue,
+                  isActive: true,
+                },
+              });
 
-            const pin = await prisma.generatedPin.create({
-              data: {
+              const recentArtworkTitles = generatedPins
+                .map((pin) => pin.pinCopy?.title?.trim())
+                .filter((value): value is string => Boolean(value));
+              const renderCopy = await generateRenderCopyForPlan(
+                job,
+                plan,
+                aiCredentialConfigs,
+                recentArtworkTitles,
+              );
+              const nextRenderContext = serializePlanRenderContext({
+                ...parsePlanRenderContext(plan.notes),
+                ...renderCopy,
+              });
+              await prisma.generationPlan.update({
+                where: { id: plan.id },
+                data: {
+                  notes: nextRenderContext,
+                },
+              });
+
+              const exportObject = await renderPin({
                 jobId: job.id,
                 planId: plan.id,
                 templateId: plan.templateId,
-                exportPath: exportUrl,
-                storageKey: exportObject.key,
-                pinCopy: {
-                  create: {
-                    title: renderCopy.title,
-                    titleStatus: PinCopyFieldStatus.GENERATED,
+              });
+              const exportUrl = exportObject.publicUrl ?? buildStorageAssetUrl(exportObject.key);
+
+              const pin = await prisma.generatedPin.create({
+                data: {
+                  jobId: job.id,
+                  planId: plan.id,
+                  templateId: plan.templateId,
+                  exportPath: exportUrl,
+                  storageKey: exportObject.key,
+                  pinCopy: {
+                    create: {
+                      title: renderCopy.title,
+                      titleStatus: PinCopyFieldStatus.GENERATED,
+                    },
+                  },
+                  publerMedia: {
+                    create: {
+                      status: MediaUploadStatus.PENDING,
+                      sourceUrl: exportUrl,
+                    },
                   },
                 },
-                publerMedia: {
-                  create: {
-                    status: MediaUploadStatus.PENDING,
-                    sourceUrl: exportUrl,
-                  },
+                include: {
+                  pinCopy: true,
+                  publerMedia: true,
                 },
-              },
-              include: {
-                pinCopy: true,
-                publerMedia: true,
-              },
-            });
+              });
 
-            await prisma.generationPlan.update({
-              where: { id: plan.id },
-              data: {
-                status: GenerationPlanStatus.GENERATED,
-              },
-            });
+              await prisma.generationPlan.update({
+                where: { id: plan.id },
+                data: {
+                  status: GenerationPlanStatus.GENERATED,
+                  artworkReviewState: ArtworkReviewState.NORMAL,
+                  artworkFlagReason: null,
+                  rerenderError: null,
+                },
+              });
 
-            generatedPins.push(pin);
+              generatedPins.push(pin);
+            } catch (error) {
+              const normalized = normalizeErrorForLogging(error);
+              const message = normalized.message;
+
+              await prisma.generationPlan.update({
+                where: { id: plan.id },
+                data: {
+                  status: GenerationPlanStatus.FAILED,
+                  artworkReviewState: ArtworkReviewState.RERENDER_FAILED,
+                  rerenderError: message,
+                },
+              });
+
+              failedPlans.push({
+                planId: plan.id,
+                templateId: plan.templateId,
+                error: message,
+              });
+            }
+
+            await input.onProgress?.({
+              stage: "running",
+              total: pendingPlans.length,
+              completed: index + 1,
+              currentLabel:
+                index + 1 < pendingPlans.length ? pendingPlans[index + 1]?.templateId ?? null : null,
+              generatedPinCount: generatedPins.length,
+              failedPlans,
+            });
           }
 
-          await prisma.generationJob.update({
-            where: { id: job.id },
-            data: {
-              status: GenerationJobStatus.PINS_GENERATED,
-            },
-          });
-          await recordJobMilestone(job.id, GenerationJobStatus.PINS_GENERATED, "Pins rendered.");
+          if (generatedPins.length === 0 && failedPlans.length > 0) {
+            await prisma.generationJob.update({
+              where: { id: job.id },
+              data: {
+                status: GenerationJobStatus.FAILED,
+              },
+            });
+            await recordJobMilestone(
+              job.id,
+              GenerationJobStatus.FAILED,
+              `Rendering failed for ${failedPlans.length} plan${failedPlans.length === 1 ? "" : "s"}.`,
+            );
+          } else {
+            await syncJobProgressStatus(job.id);
+            await recordJobMilestone(
+              job.id,
+              GenerationJobStatus.PINS_GENERATED,
+              failedPlans.length > 0
+                ? `${generatedPins.length} pin${generatedPins.length === 1 ? "" : "s"} rendered. ${failedPlans.length} plan${failedPlans.length === 1 ? "" : "s"} failed.`
+                : "Pins rendered.",
+            );
+          }
+
+          const progress: RenderTaskProgress = {
+            stage: failedPlans.length > 0 ? "completed_with_failures" : "completed",
+            total: pendingPlans.length,
+            completed: pendingPlans.length,
+            currentLabel: null,
+            generatedPinCount: generatedPins.length,
+            failedPlans,
+          };
+
+          await input.onProgress?.(progress);
 
           return {
             jobId: job.id,
             generatedPins,
+            failedPlans,
+            progress,
           };
         },
       ),
+  );
+}
+
+function selectRenderablePlans(
+  job: WorkflowJobPlansForRender,
+  planIds?: string[],
+) {
+  const pendingPlanStatuses = new Set<GenerationPlanStatus>([
+    GenerationPlanStatus.DRAFT,
+    GenerationPlanStatus.READY,
+    GenerationPlanStatus.FAILED,
+  ]);
+  const selectedPlanIds = planIds?.length ? new Set(planIds) : null;
+
+  return job.generationPlans.filter(
+    (plan) =>
+      pendingPlanStatuses.has(plan.status) &&
+      (!selectedPlanIds || selectedPlanIds.has(plan.id)),
   );
 }
 
@@ -1304,6 +1558,10 @@ export async function discardGeneratedPinsForJob(input: {
         },
         data: {
           status: GenerationPlanStatus.READY,
+          artworkReviewState: ArtworkReviewState.FLAGGED,
+          artworkFlagReason: "Generated output discarded.",
+          rerenderRequestedAt: new Date(),
+          rerenderError: null,
         },
       });
     }

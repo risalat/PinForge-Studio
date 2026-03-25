@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { ArtworkReviewState } from "@prisma/client";
 import { z } from "zod";
 import { requireAuthenticatedDashboardApiUser } from "@/lib/auth/dashboardSession";
 import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
@@ -8,6 +9,7 @@ import {
   createAssistedGenerationPlans,
   createManualGenerationPlan,
   discardGenerationPlansForJob,
+  setGenerationPlanArtworkReviewState,
   updateGenerationPlanRenderContext,
 } from "@/lib/jobs/generatePins";
 import { templateVisualPresetCategories } from "@/lib/templates/types";
@@ -40,6 +42,12 @@ const plansSchema = z.discriminatedUnion("mode", [
   z.object({
     mode: z.literal("discard"),
     planIds: z.array(z.string().min(1)).min(1).optional(),
+  }),
+  z.object({
+    mode: z.literal("set_review_state"),
+    planId: z.string().min(1),
+    artworkReviewState: z.enum([ArtworkReviewState.FLAGGED, ArtworkReviewState.NORMAL]),
+    artworkFlagReason: z.string().optional(),
   }),
 ]);
 
@@ -90,6 +98,14 @@ export async function POST(request: Request, { params }: RouteProps) {
         subtitle: payload.subtitle,
         itemNumber: payload.itemNumber,
         visualPreset: payload.visualPreset,
+      });
+    } else if (payload.mode === "set_review_state") {
+      await setGenerationPlanArtworkReviewState({
+        userId: user.id,
+        jobId,
+        planId: payload.planId,
+        artworkReviewState: payload.artworkReviewState,
+        artworkFlagReason: payload.artworkFlagReason,
       });
     } else {
       const result = await discardGenerationPlansForJob({

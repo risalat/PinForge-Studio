@@ -4,7 +4,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { BusyActionLabel } from "@/components/ui/BusyActionLabel";
 import { useAppFeedback } from "@/components/ui/AppFeedbackProvider";
 import type { AiCredentialSummary } from "@/lib/types";
@@ -47,6 +47,9 @@ type PlanItem = {
   mode: string;
   templateId: string;
   status: string;
+  artworkReviewState: string;
+  artworkFlagReason: string | null;
+  rerenderError: string | null;
   generatedPinCount: number;
   title?: string;
   subtitle?: string;
@@ -82,6 +85,7 @@ type ReviewActionState =
   | { kind: "discard_plans"; scope: "selected" | "single" }
   | { kind: "discard_pins"; scope: "all" | "single" }
   | { kind: "save_overrides"; planId: string }
+  | { kind: "set_review_state"; planId: string }
   | null;
 
 type RenderProgressState = {
@@ -89,6 +93,25 @@ type RenderProgressState = {
   completed: number;
   total: number;
   currentLabel: string;
+};
+
+type RenderTaskState = {
+  id: string;
+  kind: string;
+  status: string;
+  progressJson?: {
+    stage?: string;
+    total?: number;
+    completed?: number;
+    currentLabel?: string | null;
+    generatedPinCount?: number;
+    failedPlans?: Array<{
+      planId: string;
+      templateId: string;
+      error: string;
+    }>;
+  } | null;
+  lastError?: string | null;
 };
 
 type PlanDraft = {
@@ -135,7 +158,7 @@ export function JobReviewManager({
   const initialSelectedImages = initialImages.filter((image) => image.isSelected);
   const initialManualTemplate = templates[0] ?? null;
   const router = useRouter();
-  const { notify, updateNotification, dismissNotification } = useAppFeedback();
+  const { notify } = useAppFeedback();
   const [images, setImages] = useState(initialImages);
   const [pinCount, setPinCount] = useState(3);
   const [selectedTemplateIds, setSelectedTemplateIds] = useState(templates.map((item) => item.id));
@@ -195,6 +218,7 @@ export function JobReviewManager({
   const [missingAssetPinIds, setMissingAssetPinIds] = useState<string[]>([]);
   const [renderProgress, setRenderProgress] = useState<RenderProgressState | null>(null);
   const [isRenderingPlans, setIsRenderingPlans] = useState(false);
+  const [currentRenderTaskId, setCurrentRenderTaskId] = useState<string | null>(null);
   const [activeAction, setActiveAction] = useState<ReviewActionState>(null);
 
   const selectedImages = images.filter((image) => image.isSelected);
@@ -322,6 +346,10 @@ export function JobReviewManager({
       ok?: boolean;
       error?: string;
       generatedPinCount?: number;
+      queued?: boolean;
+      queuedPlanCount?: number;
+      reused?: boolean;
+      task?: RenderTaskState | null;
       discardedPinCount?: number;
       discardedPlanCount?: number;
     };
@@ -331,6 +359,134 @@ export function JobReviewManager({
 
     return data;
   }
+
+  useEffect(() => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    async function poll(taskId?: string | null) {
+      try {
+        const task = await fetchRenderTaskStatus(jobId, taskId);
+        if (cancelled || !task) {
+          if (!task) {
+            setIsRenderingPlans(false);
+            setRenderProgress(null);
+            setCurrentRenderTaskId(null);
+          }
+          return;
+        }
+
+        const progress = task.progressJson ?? {};
+        const total = typeof progress.total === "number" ? progress.total : 0;
+        const completed = typeof progress.completed === "number" ? progress.completed : 0;
+        const currentLabel =
+          typeof progress.currentLabel === "string" && progress.currentLabel.trim()
+            ? progress.currentLabel
+            : task.status === "SUCCEEDED"
+              ? "Complete"
+              : "Preparing";
+
+        setCurrentRenderTaskId(task.id);
+        setIsRenderingPlans(task.status === "QUEUED" || task.status === "RUNNING");
+        setRenderProgress({
+          active: task.status === "QUEUED" || task.status === "RUNNING",
+          completed,
+          total: Math.max(total, completed, 1),
+          currentLabel,
+        });
+
+        if (task.status === "QUEUED" || task.status === "RUNNING") {
+          timer = setTimeout(() => {
+            void poll(task.id);
+          }, 3000);
+          return;
+        }
+
+        if (task.status === "SUCCEEDED") {
+          const failedPlans = progress.failedPlans ?? [];
+          const generatedPinCount =
+            typeof progress.generatedPinCount === "number" ? progress.generatedPinCount : completed;
+          const message =
+            failedPlans.length > 0
+              ? `${generatedPinCount} pin${generatedPinCount === 1 ? "" : "s"} rendered. ${failedPlans.length} plan${failedPlans.length === 1 ? "" : "s"} still need attention.`
+              : `${generatedPinCount} pin${generatedPinCount === 1 ? "" : "s"} rendered.`;
+          setGenerationFeedback({
+            tone: failedPlans.length > 0 ? "error" : "success",
+            message,
+          });
+          notify({
+            tone: failedPlans.length > 0 ? "error" : "success",
+            title: failedPlans.length > 0 ? "Rendering finished with issues" : "Rendering complete",
+            message,
+            sticky: failedPlans.length > 0,
+          });
+        } else if (task.status === "FAILED" || task.status === "CANCELLED") {
+          const message = task.lastError || "Rendering failed.";
+          setGenerationFeedback({
+            tone: "error",
+            message,
+          });
+          notify({
+            tone: "error",
+            title: "Rendering failed",
+            message,
+            sticky: true,
+          });
+        }
+
+        setIsRenderingPlans(false);
+        setCurrentRenderTaskId(null);
+        startTransition(() => {
+          router.refresh();
+        });
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        const message = error instanceof Error ? error.message : "Unable to fetch render status.";
+        setGenerationFeedback({
+          tone: "error",
+          message,
+        });
+        setIsRenderingPlans(false);
+      }
+    }
+
+    if (currentRenderTaskId) {
+      void poll(currentRenderTaskId);
+    }
+
+    return () => {
+      cancelled = true;
+      if (timer) {
+        clearTimeout(timer);
+      }
+    };
+  }, [currentRenderTaskId, jobId, notify, router, startTransition]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadActiveTask() {
+      try {
+        const task = await fetchRenderTaskStatus(jobId, null);
+        if (!cancelled && task && (task.status === "QUEUED" || task.status === "RUNNING")) {
+          setCurrentRenderTaskId(task.id);
+        }
+      } catch {
+        // Ignore background task status probe failures and keep the page usable.
+      }
+    }
+
+    if (!currentRenderTaskId) {
+      void loadActiveTask();
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentRenderTaskId, jobId]);
 
   function handleSaveReview(source: "review" | "images") {
     startTransition(async () => {
@@ -480,8 +636,6 @@ export function JobReviewManager({
       return;
     }
 
-    let progressToastId: string | null = null;
-
     try {
       setGenerationFeedback(null);
       const effectivePlanIds =
@@ -508,85 +662,29 @@ export function JobReviewManager({
         total: targetRenderablePlans.length,
         currentLabel: targetRenderablePlans[0]?.templateId ?? "Preparing",
       });
-      progressToastId = notify({
-        tone: "progress",
-        title: `0 of ${targetRenderablePlans.length} pins generated`,
-        message: buildRenderProgressMessage({
-          completed: 0,
-          total: targetRenderablePlans.length,
-          currentLabel: targetRenderablePlans[0]?.templateId ?? "Preparing",
-        }),
-        sticky: true,
+      const result = await runAction(`/api/dashboard/jobs/${jobId}/generate`, {
+        planIds: targetRenderablePlans.map((plan) => plan.id),
+        aiCredentialId,
       });
-
-      let generatedPinCount = 0;
-
-      for (const [index, plan] of targetRenderablePlans.entries()) {
-        setRenderProgress({
-          active: true,
-          completed: index,
-          total: targetRenderablePlans.length,
-          currentLabel: plan.templateId,
-        });
-        updateNotification(progressToastId, {
-          tone: "progress",
-          title: `${index} of ${targetRenderablePlans.length} pins generated`,
-          message: buildRenderProgressMessage({
-            completed: index,
-            total: targetRenderablePlans.length,
-            currentLabel: plan.templateId,
-          }),
-          sticky: true,
-        });
-
-        const result = await runAction(`/api/dashboard/jobs/${jobId}/generate`, {
-          planIds: [plan.id],
-          aiCredentialId,
-        });
-        generatedPinCount += result.generatedPinCount ?? 0;
-
-        setRenderProgress({
-          active: true,
-          completed: index + 1,
-          total: targetRenderablePlans.length,
-          currentLabel:
-            index + 1 < targetRenderablePlans.length
-              ? targetRenderablePlans[index + 1].templateId
-              : "Wrapping up",
-        });
-      }
-
-      if (progressToastId) {
-        dismissNotification(progressToastId);
-      }
-      const rerenderedCount = targetRenderablePlans.length;
-      const alreadyUpToDateCount = Math.max(0, targetPlans.length - rerenderedCount);
-      const message =
+      const alreadyUpToDateCount = Math.max(0, targetPlans.length - targetRenderablePlans.length);
+      const queuedMessage =
         alreadyUpToDateCount > 0
-          ? `${generatedPinCount || rerenderedCount} pin${(generatedPinCount || rerenderedCount) === 1 ? "" : "s"} rendered. ${alreadyUpToDateCount} plan${alreadyUpToDateCount === 1 ? " was" : "s were"} already up to date.`
-          : `${generatedPinCount} pin${generatedPinCount === 1 ? "" : "s"} rendered from the selected plans.`;
+          ? `${result.queuedPlanCount ?? targetRenderablePlans.length} plan${(result.queuedPlanCount ?? targetRenderablePlans.length) === 1 ? "" : "s"} queued. ${alreadyUpToDateCount} plan${alreadyUpToDateCount === 1 ? " was" : "s were"} already up to date.`
+          : `${result.queuedPlanCount ?? targetRenderablePlans.length} plan${(result.queuedPlanCount ?? targetRenderablePlans.length) === 1 ? "" : "s"} queued for rendering.`;
       setGenerationFeedback({
         tone: "success",
-        message,
+        message: queuedMessage,
       });
       notify({
         tone: "success",
-        title: "Rendering complete",
-        message,
+        title: result.reused ? "Render task already in progress" : "Render task queued",
+        message: queuedMessage,
       });
-      setRenderProgress({
-        active: false,
-        completed: targetRenderablePlans.length,
-        total: targetRenderablePlans.length,
-        currentLabel: "Complete",
-      });
+      setCurrentRenderTaskId(result.task?.id ?? null);
       startTransition(() => {
         router.refresh();
       });
     } catch (actionError) {
-      if (progressToastId) {
-        dismissNotification(progressToastId);
-      }
       const message = actionError instanceof Error ? actionError.message : "Unable to generate pins.";
       setGenerationFeedback({
         tone: "error",
@@ -767,6 +865,54 @@ export function JobReviewManager({
         notify({
           tone: "error",
           title: "Override save failed",
+          message,
+          sticky: true,
+        });
+      } finally {
+        setActiveAction(null);
+      }
+    });
+  }
+
+  function handleSetArtworkReviewState(
+    planId: string,
+    artworkReviewState: "FLAGGED" | "NORMAL",
+  ) {
+    startTransition(async () => {
+      setActiveAction({ kind: "set_review_state", planId });
+      try {
+        setPlansFeedback(null);
+        await runAction(`/api/dashboard/jobs/${jobId}/plans`, {
+          mode: "set_review_state",
+          planId,
+          artworkReviewState,
+        });
+        setPlansFeedback({
+          tone: "success",
+          message:
+            artworkReviewState === "FLAGGED"
+              ? "Plan flagged for artwork follow-up."
+              : "Artwork flag cleared.",
+        });
+        notify({
+          tone: "success",
+          title: artworkReviewState === "FLAGGED" ? "Plan flagged" : "Flag cleared",
+          message:
+            artworkReviewState === "FLAGGED"
+              ? "This plan is marked for manual artwork follow-up."
+              : "The plan is back to a normal review state.",
+        });
+        router.refresh();
+      } catch (actionError) {
+        const message =
+          actionError instanceof Error ? actionError.message : "Unable to update review state.";
+        setPlansFeedback({
+          tone: "error",
+          message,
+        });
+        notify({
+          tone: "error",
+          title: "State update failed",
           message,
           sticky: true,
         });
@@ -1397,6 +1543,12 @@ export function JobReviewManager({
                           <div className="flex flex-wrap items-center gap-2">
                             <p className="font-semibold text-[var(--dashboard-text)]">{plan.templateId}</p>
                             <StatusPill label={formatLabel(plan.status)} tone={toneForPlanStatus(plan.status)} />
+                            {plan.artworkReviewState !== "NORMAL" ? (
+                              <StatusPill
+                                label={formatLabel(plan.artworkReviewState)}
+                                tone={toneForArtworkReviewState(plan.artworkReviewState)}
+                              />
+                            ) : null}
                           </div>
                           <p className="mt-2 text-sm text-[var(--dashboard-subtle)]">
                             {formatLabel(plan.mode)} / {plan.assignments.length} slot
@@ -1412,6 +1564,11 @@ export function JobReviewManager({
                               tone="neutral"
                             />
                           </div>
+                          {plan.rerenderError ? (
+                            <p className="mt-2 text-xs font-medium text-[var(--dashboard-danger-ink)]">
+                              {plan.rerenderError}
+                            </p>
+                          ) : null}
                         </button>
                       </div>
                     </div>
@@ -1424,18 +1581,34 @@ export function JobReviewManager({
               <div className="space-y-5">
                 <article className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-5">
                   <div className="flex flex-wrap items-start justify-between gap-4">
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="text-lg font-bold text-[var(--dashboard-text)]">{selectedPlan.templateId}</h3>
-                        <StatusPill
-                          label={formatLabel(selectedPlan.status)}
-                          tone={toneForPlanStatus(selectedPlan.status)}
-                        />
-                      </div>
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="text-lg font-bold text-[var(--dashboard-text)]">{selectedPlan.templateId}</h3>
+                          <StatusPill
+                            label={formatLabel(selectedPlan.status)}
+                            tone={toneForPlanStatus(selectedPlan.status)}
+                          />
+                          {selectedPlan.artworkReviewState !== "NORMAL" ? (
+                            <StatusPill
+                              label={formatLabel(selectedPlan.artworkReviewState)}
+                              tone={toneForArtworkReviewState(selectedPlan.artworkReviewState)}
+                            />
+                          ) : null}
+                        </div>
                       <p className="mt-2 text-sm text-[var(--dashboard-subtle)]">
                         {formatLabel(selectedPlan.mode)} / {selectedPlan.assignments.length} source image slot
                         {selectedPlan.assignments.length === 1 ? "" : "s"}
                       </p>
+                      {selectedPlan.artworkFlagReason ? (
+                        <p className="mt-2 text-sm text-[var(--dashboard-subtle)]">
+                          {selectedPlan.artworkFlagReason}
+                        </p>
+                      ) : null}
+                      {selectedPlan.rerenderError ? (
+                        <p className="mt-2 text-sm text-[var(--dashboard-danger-ink)]">
+                          {selectedPlan.rerenderError}
+                        </p>
+                      ) : null}
                     </div>
                     <div className="flex flex-wrap gap-3">
                       <button
@@ -1459,6 +1632,27 @@ export function JobReviewManager({
                           label="Generate this plan"
                           busyLabel="Rendering plan..."
                           inverse
+                        />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleSetArtworkReviewState(
+                            selectedPlan.id,
+                            selectedPlan.artworkReviewState === "FLAGGED" ? "NORMAL" : "FLAGGED",
+                          )
+                        }
+                        disabled={Boolean(activeAction) || isRenderingPlans}
+                        aria-busy={activeAction?.kind === "set_review_state" && activeAction.planId === selectedPlan.id}
+                        className={getButtonClass({
+                          tone: selectedPlan.artworkReviewState === "FLAGGED" ? "neutral" : "danger",
+                          busy: activeAction?.kind === "set_review_state" && activeAction.planId === selectedPlan.id,
+                        })}
+                      >
+                        <BusyActionLabel
+                          busy={activeAction?.kind === "set_review_state" && activeAction.planId === selectedPlan.id}
+                          label={selectedPlan.artworkReviewState === "FLAGGED" ? "Clear flag" : "Flag for fix"}
+                          busyLabel={selectedPlan.artworkReviewState === "FLAGGED" ? "Clearing flag..." : "Flagging..."}
                         />
                       </button>
                       <button
@@ -1940,6 +2134,22 @@ function toneForPinStatus(status: string) {
   return "neutral" as const;
 }
 
+function toneForArtworkReviewState(state: string) {
+  if (state === "NORMAL") {
+    return "good" as const;
+  }
+  if (state === "FLAGGED") {
+    return "warning" as const;
+  }
+  if (state === "RERENDER_FAILED") {
+    return "bad" as const;
+  }
+  if (state === "RERENDER_QUEUED" || state === "RERENDERING") {
+    return "warning" as const;
+  }
+  return "neutral" as const;
+}
+
 function formatLabel(value: string) {
   return value
     .split("_")
@@ -1955,6 +2165,25 @@ function formatCompactUrl(value: string) {
   } catch {
     return value;
   }
+}
+
+async function fetchRenderTaskStatus(jobId: string, taskId?: string | null) {
+  const search = taskId ? `?taskId=${encodeURIComponent(taskId)}` : "";
+  const response = await fetch(`/api/dashboard/jobs/${jobId}/generate${search}`, {
+    method: "GET",
+    cache: "no-store",
+  });
+  const data = (await response.json()) as {
+    ok?: boolean;
+    error?: string;
+    task?: RenderTaskState | null;
+  };
+
+  if (!response.ok || !data.ok) {
+    throw new Error(data.error ?? "Unable to fetch render status.");
+  }
+
+  return data.task ?? null;
 }
 
 function buildRenderProgressMessage(input: {

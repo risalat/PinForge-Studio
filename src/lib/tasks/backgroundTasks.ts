@@ -13,6 +13,11 @@ const ACTIVE_TASK_STATUSES = [
   BackgroundTaskStatus.RUNNING,
 ] as const;
 
+const RENDER_TASK_KINDS = [
+  BackgroundTaskKind.RENDER_PLANS,
+  BackgroundTaskKind.RERENDER_PLAN,
+] as const;
+
 export const DEFAULT_BACKGROUND_TASK_LEASE_TIMEOUT_MS = 5 * 60 * 1000;
 
 export type BackgroundTaskRecord = BackgroundTask;
@@ -280,6 +285,40 @@ export function serializeBackgroundTaskSummary(task: BackgroundTaskRecord) {
     finishedAt: task.finishedAt?.toISOString() ?? null,
     lastError: task.lastError ?? null,
   };
+}
+
+export async function listBackgroundTasksForJob(input: {
+  jobId: string;
+  kinds?: BackgroundTaskKind[];
+  statuses?: BackgroundTaskStatus[];
+  limit?: number;
+}) {
+  return prisma.backgroundTask.findMany({
+    where: {
+      jobId: input.jobId,
+      kind: input.kinds?.length ? { in: input.kinds } : undefined,
+      status: input.statuses?.length ? { in: input.statuses } : undefined,
+    },
+    orderBy: [{ createdAt: "desc" }],
+    take: input.limit ?? 10,
+  });
+}
+
+export async function getBackgroundTaskForJob(taskId: string, jobId: string) {
+  return prisma.backgroundTask.findFirst({
+    where: {
+      id: taskId,
+      jobId,
+    },
+  });
+}
+
+export function isRenderBackgroundTaskKind(kind: BackgroundTaskKind) {
+  return (RENDER_TASK_KINDS as readonly BackgroundTaskKind[]).includes(kind);
+}
+
+export function getActiveBackgroundTaskStatuses() {
+  return [...ACTIVE_TASK_STATUSES];
 }
 
 function hashIds(ids: string[]) {

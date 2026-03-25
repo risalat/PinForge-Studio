@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { BackgroundTaskKind, BackgroundTaskStatus } from "@prisma/client";
 import { requireAuthenticatedDashboardApiUser } from "@/lib/auth/dashboardSession";
 import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
 import { isDatabaseConfigured } from "@/lib/env";
@@ -11,6 +12,13 @@ import {
   normalizeErrorForLogging,
   runWithOperationContext,
 } from "@/lib/observability/operationContext";
+import {
+  getActiveBackgroundTaskStatuses,
+  getBackgroundTaskForJob,
+  isRenderBackgroundTaskKind,
+  listBackgroundTasksForJob,
+  serializeBackgroundTaskSummary,
+} from "@/lib/tasks/backgroundTasks";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -20,6 +28,90 @@ type RouteProps = {
     jobId: string;
   }>;
 };
+
+export async function GET(request: Request, { params }: RouteProps) {
+  const correlationId = createCorrelationId("job_generate_status");
+
+  return runWithOperationContext(
+    {
+      correlationId,
+      action: "api.dashboard.jobs.generate.status",
+    },
+    async () => {
+      const auth = await requireAuthenticatedDashboardApiUser();
+      if (!auth.ok) {
+        return withCorrelationHeader(auth.response, correlationId);
+      }
+
+      if (!isDatabaseConfigured()) {
+        return withCorrelationHeader(
+          NextResponse.json({ ok: false, error: "DATABASE_URL is not configured." }, { status: 500 }),
+          correlationId,
+        );
+      }
+
+      try {
+        const { jobId } = await params;
+        const user = await getOrCreateDashboardUser();
+        const url = new URL(request.url);
+        const taskId = url.searchParams.get("taskId")?.trim() || null;
+
+        const task = taskId
+          ? await getBackgroundTaskForJob(taskId, jobId)
+          : (
+              await listBackgroundTasksForJob({
+                jobId,
+                kinds: [BackgroundTaskKind.RENDER_PLANS, BackgroundTaskKind.RERENDER_PLAN],
+                statuses: [
+                  ...getActiveBackgroundTaskStatuses(),
+                  BackgroundTaskStatus.SUCCEEDED,
+                  BackgroundTaskStatus.FAILED,
+                ],
+                limit: 1,
+              })
+            )[0] ?? null;
+
+        if (!task || !isRenderBackgroundTaskKind(task.kind)) {
+          return withCorrelationHeader(
+            NextResponse.json({
+              ok: true,
+              task: null,
+            }),
+            correlationId,
+          );
+        }
+
+        if (task.userId && task.userId !== user.id) {
+          return withCorrelationHeader(
+            NextResponse.json({ ok: false, error: "Task not found." }, { status: 404 }),
+            correlationId,
+          );
+        }
+
+        return withCorrelationHeader(
+          NextResponse.json({
+            ok: true,
+            task: {
+              ...serializeBackgroundTaskSummary(task),
+              payloadJson: task.payloadJson,
+              progressJson: task.progressJson,
+            },
+          }),
+          correlationId,
+        );
+      } catch (error) {
+        const normalized = normalizeErrorForLogging(error);
+        return withCorrelationHeader(
+          NextResponse.json(
+            { ok: false, error: normalized.message, correlationId, diagnostics: normalized },
+            { status: 400 },
+          ),
+          correlationId,
+        );
+      }
+    },
+  );
+}
 
 export async function POST(request: Request, { params }: RouteProps) {
   const correlationId = createCorrelationId("job_generate");
@@ -78,7 +170,10 @@ export async function POST(request: Request, { params }: RouteProps) {
         return withCorrelationHeader(
           NextResponse.json({
             ok: true,
-            generatedPinCount: result.generatedPins.length,
+            queued: true,
+            queuedPlanCount: result.queuedPlanCount,
+            reused: result.reused,
+            task: result.task,
           }),
           correlationId,
         );

@@ -5,11 +5,19 @@ import {
 } from "@prisma/client";
 import { z } from "zod";
 import { cleanupStaleTempAssets } from "@/lib/housekeeping/storageMaintenance";
+import { renderPlansForJobTask } from "@/lib/jobs/generatePins";
 import { normalizeErrorForLogging } from "@/lib/observability/operationContext";
 
 const cleanTempAssetsPayloadSchema = z.object({
   days: z.number().int().positive().max(365).optional(),
   apply: z.boolean().optional(),
+});
+
+const renderPlansPayloadSchema = z.object({
+  userId: z.string().min(1),
+  jobId: z.string().min(1),
+  planIds: z.array(z.string().min(1)).optional(),
+  aiCredentialId: z.string().min(1).nullable().optional(),
 });
 
 export type BackgroundTaskExecutionResult = {
@@ -26,11 +34,34 @@ export async function executeBackgroundTask(
   context: BackgroundTaskHandlerContext,
 ): Promise<BackgroundTaskExecutionResult> {
   switch (task.kind) {
+    case BackgroundTaskKind.RENDER_PLANS:
+    case BackgroundTaskKind.RERENDER_PLAN:
+      return executeRenderPlansTask(task, context);
     case BackgroundTaskKind.CLEAN_TEMP_ASSETS:
       return executeCleanTempAssetsTask(task, context);
     default:
       throw new Error(`Background task kind ${task.kind} is not implemented yet.`);
   }
+}
+
+async function executeRenderPlansTask(
+  task: BackgroundTask,
+  context: BackgroundTaskHandlerContext,
+): Promise<BackgroundTaskExecutionResult> {
+  const payload = renderPlansPayloadSchema.parse(task.payloadJson);
+  const result = await renderPlansForJobTask({
+    userId: payload.userId,
+    jobId: payload.jobId,
+    planIds: payload.planIds,
+    aiCredentialId: payload.aiCredentialId ?? null,
+    onProgress: async (progress) => {
+      await context.reportProgress(progress satisfies Prisma.InputJsonValue);
+    },
+  });
+
+  return {
+    progressJson: result.progress satisfies Prisma.InputJsonValue,
+  };
 }
 
 export function classifyBackgroundTaskFailure(task: BackgroundTask, error: unknown) {
