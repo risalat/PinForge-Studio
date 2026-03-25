@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
 import { requireAuthenticatedDashboardApiUser } from "@/lib/auth/dashboardSession";
 import { isDatabaseConfigured } from "@/lib/env";
-import { createFreshPinsJobFromPost, getJobForUser } from "@/lib/jobs/generatePins";
+import { createFreshPinsJobFromPost, getOwnedJobHeaderOrThrow } from "@/lib/jobs/generatePins";
 
 type RouteProps = {
   params: Promise<{
@@ -29,11 +29,7 @@ export async function POST(_request: Request, { params }: RouteProps) {
   try {
     const { jobId } = await params;
     const user = await getOrCreateDashboardUser();
-    const job = await getJobForUser(jobId, user.id);
-
-    if (!job) {
-      return NextResponse.json({ ok: false, error: "Job not found." }, { status: 404 });
-    }
+    const job = await getOwnedJobHeaderOrThrow(jobId, user.id);
 
     const latestScheduleStatus = job.scheduleRuns[0]?.status ?? null;
     const isFailedCycle = job.status === "FAILED" || latestScheduleStatus === "FAILED";
@@ -59,13 +55,14 @@ export async function POST(_request: Request, { params }: RouteProps) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to start a new cycle.";
+    const status = message === "Job not found." ? 404 : 400;
 
     return NextResponse.json(
       {
         ok: false,
         error: message,
       },
-      { status: 400 },
+      { status },
     );
   }
 }

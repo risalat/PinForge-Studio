@@ -227,6 +227,164 @@ const jobDetailInclude = {
   },
 } satisfies Prisma.GenerationJobInclude;
 
+const scheduleRunStatusSelect = {
+  id: true,
+  status: true,
+  createdAt: true,
+  submittedAt: true,
+  completedAt: true,
+  errorMessage: true,
+} satisfies Prisma.ScheduleRunSelect;
+
+const jobHeaderSelect = {
+  id: true,
+  userId: true,
+  postId: true,
+  postUrlSnapshot: true,
+  articleTitleSnapshot: true,
+  domainSnapshot: true,
+  status: true,
+  globalKeywords: true,
+  titleStyle: true,
+  toneHint: true,
+  listCountHint: true,
+  titleVariationCount: true,
+  requestedPinCount: true,
+  createdAt: true,
+  updatedAt: true,
+  scheduleRuns: {
+    orderBy: { createdAt: "desc" },
+    take: 1,
+    select: scheduleRunStatusSelect,
+  },
+} satisfies Prisma.GenerationJobSelect;
+
+const sourceImageActionSelect = {
+  id: true,
+  url: true,
+  alt: true,
+  caption: true,
+  nearestHeading: true,
+  sectionHeadingPath: true,
+  surroundingTextSnippet: true,
+  isSelected: true,
+  isPreferred: true,
+  sortOrder: true,
+} satisfies Prisma.JobSourceImageSelect;
+
+const generationPlanForRenderSelect = {
+  id: true,
+  jobId: true,
+  mode: true,
+  templateId: true,
+  sortOrder: true,
+  status: true,
+  notes: true,
+  artworkReviewState: true,
+  artworkFlagReason: true,
+  rerenderRequestedAt: true,
+  rerenderError: true,
+  template: {
+    select: {
+      id: true,
+      name: true,
+      componentKey: true,
+    },
+  },
+  imageAssignments: {
+    select: {
+      id: true,
+      sourceImageId: true,
+      slotIndex: true,
+      sourceImage: {
+        select: sourceImageActionSelect,
+      },
+    },
+  },
+  generatedPins: {
+    select: {
+      id: true,
+      exportPath: true,
+      storageKey: true,
+      scheduleRunItems: {
+        select: {
+          id: true,
+        },
+      },
+    },
+  },
+} satisfies Prisma.GenerationPlanSelect;
+
+const generatedPinForPublishSelect = {
+  id: true,
+  jobId: true,
+  planId: true,
+  templateId: true,
+  exportPath: true,
+  storageKey: true,
+  createdAt: true,
+  template: {
+    select: {
+      id: true,
+      name: true,
+      componentKey: true,
+    },
+  },
+  plan: {
+    select: {
+      id: true,
+      templateId: true,
+      notes: true,
+      artworkReviewState: true,
+      artworkFlagReason: true,
+      rerenderRequestedAt: true,
+      rerenderError: true,
+      imageAssignments: {
+        select: {
+          id: true,
+          sourceImageId: true,
+          slotIndex: true,
+          sourceImage: {
+            select: sourceImageActionSelect,
+          },
+        },
+      },
+    },
+  },
+  pinCopy: {
+    select: {
+      id: true,
+      title: true,
+      titleOptions: true,
+      description: true,
+      titleStatus: true,
+      descriptionStatus: true,
+    },
+  },
+  publerMedia: {
+    select: {
+      id: true,
+      status: true,
+      uploadJobId: true,
+      mediaId: true,
+      sourceUrl: true,
+      errorMessage: true,
+      rawResponse: true,
+    },
+  },
+  scheduleRunItems: {
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      publerJobId: true,
+      publerPostId: true,
+      scheduledFor: true,
+      status: true,
+      errorMessage: true,
+    },
+  },
+} satisfies Prisma.GeneratedPinSelect;
+
 export type WorkflowJobListItem = Prisma.GenerationJobGetPayload<{
   include: typeof jobListInclude;
 }>;
@@ -234,6 +392,55 @@ export type WorkflowJobListItem = Prisma.GenerationJobGetPayload<{
 export type WorkflowJob = Prisma.GenerationJobGetPayload<{
   include: typeof jobDetailInclude;
 }>;
+
+export type WorkflowJobHeader = Prisma.GenerationJobGetPayload<{
+  select: typeof jobHeaderSelect;
+}>;
+
+export type WorkflowJobSourceImages = Prisma.GenerationJobGetPayload<{
+  select: typeof jobHeaderSelect & {
+    sourceImages: {
+      orderBy: { sortOrder: "asc" };
+      select: typeof sourceImageActionSelect;
+    };
+    _count: {
+      select: {
+        generationPlans: true;
+      };
+    };
+  };
+}>;
+
+export type WorkflowJobPlansForRender = Prisma.GenerationJobGetPayload<{
+  select: typeof jobHeaderSelect & {
+    sourceImages: {
+      orderBy: { sortOrder: "asc" };
+      select: typeof sourceImageActionSelect;
+    };
+    generationPlans: {
+      orderBy: { sortOrder: "asc" };
+      select: typeof generationPlanForRenderSelect;
+    };
+  };
+}>;
+
+export type WorkflowJobPublishPins = Prisma.GenerationJobGetPayload<{
+  select: typeof jobHeaderSelect & {
+    sourceImages: {
+      select: {
+        id: true;
+      };
+    };
+    generatedPins: {
+      orderBy: { createdAt: "asc" };
+      select: typeof generatedPinForPublishSelect;
+    };
+  };
+}>;
+
+type WorkflowSourceImage = WorkflowJobSourceImages["sourceImages"][number];
+type WorkflowPlanForRender = WorkflowJobPlansForRender["generationPlans"][number];
+type WorkflowPublishPin = WorkflowJobPublishPins["generatedPins"][number];
 
 export type JobCycleListItem = Prisma.GenerationJobGetPayload<{
   select: {
@@ -448,7 +655,7 @@ export async function saveJobImageSelections(input: {
   listCountHint?: number | null;
   titleVariationCount?: number | null;
 }) {
-  const job = await getOwnedJobOrThrow(input.jobId, input.userId);
+  const job = await getOwnedJobHeaderOrThrow(input.jobId, input.userId);
   await prisma.$transaction([
     ...input.images.map((image) =>
       prisma.jobSourceImage.updateMany({
@@ -507,7 +714,7 @@ export async function createAssistedGenerationPlans(input: {
   presetCategoryIds?: TemplateVisualPresetCategoryId[];
   allowAnyPresetOverride?: boolean;
 }) {
-  const job = await getOwnedJobOrThrow(input.jobId, input.userId);
+  const job = await getOwnedJobSourceImages(input.jobId, input.userId);
 
   const selectedImages = job.sourceImages.filter((image) => image.isSelected);
   if (selectedImages.length === 0) {
@@ -521,7 +728,7 @@ export async function createAssistedGenerationPlans(input: {
     throw new Error("Choose at least one valid template.");
   }
 
-  const baseSortOrder = job.generationPlans.length;
+  const baseSortOrder = job._count.generationPlans;
   const preferredImages = selectedImages.filter((image) => image.isPreferred);
   const selectedImagePool = shuffleBySeed(selectedImages, `${job.id}:selected-images`);
   const preferredImagePool = shuffleBySeed(preferredImages, `${job.id}:preferred-images`);
@@ -668,7 +875,7 @@ export async function createManualGenerationPlan(input: {
   templateId: string;
   sourceImageIds: string[];
 }) {
-  const job = await getOwnedJobOrThrow(input.jobId, input.userId);
+  const job = await getOwnedJobSourceImages(input.jobId, input.userId);
   const template = getTemplateConfig(input.templateId);
 
   if (!template) {
@@ -722,7 +929,7 @@ export async function createManualGenerationPlan(input: {
       jobId: job.id,
       mode: GenerationPlanMode.MANUAL,
       templateId: input.templateId,
-      sortOrder: job.generationPlans.length,
+      sortOrder: job._count.generationPlans,
       status: GenerationPlanStatus.READY,
       notes: serializePlanRenderContext(manualRenderContext),
       imageAssignments: {
@@ -756,7 +963,7 @@ export async function updateGenerationPlanRenderContext(input: {
   itemNumber?: number | null;
   visualPreset?: string | null;
 }) {
-  const job = await getOwnedJobOrThrow(input.jobId, input.userId);
+  const job = await getOwnedJobPlansForRender(input.jobId, input.userId, [input.planId]);
   const plan = job.generationPlans.find((entry) => entry.id === input.planId);
 
   if (!plan) {
@@ -843,7 +1050,7 @@ export async function generatePinsForJob(input: {
           aiCredentialId: input.aiCredentialId ?? null,
         },
         async () => {
-          const job = await getOwnedJobOrThrow(input.jobId, input.userId);
+          const job = await getOwnedJobPlansForRender(input.jobId, input.userId, input.planIds);
           const aiCredentialConfigs = (
             await resolveAiCredentialCandidatesForUserId({
               userId: input.userId,
@@ -987,11 +1194,8 @@ export async function discardGenerationPlansForJob(input: {
   jobId: string;
   planIds?: string[];
 }) {
-  const job = await getOwnedJobOrThrow(input.jobId, input.userId);
-  const selectedPlanIds = input.planIds?.length ? new Set(input.planIds) : null;
-  const plansToDiscard = job.generationPlans.filter(
-    (plan) => !selectedPlanIds || selectedPlanIds.has(plan.id),
-  );
+  const job = await getOwnedJobPlansForRender(input.jobId, input.userId, input.planIds);
+  const plansToDiscard = job.generationPlans;
 
   if (plansToDiscard.length === 0) {
     return {
@@ -1065,7 +1269,7 @@ export async function discardGeneratedPinsForJob(input: {
   jobId: string;
   generatedPinIds?: string[];
 }) {
-  const job = await getOwnedJobOrThrow(input.jobId, input.userId);
+  const job = await getOwnedGeneratedPinsForPublish(input.jobId, input.userId, input.generatedPinIds);
 
   if (job.generatedPins.length === 0) {
     return {
@@ -1074,7 +1278,7 @@ export async function discardGeneratedPinsForJob(input: {
     };
   }
 
-  const pinsToDiscard = selectPinsForWorkflowAction(job, input.generatedPinIds);
+  const pinsToDiscard = selectPinsForWorkflowAction(job);
   const scheduledPins = pinsToDiscard.filter((pin) => pin.scheduleRunItems.length > 0);
   if (scheduledPins.length > 0) {
     throw new Error(
@@ -1146,7 +1350,7 @@ export async function uploadJobPinsToPubler(input: {
       jobId: input.jobId,
     },
     async () => {
-      const job = await getOwnedJobOrThrow(input.jobId, input.userId);
+      const job = await getOwnedGeneratedPinsForPublish(input.jobId, input.userId, input.generatedPinIds);
       const settings = await getIntegrationSettingsForUserId(input.userId);
       const workspaceId = await resolveAccessiblePublerWorkspaceId({
         apiKey: settings.publerApiKey,
@@ -1175,7 +1379,7 @@ export async function uploadJobPinsToPubler(input: {
                 apiKey: settings.publerApiKey,
                 workspaceId,
               });
-              const selectedPins = selectPinsForWorkflowAction(job, input.generatedPinIds);
+              const selectedPins = selectPinsForWorkflowAction(job);
               const result = createStepResultAccumulator();
               await runSerializedPublerUpload(workspaceId, async () => {
                 for (const pin of selectedPins) {
@@ -1343,7 +1547,7 @@ export async function generateTitlesForJobPins(input: {
           aiCredentialId: input.aiCredentialId ?? null,
         },
         async () => {
-          const job = await getOwnedJobOrThrow(input.jobId, input.userId);
+          const job = await getOwnedGeneratedPinsForPublish(input.jobId, input.userId, input.generatedPinIds);
           const aiCredentials = await resolveAiCredentialCandidatesForUserId({
             userId: input.userId,
             aiCredentialId: input.aiCredentialId,
@@ -1351,7 +1555,7 @@ export async function generateTitlesForJobPins(input: {
           if (aiCredentials.length === 0) {
             throw new Error("Save an AI credential in Integrations before generating titles.");
           }
-          const selectedPins = selectPinsForWorkflowAction(job, input.generatedPinIds);
+          const selectedPins = selectPinsForWorkflowAction(job);
           const result = createStepResultAccumulator();
           const generatedTitleOptions: Array<{
             pinId: string;
@@ -1427,7 +1631,11 @@ export async function saveJobPinCopyEdits(input: {
     description?: string;
   }>;
 }) {
-  const job = await getOwnedJobOrThrow(input.jobId, input.userId);
+  const job = await getOwnedGeneratedPinsForPublish(
+    input.jobId,
+    input.userId,
+    input.copies.map((copy) => copy.generatedPinId),
+  );
   const pinIds = new Set(job.generatedPins.map((pin) => pin.id));
   const result = createStepResultAccumulator();
   const copyOperations: Prisma.PrismaPromise<unknown>[] = [];
@@ -1512,7 +1720,7 @@ export async function generateDescriptionsForJobPins(input: {
           aiCredentialId: input.aiCredentialId ?? null,
         },
         async () => {
-          const job = await getOwnedJobOrThrow(input.jobId, input.userId);
+          const job = await getOwnedGeneratedPinsForPublish(input.jobId, input.userId, input.generatedPinIds);
           const aiCredentials = await resolveAiCredentialCandidatesForUserId({
             userId: input.userId,
             aiCredentialId: input.aiCredentialId,
@@ -1520,7 +1728,7 @@ export async function generateDescriptionsForJobPins(input: {
           if (aiCredentials.length === 0) {
             throw new Error("Save an AI credential in Integrations before generating descriptions.");
           }
-          const selectedPins = selectPinsForWorkflowAction(job, input.generatedPinIds);
+          const selectedPins = selectPinsForWorkflowAction(job);
           const result = createStepResultAccumulator();
           const keywordPlan = buildPinKeywordFocusPlan(selectedPins, job.globalKeywords);
           const pinsToGenerate: Array<(typeof selectedPins)[number] & { finalizedTitle: string }> = [];
@@ -1661,24 +1869,28 @@ export async function scheduleJobPins(input: {
           jitterMinutes: input.jitterMinutes ?? 0,
         },
         async () => {
-  const job = await getOwnedJobOrThrow(input.jobId, input.userId);
-  const settings = await getIntegrationSettingsForUserId(input.userId);
-  const workspaceId = await resolveAccessiblePublerWorkspaceId({
-    apiKey: settings.publerApiKey,
-    requestedWorkspaceId: input.workspaceId?.trim() || settings.publerWorkspaceId,
-  });
-  const accountId = input.accountId?.trim() || settings.publerAccountId;
-  const selectedBoardIds = Array.from(
-    new Set(
-      (input.boardIds?.length ? input.boardIds : [input.boardId?.trim() || settings.publerBoardId])
-        .map((boardId) => boardId?.trim())
-        .filter((boardId): boardId is string => Boolean(boardId)),
-    ),
-  );
-  const boardDistributionMode = input.boardDistributionMode ?? "round_robin";
-  const primaryBoardId = input.primaryBoardId?.trim() || selectedBoardIds[0] || null;
-  const primaryBoardPercent =
-    boardDistributionMode === "primary_weighted"
+          const job = await getOwnedGeneratedPinsForPublish(
+            input.jobId,
+            input.userId,
+            input.generatedPinIds,
+          );
+          const settings = await getIntegrationSettingsForUserId(input.userId);
+          const workspaceId = await resolveAccessiblePublerWorkspaceId({
+            apiKey: settings.publerApiKey,
+            requestedWorkspaceId: input.workspaceId?.trim() || settings.publerWorkspaceId,
+          });
+          const accountId = input.accountId?.trim() || settings.publerAccountId;
+          const selectedBoardIds = Array.from(
+            new Set(
+              (input.boardIds?.length ? input.boardIds : [input.boardId?.trim() || settings.publerBoardId])
+                .map((boardId) => boardId?.trim())
+                .filter((boardId): boardId is string => Boolean(boardId)),
+            ),
+          );
+          const boardDistributionMode = input.boardDistributionMode ?? "round_robin";
+          const primaryBoardId = input.primaryBoardId?.trim() || selectedBoardIds[0] || null;
+          const primaryBoardPercent =
+            boardDistributionMode === "primary_weighted"
       ? Math.max(0, Math.min(100, input.primaryBoardPercent ?? 60))
       : null;
   const publerClient = createPublerClient({
@@ -1707,7 +1919,7 @@ export async function scheduleJobPins(input: {
     throw new Error("Provide a valid first publish datetime.");
   }
 
-  const requestedPins = selectPinsForWorkflowAction(job, input.generatedPinIds);
+              const requestedPins = selectPinsForWorkflowAction(job);
   const selectedPins = requestedPins.filter((pin) => !hasSuccessfulSchedule(pin));
   if (selectedPins.length === 0) {
     return finalizeStepResult("Scheduling", {
@@ -2033,7 +2245,7 @@ export async function listJobsForUser(userId: string) {
   });
 }
 
-export async function getJobForUser(jobId: string, userId: string): Promise<WorkflowJob | null> {
+export async function getJobDetailForPage(jobId: string, userId: string): Promise<WorkflowJob | null> {
   return runWithOperationContext(
     {
       action: "query.job_detail_load",
@@ -2059,6 +2271,136 @@ export async function getJobForUser(jobId: string, userId: string): Promise<Work
   );
 }
 
+export async function getJobForUser(jobId: string, userId: string): Promise<WorkflowJob | null> {
+  return getJobDetailForPage(jobId, userId);
+}
+
+export async function getOwnedJobHeaderOrThrow(
+  jobId: string,
+  userId: string,
+): Promise<WorkflowJobHeader> {
+  const job = await prisma.generationJob.findFirst({
+    where: {
+      id: jobId,
+      userId,
+    },
+    select: jobHeaderSelect,
+  });
+
+  if (!job) {
+    throw new Error("Job not found.");
+  }
+
+  return job;
+}
+
+export async function getOwnedJobSourceImages(
+  jobId: string,
+  userId: string,
+): Promise<WorkflowJobSourceImages> {
+  const job = await prisma.generationJob.findFirst({
+    where: {
+      id: jobId,
+      userId,
+    },
+    select: {
+      ...jobHeaderSelect,
+      sourceImages: {
+        orderBy: { sortOrder: "asc" },
+        select: sourceImageActionSelect,
+      },
+      _count: {
+        select: {
+          generationPlans: true,
+        },
+      },
+    },
+  });
+
+  if (!job) {
+    throw new Error("Job not found.");
+  }
+
+  return job;
+}
+
+export async function getOwnedJobPlansForRender(
+  jobId: string,
+  userId: string,
+  planIds?: string[],
+): Promise<WorkflowJobPlansForRender> {
+  const selectedPlanIds = planIds?.length ? Array.from(new Set(planIds)) : undefined;
+  const job = await prisma.generationJob.findFirst({
+    where: {
+      id: jobId,
+      userId,
+    },
+    select: {
+      ...jobHeaderSelect,
+      sourceImages: {
+        orderBy: { sortOrder: "asc" },
+        select: sourceImageActionSelect,
+      },
+      generationPlans: {
+        where: selectedPlanIds?.length
+          ? {
+              id: {
+                in: selectedPlanIds,
+              },
+            }
+          : undefined,
+        orderBy: { sortOrder: "asc" },
+        select: generationPlanForRenderSelect,
+      },
+    },
+  });
+
+  if (!job) {
+    throw new Error("Job not found.");
+  }
+
+  return job;
+}
+
+export async function getOwnedGeneratedPinsForPublish(
+  jobId: string,
+  userId: string,
+  generatedPinIds?: string[],
+): Promise<WorkflowJobPublishPins> {
+  const selectedPinIds = generatedPinIds?.length ? Array.from(new Set(generatedPinIds)) : undefined;
+  const job = await prisma.generationJob.findFirst({
+    where: {
+      id: jobId,
+      userId,
+    },
+    select: {
+      ...jobHeaderSelect,
+      sourceImages: {
+        select: {
+          id: true,
+        },
+      },
+      generatedPins: {
+        where: selectedPinIds?.length
+          ? {
+              id: {
+                in: selectedPinIds,
+              },
+            }
+          : undefined,
+        orderBy: { createdAt: "asc" },
+        select: generatedPinForPublishSelect,
+      },
+    },
+  });
+
+  if (!job) {
+    throw new Error("Job not found.");
+  }
+
+  return job;
+}
+
 export async function listJobCyclesForPost(userId: string, postId: string): Promise<JobCycleListItem[]> {
   return prisma.generationJob.findMany({
     where: {
@@ -2076,19 +2418,6 @@ export async function listJobCyclesForPost(userId: string, postId: string): Prom
       createdAt: true,
     },
   });
-}
-
-async function getOwnedJobOrThrow(
-  jobId: string,
-  userId: string,
-): Promise<WorkflowJob> {
-  const job = await getJobForUser(jobId, userId);
-
-  if (!job) {
-    throw new Error("Job not found.");
-  }
-
-  return job;
 }
 
 async function recordJobMilestone(
@@ -2250,8 +2579,8 @@ function shuffleBySeed<T>(values: readonly T[], seed: string) {
 }
 
 function buildAssistedImageAssignments(input: {
-  selectedImages: WorkflowJob["sourceImages"];
-  preferredImages: WorkflowJob["sourceImages"];
+  selectedImages: WorkflowSourceImage[];
+  preferredImages: WorkflowSourceImage[];
   slotCount: number;
   planIndex: number;
   templateId: string;
@@ -2291,7 +2620,7 @@ function buildAssistedImageAssignments(input: {
 }
 
 function findDistributedImage(input: {
-  images: WorkflowJob["sourceImages"];
+  images: WorkflowSourceImage[];
   usedImageIds: Set<string>;
   startIndex: number;
 }) {
@@ -2343,8 +2672,8 @@ function hashString(value: string) {
 }
 
 async function generateRenderCopyForPlan(
-  job: WorkflowJob,
-  plan: WorkflowJob["generationPlans"][number],
+  job: WorkflowJobPlansForRender,
+  plan: WorkflowPlanForRender,
   aiConfigs: ResolvedAICredentialConfig[],
   recentArtworkTitles: string[] = [],
 ) {
@@ -3540,8 +3869,8 @@ function getPublishingTitleChunkSize(
 }
 
 async function generatePublishingTitleResultsForChunk(input: {
-  job: WorkflowJob;
-  chunk: WorkflowJob["generatedPins"];
+  job: WorkflowJobPublishPins;
+  chunk: WorkflowPublishPin[];
   aiCredentials: ResolvedAICredentialConfig[];
   keywordPlan: Map<
     string,
@@ -3634,8 +3963,8 @@ async function generatePublishingTitleResultsForChunk(input: {
 }
 
 function buildPublishingTitleBatchEntries(input: {
-  job: WorkflowJob;
-  chunk: WorkflowJob["generatedPins"];
+  job: WorkflowJobPublishPins;
+  chunk: WorkflowPublishPin[];
   keywordPlan: Map<
     string,
     {
@@ -4012,7 +4341,7 @@ async function resolveAccessiblePublerWorkspaceId(input: {
 
 async function findReusableUploadedMedia(
   jobId: string,
-  pin: WorkflowJob["generatedPins"][number],
+  pin: WorkflowPublishPin,
 ) {
   const assetConditions: Prisma.GeneratedPinWhereInput[] = [];
   if (pin.storageKey?.trim()) {
@@ -4041,7 +4370,7 @@ async function findReusableUploadedMedia(
 }
 
 async function resumeExistingPublerMediaUpload(input: {
-  pin: WorkflowJob["generatedPins"][number];
+  pin: WorkflowPublishPin;
   client: PublerClient;
   sourceUrl: string;
 }) {
@@ -4076,11 +4405,11 @@ async function resumeExistingPublerMediaUpload(input: {
   return "continue" as const;
 }
 
-function getPinAssetKey(pin: Pick<WorkflowJob["generatedPins"][number], "storageKey" | "exportPath">) {
+function getPinAssetKey(pin: Pick<WorkflowPublishPin, "storageKey" | "exportPath">) {
   return pin.storageKey?.trim() || pin.exportPath.trim();
 }
 
-function getPinAssetUrl(pin: Pick<WorkflowJob["generatedPins"][number], "storageKey" | "exportPath">) {
+function getPinAssetUrl(pin: Pick<WorkflowPublishPin, "storageKey" | "exportPath">) {
   return resolveStoredAssetUrl({
     storageKey: pin.storageKey,
     exportPath: pin.exportPath,
@@ -4088,7 +4417,7 @@ function getPinAssetUrl(pin: Pick<WorkflowJob["generatedPins"][number], "storage
 }
 
 async function deleteStoredAssetsForPins(
-  pins: Array<Pick<WorkflowJob["generatedPins"][number], "storageKey">>,
+  pins: Array<Pick<WorkflowPublishPin, "storageKey">>,
 ) {
   const keys = Array.from(
     new Set(
@@ -4106,7 +4435,10 @@ async function deleteStoredAssetsForPins(
   await Promise.allSettled(keys.map((key) => storageProvider.delete(key)));
 }
 
-function selectPinsForWorkflowAction(job: WorkflowJob, generatedPinIds?: string[]) {
+function selectPinsForWorkflowAction(
+  job: Pick<WorkflowJobPublishPins, "generatedPins">,
+  generatedPinIds?: string[],
+) {
   if (job.generatedPins.length === 0) {
     throw new Error("Generate pins before starting the publishing flow.");
   }
@@ -4118,7 +4450,7 @@ function selectPinsForWorkflowAction(job: WorkflowJob, generatedPinIds?: string[
   const availablePins = new Map(job.generatedPins.map((pin) => [pin.id, pin]));
   const selectedPins = Array.from(new Set(generatedPinIds))
     .map((pinId) => availablePins.get(pinId))
-    .filter((pin): pin is WorkflowJob["generatedPins"][number] => Boolean(pin));
+    .filter((pin): pin is WorkflowPublishPin => Boolean(pin));
 
   if (selectedPins.length === 0) {
     throw new Error("Select at least one generated pin.");
@@ -4127,7 +4459,7 @@ function selectPinsForWorkflowAction(job: WorkflowJob, generatedPinIds?: string[
   return selectedPins;
 }
 
-function hasSuccessfulSchedule(pin: WorkflowJob["generatedPins"][number]) {
+function hasSuccessfulSchedule(pin: WorkflowPublishPin) {
   return pin.scheduleRunItems.some((item) => item.status === ScheduleRunItemStatus.SCHEDULED);
 }
 

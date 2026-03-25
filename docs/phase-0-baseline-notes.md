@@ -72,18 +72,22 @@ Use a production-like environment on Coolify/VPS and collect timings from server
 
 ## Baseline table
 
-Fill this after capturing real timings in staging or production.
+Captured so far from production-style Coolify logs on 2026-03-25.
 
 | Operation | Sample size | Average ms | Notes |
 | --- | --- | ---: | --- |
-| Bulk render representative batch | Pending | Pending | Capture `workflow.bulk_render.succeeded` and note actual plan count |
-| Single-pin rerender | Pending | Pending | Capture `workflow.single_pin_rerender.succeeded` |
-| Publish title generation for 20 pins | Pending | Pending | Capture `workflow.publish_title_generation.succeeded` |
-| Post Pulse load | Pending | Pending | Capture `dashboard.post_pulse.load.succeeded` |
-| Job detail page load | Pending | Pending | Capture `query.job_detail_load.succeeded` |
+| Bulk render representative batch | Pending | Pending | No representative bulk render timing captured yet |
+| Single-pin rerender | Pending | Pending | No single-pin rerender timing captured yet |
+| Publish title generation | 2 runs, chunk sizes 4 and 3 | 6944 | Observed `7918ms` for 4 pins and `5969ms` for 3 pins with Koala batching |
+| Description generation | 3 runs, chunk size 5 | 9760 | Observed `12111ms`, `8510ms`, and `8660ms` |
+| Publer media upload | 1 run, pin count 1 | 681 | Successful single-pin media upload |
+| Schedule submission | 1 run, pin count 15 | 24352 | Full schedule submit including Publer job polling |
+| Post Pulse load | Pending | Pending | No `dashboard.post_pulse.load.succeeded` event captured yet |
+| Job detail page load | Many repeated samples | 1230 | Most runs were around `1150ms` to `1300ms`, with a slower observed case at `1607ms` |
 
 ## Notes
 
 - This phase intentionally does not change workflow behavior.
 - These timings are the pre-refactor baseline for later phases.
 - If multiple runs vary widely, record both average and worst-case values in rollout notes.
+- The `20-30` bulk example in the PRD/checklist is not a hard rule; future baseline captures should note the actual batch size used.

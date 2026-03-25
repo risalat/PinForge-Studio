@@ -34,6 +34,14 @@ enum GenerationPlanStatus {
   FAILED
 }
 
+enum ArtworkReviewState {
+  NORMAL
+  FLAGGED
+  RERENDER_QUEUED
+  RERENDERING
+  RERENDER_FAILED
+}
+
 enum MediaUploadStatus {
   PENDING
   UPLOADING
@@ -142,6 +150,8 @@ model GenerationJob {
 
   @@index([userId, status, createdAt])
   @@index([postId, createdAt])
+  @@index([userId, postId, status, createdAt])
+  @@index([userId, postId, createdAt])
 }
 
 model JobSourceImage {
@@ -171,6 +181,10 @@ model GenerationPlan {
   templateId       String
   sortOrder        Int                  @default(0)
   status           GenerationPlanStatus @default(DRAFT)
+  artworkReviewState ArtworkReviewState @default(NORMAL)
+  artworkFlagReason String?
+  rerenderRequestedAt DateTime?
+  rerenderError    String?
   notes            String?
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @updatedAt
@@ -180,6 +194,7 @@ model GenerationPlan {
   generatedPins    GeneratedPin[]
 
   @@index([jobId, status, sortOrder])
+  @@index([jobId, artworkReviewState, sortOrder])
 }
 
 model GenerationPlanImageAssignment {
@@ -244,6 +259,8 @@ model PublicationRecord {
   @@index([userId, syncedAt])
   @@index([userId, providerWorkspaceId, syncedAt])
   @@index([generatedPinId])
+  @@index([userId, state, scheduledAt])
+  @@index([userId, postId, providerWorkspaceId, publishedAt])
 }
 
 model PublicationSyncState {
@@ -340,6 +357,7 @@ model ScheduleRunItem {
   generatedPin  GeneratedPin          @relation(fields: [generatedPinId], references: [id], onDelete: Cascade)
 
   @@unique([scheduleRunId, generatedPinId])
+  @@index([status, scheduledFor])
 }
 
 model JobMilestone {

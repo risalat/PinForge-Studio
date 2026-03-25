@@ -7,7 +7,7 @@ import { isDatabaseConfigured } from "@/lib/env";
 import {
   generateDescriptionsForJobPins,
   generateTitlesForJobPins,
-  getJobForUser,
+  getOwnedGeneratedPinsForPublish,
   saveJobPinCopyEdits,
   scheduleJobPins,
   uploadJobPinsToPubler,
@@ -103,13 +103,7 @@ export async function GET(_request: Request, { params }: RouteProps) {
       try {
         const { jobId } = await params;
         const user = await getOrCreateDashboardUser();
-        const job = await getJobForUser(jobId, user.id);
-        if (!job) {
-          return withCorrelationHeader(
-            NextResponse.json({ ok: false, error: "Job not found." }, { status: 404 }),
-            correlationId,
-          );
-        }
+        const job = await getOwnedGeneratedPinsForPublish(jobId, user.id);
 
         return withCorrelationHeader(
           NextResponse.json({
@@ -130,10 +124,11 @@ export async function GET(_request: Request, { params }: RouteProps) {
         );
       } catch (error) {
         const normalized = normalizeErrorForLogging(error);
+        const status = normalized.message === "Job not found." ? 404 : 400;
         return withCorrelationHeader(
           NextResponse.json(
             { ok: false, error: normalized.message, correlationId, diagnostics: normalized },
-            { status: 400 },
+            { status },
           ),
           correlationId,
         );
@@ -241,7 +236,7 @@ function withCorrelationHeader(response: NextResponse, correlationId: string) {
   return response;
 }
 
-function serializePin(pin: NonNullable<Awaited<ReturnType<typeof getJobForUser>>>["generatedPins"][number]) {
+function serializePin(pin: Awaited<ReturnType<typeof getOwnedGeneratedPinsForPublish>>["generatedPins"][number]) {
   return {
     id: pin.id,
     templateId: pin.templateId,
