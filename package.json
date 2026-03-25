@@ -6,6 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "worker": "tsx scripts/background-worker.ts",
+    "worker:once": "tsx scripts/background-worker.ts --once",
     "lint": "eslint",
     "postinstall": "prisma generate",
     "prisma:generate": "prisma generate",
@@ -28,6 +30,7 @@
     "playwright-core": "^1.58.2",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "tsx": "^4.21.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {

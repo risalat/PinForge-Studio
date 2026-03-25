@@ -42,6 +42,25 @@ enum ArtworkReviewState {
   RERENDER_FAILED
 }
 
+enum BackgroundTaskStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+enum BackgroundTaskKind {
+  RENDER_PLANS
+  RERENDER_PLAN
+  UPLOAD_MEDIA_BATCH
+  GENERATE_TITLE_BATCH
+  GENERATE_DESCRIPTION_BATCH
+  SCHEDULE_PINS
+  SYNC_PUBLICATIONS
+  CLEAN_TEMP_ASSETS
+}
+
 enum MediaUploadStatus {
   PENDING
   UPLOADING
@@ -95,6 +114,7 @@ model User {
   publicationSyncStates PublicationSyncState[]
   workspaceProfiles   WorkspaceProfile[]
   freshTargetSnoozes  FreshTargetSnooze[]
+  backgroundTasks     BackgroundTask[]
 }
 
 model Post {
@@ -147,6 +167,7 @@ model GenerationJob {
   generatedPins      GeneratedPin[]
   milestones         JobMilestone[]
   scheduleRuns       ScheduleRun[]
+  backgroundTasks    BackgroundTask[]
 
   @@index([userId, status, createdAt])
   @@index([postId, createdAt])
@@ -192,6 +213,7 @@ model GenerationPlan {
   template         Template             @relation(fields: [templateId], references: [id], onDelete: Restrict)
   imageAssignments GenerationPlanImageAssignment[]
   generatedPins    GeneratedPin[]
+  backgroundTasks  BackgroundTask[]
 
   @@index([jobId, status, sortOrder])
   @@index([jobId, artworkReviewState, sortOrder])
@@ -226,6 +248,7 @@ model GeneratedPin {
   publerMedia       PublerMedia?
   scheduleRunItems  ScheduleRunItem[]
   publicationRecords PublicationRecord[]
+  backgroundTasks   BackgroundTask[]
 
   @@index([jobId, createdAt])
   @@index([planId])
@@ -358,6 +381,41 @@ model ScheduleRunItem {
 
   @@unique([scheduleRunId, generatedPinId])
   @@index([status, scheduledFor])
+}
+
+model BackgroundTask {
+  id             String               @id @default(cuid())
+  kind           BackgroundTaskKind
+  status         BackgroundTaskStatus @default(QUEUED)
+  userId         String?
+  jobId          String?
+  planId         String?
+  generatedPinId String?
+  workspaceId    String?
+  priority       Int                  @default(0)
+  dedupeKey      String?
+  payloadJson    Json
+  progressJson   Json?
+  attempts       Int                  @default(0)
+  maxAttempts    Int                  @default(5)
+  runAfter       DateTime             @default(now())
+  lockedAt       DateTime?
+  lockedBy       String?
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  lastError      String?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  user           User?                @relation(fields: [userId], references: [id], onDelete: SetNull)
+  job            GenerationJob?       @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  plan           GenerationPlan?      @relation(fields: [planId], references: [id], onDelete: Cascade)
+  generatedPin   GeneratedPin?        @relation(fields: [generatedPinId], references: [id], onDelete: Cascade)
+
+  @@index([status, runAfter, priority, createdAt])
+  @@index([dedupeKey, status, createdAt])
+  @@index([userId, status, createdAt])
+  @@index([jobId, kind, status, createdAt])
+  @@index([workspaceId, kind, status, createdAt])
 }
 
 model JobMilestone {
