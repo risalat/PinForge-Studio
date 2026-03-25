@@ -78,7 +78,13 @@ type FeedbackState = {
   source?: "review" | "images";
 } | null;
 
-type ReviewGridFilter = "all" | "flagged" | "rerendering" | "failed" | "recently_fixed";
+type ReviewGridFilter =
+  | "all"
+  | "actionable"
+  | "flagged"
+  | "rerendering"
+  | "failed"
+  | "recently_fixed";
 
 type ReviewActionState =
   | { kind: "save_review"; source: "review" | "images" }
@@ -289,6 +295,10 @@ export function JobReviewManager({
   const filteredReviewGridItems = reviewGridItems.filter((item) => {
     if (reviewGridFilter === "all") {
       return true;
+    }
+
+    if (reviewGridFilter === "actionable") {
+      return item.plan.artworkReviewState === "FLAGGED" || item.isRenderable;
     }
 
     if (reviewGridFilter === "flagged") {
@@ -1645,6 +1655,17 @@ export function JobReviewManager({
                     onClick={() => setReviewGridFilter("all")}
                   />
                   <FilterChip
+                    label={`Actionable ${
+                      plans.filter(
+                        (plan) =>
+                          plan.artworkReviewState === "FLAGGED" ||
+                          ["READY", "DRAFT", "FAILED"].includes(plan.status),
+                      ).length
+                    }`}
+                    active={reviewGridFilter === "actionable"}
+                    onClick={() => setReviewGridFilter("actionable")}
+                  />
+                  <FilterChip
                     label={`Flagged ${plans.filter((plan) => plan.artworkReviewState === "FLAGGED").length}`}
                     active={reviewGridFilter === "flagged"}
                     onClick={() => setReviewGridFilter("flagged")}
@@ -1677,23 +1698,44 @@ export function JobReviewManager({
                 <div className="flex flex-wrap gap-2">
                   <SelectionChip
                     label="Select all"
-                    onClick={() => setPlanSelection(plans.map((plan) => plan.id))}
+                    onClick={() => {
+                      setPlanSelection(plans.map((plan) => plan.id));
+                      setReviewGridFilter("all");
+                    }}
                   />
                   <SelectionChip
                     label="Ready only"
-                    onClick={() => setPlanSelection(renderablePlans.map((plan) => plan.id))}
+                    onClick={() => {
+                      setPlanSelection(
+                        plans
+                          .filter(
+                            (plan) =>
+                              plan.artworkReviewState === "FLAGGED" ||
+                              ["READY", "DRAFT", "FAILED"].includes(plan.status),
+                          )
+                          .map((plan) => plan.id),
+                      );
+                      setReviewGridFilter("actionable");
+                    }}
                   />
                   <SelectionChip
                     label="Flagged only"
-                    onClick={() =>
+                    onClick={() => {
                       setPlanSelection(
                         plans
                           .filter((plan) => plan.artworkReviewState === "FLAGGED")
                           .map((plan) => plan.id),
-                      )
-                    }
+                      );
+                      setReviewGridFilter("flagged");
+                    }}
                   />
-                  <SelectionChip label="Clear" onClick={() => setPlanSelection([])} />
+                  <SelectionChip
+                    label="Clear"
+                    onClick={() => {
+                      setPlanSelection([]);
+                      setReviewGridFilter("all");
+                    }}
+                  />
                 </div>
               </div>
             </div>
