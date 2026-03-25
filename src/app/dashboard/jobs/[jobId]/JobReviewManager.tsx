@@ -70,6 +70,8 @@ type GeneratedPinItem = {
   mediaStatus: string;
   title: string | null;
   description: string | null;
+  isScheduled: boolean;
+  scheduledFor: string | null;
 };
 
 type FeedbackState = {
@@ -1775,6 +1777,7 @@ export function JobReviewManager({
                             label={plan.artworkReviewState === "NORMAL" ? "Usable" : formatLabel(plan.artworkReviewState)}
                             tone={toneForArtworkReviewState(plan.artworkReviewState)}
                           />
+                          {currentPin?.isScheduled ? <StatusPill label="Scheduled" tone="good" /> : null}
                           {isInRecentlyFixed ? <StatusPill label="Fixed this session" tone="good" /> : null}
                         </div>
                       </div>
@@ -1813,6 +1816,12 @@ export function JobReviewManager({
                             Open editor or queue a render.
                           </button>
                         )}
+
+                        {currentPin?.isScheduled ? (
+                          <p className="mt-3 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-success-ink)]">
+                            Scheduled for {formatScheduleDateTime(currentPin.scheduledFor)}
+                          </p>
+                        ) : null}
 
                         <div className="mt-4 space-y-3">
                           <div>
@@ -2274,6 +2283,7 @@ export function JobReviewManager({
                                     label={formatLabel(pin.mediaStatus)}
                                     tone={toneForPinStatus(pin.mediaStatus)}
                                   />
+                                  {pin.isScheduled ? <StatusPill label="Scheduled" tone="good" /> : null}
                                   {assetMissing ? (
                                     <StatusPill label="Asset missing" tone="warning" />
                                   ) : null}
@@ -2281,6 +2291,11 @@ export function JobReviewManager({
                                     <StatusPill label="Active plan" tone="good" />
                                   ) : null}
                                 </div>
+                                {pin.isScheduled ? (
+                                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-success-ink)]">
+                                    Scheduled for {formatScheduleDateTime(pin.scheduledFor)}
+                                  </p>
+                                ) : null}
                                 {assetMissing ? (
                                   <div className="rounded-2xl border border-[var(--dashboard-danger-border)] bg-[var(--dashboard-danger-soft)] px-3 py-3 text-sm text-[var(--dashboard-danger-ink)]">
                                     Preview asset is missing from storage. Rerender required.
@@ -2626,7 +2641,13 @@ export function JobReviewManager({
                             <div className="flex flex-wrap gap-2">
                               <StatusPill label={pin.templateId} tone="neutral" />
                               <StatusPill label={formatLabel(pin.mediaStatus)} tone={toneForPinStatus(pin.mediaStatus)} />
+                              {pin.isScheduled ? <StatusPill label="Scheduled" tone="good" /> : null}
                             </div>
+                            {pin.isScheduled ? (
+                              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-success-ink)]">
+                                Scheduled for {formatScheduleDateTime(pin.scheduledFor)}
+                              </p>
+                            ) : null}
                             <p>
                               <strong className="text-[var(--dashboard-text)]">Title:</strong>{" "}
                               {pin.title || "No saved title"}
@@ -2789,7 +2810,13 @@ export function JobReviewManager({
                       label={formatLabel(previewPin.mediaStatus)}
                       tone={toneForPinStatus(previewPin.mediaStatus)}
                     />
+                    {previewPin.isScheduled ? <StatusPill label="Scheduled" tone="good" /> : null}
                   </div>
+                  {previewPin.isScheduled ? (
+                    <p className="mt-3 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-success-ink)]">
+                      Scheduled for {formatScheduleDateTime(previewPin.scheduledFor)}
+                    </p>
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -2944,6 +2971,25 @@ function formatCompactUrl(value: string) {
   } catch {
     return value;
   }
+}
+
+function formatScheduleDateTime(value: string | null) {
+  if (!value) {
+    return "Unknown time";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.valueOf())) {
+    return "Unknown time";
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
 }
 
 async function fetchRenderTaskStatus(jobId: string, taskId?: string | null) {

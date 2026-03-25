@@ -179,18 +179,24 @@ export default async function DashboardJobDetailsPage({ params }: PageProps) {
                 "Source image",
             })),
           }))}
-          generatedPins={job.generatedPins.map((pin) => ({
-            id: pin.id,
-            planId: pin.planId,
-            templateId: pin.templateId,
-            exportPath: resolveStoredAssetUrl({
-              storageKey: pin.storageKey,
-              exportPath: pin.exportPath,
-            }),
-            mediaStatus: pin.publerMedia?.status ?? "PENDING",
-            title: pin.pinCopy?.title ?? null,
-            description: pin.pinCopy?.description ?? null,
-          }))}
+          generatedPins={job.generatedPins.map((pin) => {
+            const scheduledItem = pin.scheduleRunItems.find((item) => item.status === "SCHEDULED");
+
+            return {
+              id: pin.id,
+              planId: pin.planId,
+              templateId: pin.templateId,
+              exportPath: resolveStoredAssetUrl({
+                storageKey: pin.storageKey,
+                exportPath: pin.exportPath,
+              }),
+              mediaStatus: pin.publerMedia?.status ?? "PENDING",
+              title: pin.pinCopy?.title ?? null,
+              description: pin.pinCopy?.description ?? null,
+              isScheduled: Boolean(scheduledItem),
+              scheduledFor: scheduledItem?.scheduledFor ? scheduledItem.scheduledFor.toISOString() : null,
+            };
+          })}
         />
       </div>
 
