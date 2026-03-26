@@ -177,6 +177,8 @@ export function JobReviewManager({
   const [pinCount, setPinCount] = useState(3);
   const [selectedTemplateIds, setSelectedTemplateIds] = useState(templates.map((item) => item.id));
   const [selectedPresetCategoryIds, setSelectedPresetCategoryIds] = useState<string[]>([]);
+  const [templateSearchQuery, setTemplateSearchQuery] = useState("");
+  const [presetCategorySearchQuery, setPresetCategorySearchQuery] = useState("");
   const [allowAnyPresetOverride, setAllowAnyPresetOverride] = useState(false);
   const [assistedPresetStrategy, setAssistedPresetStrategy] = useState<
     "recommended" | "random_all" | "random_bold" | "random_feminine"
@@ -244,6 +246,20 @@ export function JobReviewManager({
 
   const selectedImages = images.filter((image) => image.isSelected);
   const manualTemplate = templates.find((item) => item.id === manualTemplateId) ?? null;
+  const filteredTemplates = templates.filter((template) =>
+    template.name.toLowerCase().includes(templateSearchQuery.trim().toLowerCase()),
+  );
+  const filteredPresetCategories = visualPresetCategories.filter((category) => {
+    const query = presetCategorySearchQuery.trim().toLowerCase();
+    if (!query) {
+      return true;
+    }
+
+    return (
+      category.label.toLowerCase().includes(query) ||
+      category.description.toLowerCase().includes(query)
+    );
+  });
   const renderablePlans = plans.filter((plan) => ["READY", "DRAFT", "FAILED"].includes(plan.status));
   const alreadyRenderedPlans = plans.filter((plan) => plan.status === "GENERATED");
   const selectedActionPlans = plans.filter((plan) => selectedPlanIds.includes(plan.id));
@@ -366,6 +382,22 @@ export function JobReviewManager({
         ? current.filter((item) => item !== categoryId)
         : [...current, categoryId],
     );
+  }
+
+  function selectAllTemplates() {
+    setSelectedTemplateIds(templates.map((item) => item.id));
+  }
+
+  function clearTemplateSelection() {
+    setSelectedTemplateIds([]);
+  }
+
+  function clearPresetCategorySelection() {
+    setSelectedPresetCategoryIds([]);
+  }
+
+  function selectAllPresetCategories() {
+    setSelectedPresetCategoryIds(visualPresetCategories.map((item) => item.id));
   }
 
   function updateImage(id: string, patch: Partial<SourceImageItem>) {
@@ -1328,28 +1360,85 @@ export function JobReviewManager({
                   <option value="random_feminine">Random feminine presets</option>
                 </select>
               </label>
-              <div>
-                <p className="text-sm font-semibold text-[var(--dashboard-subtle)]">Eligible templates</p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {templates.map((template) => {
-                    const active = selectedTemplateIds.includes(template.id);
-                    return (
-                      <button
-                        key={template.id}
-                        type="button"
-                        onClick={() => toggleTemplate(template.id)}
-                        className={`rounded-full border px-3 py-2 text-sm font-semibold transition ${
-                          active
-                            ? "border-[var(--dashboard-accent)] bg-[var(--dashboard-accent-soft)] text-[var(--dashboard-accent-strong)]"
-                            : "border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] text-[var(--dashboard-subtle)]"
-                        }`}
-                      >
-                        {template.name}
-                      </button>
-                    );
-                  })}
+              <details className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)]">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3">
+                  <div>
+                    <p className="text-sm font-semibold text-[var(--dashboard-subtle)]">Eligible templates</p>
+                    <p className="mt-1 text-sm font-bold text-[var(--dashboard-text)]">
+                      {selectedTemplateIds.length === templates.length
+                        ? `All ${templates.length} templates`
+                        : selectedTemplateIds.length === 0
+                          ? "No templates selected"
+                          : `${selectedTemplateIds.length} selected`}
+                    </p>
+                  </div>
+                  <span className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-muted)]">
+                    Manage
+                  </span>
+                </summary>
+                <div className="border-t border-[var(--dashboard-line)] px-4 py-4">
+                  <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
+                    Search templates
+                    <input
+                      value={templateSearchQuery}
+                      onChange={(event) => setTemplateSearchQuery(event.target.value)}
+                      placeholder="Template name"
+                      className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-2"
+                    />
+                  </label>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={selectAllTemplates}
+                      className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-muted)]"
+                    >
+                      Select all
+                    </button>
+                    <button
+                      type="button"
+                      onClick={clearTemplateSelection}
+                      className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-muted)]"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                  <div className="mt-3 max-h-72 space-y-2 overflow-y-auto pr-1">
+                    {filteredTemplates.length === 0 ? (
+                      <p className="text-sm text-[var(--dashboard-subtle)]">No templates match this search.</p>
+                    ) : (
+                      filteredTemplates.map((template) => {
+                        const active = selectedTemplateIds.includes(template.id);
+                        return (
+                          <label
+                            key={template.id}
+                            className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-2 ${
+                              active
+                                ? "border-[var(--dashboard-accent)] bg-[var(--dashboard-accent-soft)]"
+                                : "border-[var(--dashboard-line)] bg-[var(--dashboard-panel)]"
+                            }`}
+                          >
+                            <span className="flex min-w-0 items-center gap-3">
+                              <input
+                                type="checkbox"
+                                checked={active}
+                                onChange={() => toggleTemplate(template.id)}
+                              />
+                              <span className="min-w-0">
+                                <span className="block truncate text-sm font-semibold text-[var(--dashboard-text)]">
+                                  {template.name}
+                                </span>
+                                <span className="block text-xs text-[var(--dashboard-muted)]">
+                                  {template.imageSlotCount} slots
+                                </span>
+                              </span>
+                            </span>
+                          </label>
+                        );
+                      })
+                    )}
+                  </div>
                 </div>
-              </div>
+              </details>
             </div>
 
             <label className="mt-4 flex items-center gap-3 rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-4 py-3 text-sm text-[var(--dashboard-subtle)]">
@@ -1363,52 +1452,84 @@ export function JobReviewManager({
               </span>
             </label>
 
-            <div className="mt-4 rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-4">
-              <div className="flex items-start justify-between gap-4">
+            <details className="mt-4 rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)]">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3">
                 <div>
                   <p className="text-sm font-bold text-[var(--dashboard-text)]">Preset bundles</p>
                   <p className="mt-1 text-sm text-[var(--dashboard-subtle)]">
-                    Narrow assisted generation to specific color families. Leave all bundles off to use the full preset catalog.
+                    {selectedPresetCategoryIds.length === 0
+                      ? "All bundles available"
+                      : `${selectedPresetCategoryIds.length} bundle${selectedPresetCategoryIds.length === 1 ? "" : "s"} selected`}
                   </p>
                 </div>
                 <span className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-muted)]">
-                  {selectedPresetCategoryIds.length === 0 ? "All bundles" : `${selectedPresetCategoryIds.length} selected`}
+                  Manage
                 </span>
-              </div>
-              <div className="mt-4 grid gap-3 md:grid-cols-2">
-                {visualPresetCategories.map((category) => {
-                  const active = selectedPresetCategoryIds.includes(category.id);
-                  return (
-                    <button
-                      key={category.id}
-                      type="button"
-                      onClick={() => togglePresetCategory(category.id)}
-                      className={`rounded-2xl border px-4 py-4 text-left ${
-                        active
-                          ? "border-[var(--dashboard-accent)] bg-[var(--dashboard-accent-soft-strong)] shadow-[0_12px_28px_rgba(30,94,255,0.12)]"
-                          : "border-[var(--dashboard-line)] bg-[var(--dashboard-panel)]"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="text-sm font-bold text-[var(--dashboard-text)]">{category.label}</p>
-                        <span
-                          className={`rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] ${
+              </summary>
+              <div className="border-t border-[var(--dashboard-line)] px-4 py-4">
+                <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
+                  Search bundles
+                  <input
+                    value={presetCategorySearchQuery}
+                    onChange={(event) => setPresetCategorySearchQuery(event.target.value)}
+                    placeholder="Bundle name"
+                    className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-2"
+                  />
+                </label>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={selectAllPresetCategories}
+                    className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-muted)]"
+                  >
+                    Select all
+                  </button>
+                  <button
+                    type="button"
+                    onClick={clearPresetCategorySelection}
+                    className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-muted)]"
+                  >
+                    Use all bundles
+                  </button>
+                </div>
+                <div className="mt-3 max-h-72 space-y-2 overflow-y-auto pr-1">
+                  {filteredPresetCategories.length === 0 ? (
+                    <p className="text-sm text-[var(--dashboard-subtle)]">No preset bundles match this search.</p>
+                  ) : (
+                    filteredPresetCategories.map((category) => {
+                      const active = selectedPresetCategoryIds.includes(category.id);
+                      return (
+                        <label
+                          key={category.id}
+                          className={`flex items-start justify-between gap-3 rounded-xl border px-3 py-3 ${
                             active
-                              ? "bg-[var(--dashboard-accent)] text-white"
-                              : "bg-[var(--dashboard-panel-alt)] text-[var(--dashboard-muted)]"
+                              ? "border-[var(--dashboard-accent)] bg-[var(--dashboard-accent-soft)]"
+                              : "border-[var(--dashboard-line)] bg-[var(--dashboard-panel)]"
                           }`}
                         >
-                          {active ? "On" : "Off"}
-                        </span>
-                      </div>
-                      <p className="mt-2 text-sm leading-6 text-[var(--dashboard-subtle)]">
-                        {category.description}
-                      </p>
-                    </button>
-                  );
-                })}
+                          <span className="flex min-w-0 items-start gap-3">
+                            <input
+                              type="checkbox"
+                              checked={active}
+                              onChange={() => togglePresetCategory(category.id)}
+                              className="mt-1"
+                            />
+                            <span className="min-w-0">
+                              <span className="block text-sm font-semibold text-[var(--dashboard-text)]">
+                                {category.label}
+                              </span>
+                              <span className="mt-1 block text-sm leading-6 text-[var(--dashboard-subtle)]">
+                                {category.description}
+                              </span>
+                            </span>
+                          </span>
+                        </label>
+                      );
+                    })
+                  )}
+                </div>
               </div>
-            </div>
+            </details>
           </div>
 
           <div className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-4">
