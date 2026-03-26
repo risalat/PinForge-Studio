@@ -407,6 +407,13 @@ export function JobPublishManager({
       ),
     [copyByPinId, publishReadyArtworkPins],
   );
+  const titleFinalizedPins = useMemo(
+    () =>
+      publishReadyArtworkPins.filter((pin) =>
+        isPinTitleFinalized(pin, copyByPinId.get(pin.id)?.title ?? ""),
+      ),
+    [copyByPinId, publishReadyArtworkPins],
+  );
   const titleNotReadyPins = useMemo(
     () => orderedPins.filter((pin) => !isPinReadyForTitleWork(pin)),
     [orderedPins],
@@ -2605,6 +2612,7 @@ function formatDateLabel(value: string) {
               <>
                 <span>{titleReadyForGenerationPins.length} ready</span>
                 <span>{titleReadyForSelectionPins.length} ready to pick</span>
+                <span>{titleFinalizedPins.length} finalized</span>
                 <span>{titleNotReadyPins.length} not ready</span>
               </>
             }
@@ -2889,6 +2897,25 @@ function formatDateLabel(value: string) {
                       );
                     })}
                   </div>
+                )}
+              </article>
+
+              <article className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-base font-bold text-[var(--dashboard-text)]">Finalized titles</h3>
+                    <p className="mt-1 text-sm text-[var(--dashboard-subtle)]">
+                      These pins already have a chosen publish title and do not need Step 2 attention.
+                    </p>
+                  </div>
+                  <StatusChip label={`${titleFinalizedPins.length} pins`} tone="good" />
+                </div>
+                {titleFinalizedPins.length === 0 ? (
+                  <p className="mt-4 text-sm text-[var(--dashboard-subtle)]">No finalized publish titles yet.</p>
+                ) : (
+                  <p className="mt-4 text-sm text-[var(--dashboard-subtle)]">
+                    {titleFinalizedPins.length} pin{titleFinalizedPins.length === 1 ? "" : "s"} already have finalized publish titles. Use the compact Pins panel or regenerate options manually if you want a new variant later.
+                  </p>
                 )}
               </article>
 
@@ -4009,8 +4036,16 @@ function isPinReadyForTitleSelection(pin: PinItem, currentTitle: string) {
     return false;
   }
 
-  if (pin.titleOptions.length > 0) {
-    return true;
+  if (isPinTitleFinalized(pin, currentTitle)) {
+    return false;
+  }
+
+  return pin.titleOptions.length > 0;
+}
+
+function isPinTitleFinalized(pin: PinItem, currentTitle: string) {
+  if (!isPinReadyForTitleWork(pin)) {
+    return false;
   }
 
   return pin.titleStatus === "FINALIZED" && currentTitle.trim().length > 0;
