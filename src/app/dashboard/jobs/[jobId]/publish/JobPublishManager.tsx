@@ -129,6 +129,7 @@ type BannerState = {
 } | null;
 
 type PublishSectionKey = "upload" | "titles" | "descriptions" | "schedule";
+type PublishStepKey = PublishSectionKey;
 
 type PublerOptionsResponse = {
   ok: boolean;
@@ -238,6 +239,12 @@ export function JobPublishManager({
     descriptions: null,
     schedule: null,
   });
+  const [collapsedSteps, setCollapsedSteps] = useState<Record<PublishStepKey, boolean>>({
+    upload: false,
+    titles: false,
+    descriptions: true,
+    schedule: false,
+  });
   const [profileDefaultsFeedback, setProfileDefaultsFeedback] = useState<BannerState>(null);
   const [missingAssetPinIds, setMissingAssetPinIds] = useState<string[]>([]);
   const [isLoadingOptions, setIsLoadingOptions] = useState(false);
@@ -258,6 +265,13 @@ export function JobPublishManager({
   const isSavingCopy = activeAction === "save_copy";
   const isGeneratingDescriptions = activeAction === "generate_descriptions";
   const isSchedulingPins = activeAction === "schedule";
+
+  const toggleStepCollapsed = useCallback((step: PublishStepKey) => {
+    setCollapsedSteps((current) => ({
+      ...current,
+      [step]: !current[step],
+    }));
+  }, []);
 
   function markPinAssetMissing(pinId: string) {
     setMissingAssetPinIds((current) =>
@@ -2395,17 +2409,19 @@ function formatDateLabel(value: string) {
 
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.9fr)]">
-        <div className="space-y-4">
-          <section id="publish-upload" className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-5 shadow-[var(--dashboard-shadow-sm)]">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <h2 className="text-xl font-bold">Step 1 - Upload media</h2>
-              </div>
-              <p className="text-sm font-semibold text-[var(--dashboard-muted)]">
+      <section className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)] xl:items-start">
+        <div className="space-y-4 xl:max-h-[calc(100vh-7.5rem)] xl:overflow-y-auto xl:pr-2">
+          <StepSection
+            id="publish-upload"
+            title="Step 1 - Upload media"
+            collapsed={collapsedSteps.upload}
+            onToggle={() => toggleStepCollapsed("upload")}
+            summary={
+              <>
                 {summary.uploaded} uploaded - {summary.mediaFailed} failed
-              </p>
-            </div>
+              </>
+            }
+          >
 
             <div className="mt-4 flex flex-wrap gap-3">
               <button
@@ -2547,7 +2563,7 @@ function formatDateLabel(value: string) {
                 )}
               </div>
             </div>
-          </section>
+          </StepSection>
 
           <section className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-5 shadow-[var(--dashboard-shadow-sm)]">
             <div className="flex flex-wrap items-center justify-between gap-4">
@@ -2579,20 +2595,20 @@ function formatDateLabel(value: string) {
             </div>
           </section>
 
-          <section id="publish-titles" className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-5 shadow-[var(--dashboard-shadow-sm)]">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <h2 className="text-xl font-bold">Step 2 - Titles</h2>
-                <p className="mt-1 text-sm text-[var(--dashboard-subtle)]">
-                  Generate title options in background batches, then choose or override the best one per pin.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2 text-sm font-semibold text-[var(--dashboard-muted)]">
+          <StepSection
+            id="publish-titles"
+            title="Step 2 - Titles"
+            description="Generate title options in background batches, then choose or override the best one per pin."
+            collapsed={collapsedSteps.titles}
+            onToggle={() => toggleStepCollapsed("titles")}
+            summary={
+              <>
                 <span>{titleReadyForGenerationPins.length} ready</span>
                 <span>{titleReadyForSelectionPins.length} ready to pick</span>
                 <span>{titleNotReadyPins.length} not ready</span>
-              </div>
-            </div>
+              </>
+            }
+          >
             <div className="mt-4 flex flex-wrap gap-3">
               <button
                 type="button"
@@ -2918,22 +2934,22 @@ function formatDateLabel(value: string) {
                 )}
               </article>
             </div>
-          </section>
+          </StepSection>
 
-          <section id="publish-descriptions" className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-5 shadow-[var(--dashboard-shadow-sm)]">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <h2 className="text-xl font-bold">Step 3 - Descriptions</h2>
-                <p className="mt-1 text-sm text-[var(--dashboard-subtle)]">
-                  Keep descriptions mostly invisible. Generate them in background for ready pins, then only expand pins that need attention.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2 text-sm font-semibold text-[var(--dashboard-muted)]">
+          <StepSection
+            id="publish-descriptions"
+            title="Step 3 - Descriptions"
+            description="Keep descriptions mostly invisible. Generate them in background for ready pins, then only expand pins that need attention."
+            collapsed={collapsedSteps.descriptions}
+            onToggle={() => toggleStepCollapsed("descriptions")}
+            summary={
+              <>
                 <span>{descriptionReadyForGenerationPins.length} ready</span>
                 <span>{descriptionNeedsAttentionPins.length} need attention</span>
                 <span>{summary.descriptionsReady} completed</span>
-              </div>
-            </div>
+              </>
+            }
+          >
             <div className="mt-4 flex flex-wrap gap-3">
               <button
                 type="button"
@@ -2964,6 +2980,36 @@ function formatDateLabel(value: string) {
                   label="Generate remaining descriptions now"
                   busyLabel="Queueing descriptions..."
                   inverse
+                />
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  handleAction(
+                    { action: "save_copy", copies: dirtyCopyPayload },
+                    "Unable to save copy edits.",
+                    "descriptions",
+                  )
+                }
+                disabled={
+                  isPending ||
+                  Boolean(activeAction) ||
+                  dirtyCopyPayload.length === 0
+                }
+                aria-busy={isSavingCopy}
+                className={getActionButtonClass({
+                  tone: "secondary",
+                  busy: isSavingCopy,
+                  disabled:
+                    isPending ||
+                    Boolean(activeAction) ||
+                    dirtyCopyPayload.length === 0,
+                })}
+              >
+                <ActionButtonContent
+                  busy={isSavingCopy}
+                  label="Save description edits"
+                  busyLabel="Saving..."
                 />
               </button>
             </div>
@@ -3011,6 +3057,7 @@ function formatDateLabel(value: string) {
                 <div className="mt-4 grid gap-4 xl:grid-cols-2">
                   {descriptionNeedsAttentionPins.map((pin) => {
                     const copy = copyByPinId.get(pin.id);
+                    const isExpanded = expandedDescriptionPinIds.includes(pin.id);
                     return (
                       <article key={`description-attention-${pin.id}`} className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-3">
                         <div className="grid gap-4 sm:grid-cols-[120px_minmax(0,1fr)]">
@@ -3058,7 +3105,9 @@ function formatDateLabel(value: string) {
                                 type="button"
                                 onClick={() =>
                                   setExpandedDescriptionPinIds((current) =>
-                                    current.includes(pin.id) ? current : [...current, pin.id],
+                                    current.includes(pin.id)
+                                      ? current.filter((value) => value !== pin.id)
+                                      : [...current, pin.id],
                                   )
                                 }
                                 className={getActionButtonClass({
@@ -3066,9 +3115,26 @@ function formatDateLabel(value: string) {
                                   disabled: false,
                                 })}
                               >
-                                Edit manually
+                                {isExpanded ? "Collapse editor" : "Edit manually"}
                               </button>
                             </div>
+                            {isExpanded ? (
+                              <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
+                                <span className="flex items-center justify-between gap-3">
+                                  <span>Manual description</span>
+                                  <span className="text-xs font-medium text-[var(--dashboard-muted)]">
+                                    {(copy?.description ?? "").length}/{DESCRIPTION_MAX_LENGTH}
+                                  </span>
+                                </span>
+                                <textarea
+                                  value={copy?.description ?? ""}
+                                  onChange={(event) => updateCopy(pin.id, "description", event.target.value)}
+                                  maxLength={DESCRIPTION_MAX_LENGTH}
+                                  rows={5}
+                                  className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-white px-3 py-2"
+                                />
+                              </label>
+                            ) : null}
                           </div>
                         </div>
                       </article>
@@ -3077,22 +3143,24 @@ function formatDateLabel(value: string) {
                 </div>
               )}
             </div>
-          </section>
+          </StepSection>
 
-          <section id="publish-schedule" className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-5 shadow-[var(--dashboard-shadow-sm)]">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <h2 className="text-xl font-bold">Step 4 - Scheduling</h2>
-              </div>
-              <div className="text-sm text-[var(--dashboard-subtle)]">
+          <StepSection
+            id="publish-schedule"
+            title="Step 4 - Scheduling"
+            collapsed={collapsedSteps.schedule}
+            onToggle={() => toggleStepCollapsed("schedule")}
+            summary={
+              <>
                 <p>
                   <strong>{summary.scheduled}</strong> scheduled
                 </p>
                 <p>
                   <strong>{summary.scheduleFailed}</strong> failed
                 </p>
-              </div>
-            </div>
+              </>
+            }
+          >
 
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
@@ -3340,10 +3408,10 @@ function formatDateLabel(value: string) {
                 })
               )}
             </div>
-          </section>
+          </StepSection>
         </div>
 
-        <section id="publish-pins" className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-5 shadow-[var(--dashboard-shadow-sm)]">
+        <section id="publish-pins" className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-5 shadow-[var(--dashboard-shadow-sm)] xl:max-h-[calc(100vh-7.5rem)] xl:overflow-y-auto xl:pr-2">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <h2 className="text-xl font-bold">Pins</h2>
@@ -3379,9 +3447,8 @@ function formatDateLabel(value: string) {
             {orderedPins.map((pin) => {
               const copy = copyByPinId.get(pin.id);
               const isSelected = selectedPinIds.includes(pin.id);
-              const isDescriptionExpanded =
-                expandedDescriptionPinIds.includes(pin.id) ||
-                isPinDescriptionNeedsAttention(pin);
+              const currentTitle = copy?.title?.trim() ?? "";
+              const currentDescription = copy?.description?.trim() ?? "";
 
               return (
                 <article
@@ -3422,19 +3489,42 @@ function formatDateLabel(value: string) {
                     </div>
                   </div>
 
-                  <div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
+                  <div className="grid gap-4 lg:grid-cols-[112px_minmax(0,1fr)]">
                     {missingAssetPinIds.includes(pin.id) ? (
-                      <MissingAssetCard />
+                      <div className="min-h-[112px]">
+                        <MissingAssetCard />
+                      </div>
                     ) : (
                       <img
                         src={pin.exportPath}
-                        alt={copy?.title || "Generated pin"}
+                        alt={currentTitle || "Generated pin"}
                         className="w-full rounded-xl border border-[var(--dashboard-line)]"
                         onError={() => markPinAssetMissing(pin.id)}
                       />
                     )}
                     <div className="space-y-3">
-                      <p className="text-sm font-semibold text-[var(--dashboard-text)]">{pin.templateId}</p>
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-[var(--dashboard-text)]">{pin.templateId}</p>
+                          <p className="mt-1 text-sm text-[var(--dashboard-subtle)] line-clamp-2">
+                            {currentTitle || "No publishing title selected yet."}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Link
+                            href="#publish-titles"
+                            className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-subtle)]"
+                          >
+                            Titles
+                          </Link>
+                          <Link
+                            href="#publish-descriptions"
+                            className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-subtle)]"
+                          >
+                            Descriptions
+                          </Link>
+                        </div>
+                      </div>
                       {pin.artworkFlagReason ? (
                         <p className="text-sm text-[var(--dashboard-subtle)]">{pin.artworkFlagReason}</p>
                       ) : null}
@@ -3443,131 +3533,33 @@ function formatDateLabel(value: string) {
                           This pin asset is missing from storage. Discard and rerender it before upload or scheduling.
                         </div>
                       ) : null}
-                      <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
-                        <span className="flex items-center justify-between gap-3">
-                          <span>Title</span>
-                          <span className="text-xs font-medium text-[var(--dashboard-muted)]">
-                            {(copy?.title ?? "").length}/{TITLE_MAX_LENGTH}
-                          </span>
-                        </span>
-                        <input
-                          value={copy?.title ?? ""}
-                          onChange={(event) => updateCopy(pin.id, "title", event.target.value)}
-                          maxLength={TITLE_MAX_LENGTH}
-                          className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-white px-3 py-2"
-                        />
-                        {(titleCandidatesByPinId[pin.id]?.length ?? 0) > 0 ? (
-                          <div className="mt-3">
-                            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--dashboard-muted)]">
-                              Generated options
-                            </p>
-                            <div className="mt-2 flex flex-wrap gap-2">
-                              {titleCandidatesByPinId[pin.id].map((candidate, candidateIndex) => {
-                                const active = (copy?.title ?? "") === candidate;
-                                return (
-                                  <button
-                                    key={`${pin.id}-title-candidate-${candidateIndex}`}
-                                    type="button"
-                                    onClick={() => updateCopy(pin.id, "title", candidate)}
-                                    className={`rounded-full border px-3 py-2 text-left text-xs font-semibold leading-5 ${
-                                      active
-                                        ? "border-[var(--dashboard-accent)] bg-[var(--dashboard-accent-soft-strong)] text-[var(--dashboard-accent-strong)]"
-                                        : "border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] text-[var(--dashboard-subtle)]"
-                                    }`}
-                                  >
-                                    {candidate}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        ) : null}
-                      </label>
-
-                      <div className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-3 py-3">
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                          <div>
-                            <p className="text-sm font-semibold text-[var(--dashboard-subtle)]">Description</p>
-                            <p className="mt-1 text-xs text-[var(--dashboard-muted)]">
-                              {copy?.description?.trim()
-                                ? `Ready (${(copy?.description ?? "").length}/${DESCRIPTION_MAX_LENGTH})`
-                                : "Missing"}
-                            </p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setExpandedDescriptionPinIds((current) =>
-                                current.includes(pin.id)
-                                  ? current.filter((value) => value !== pin.id)
-                                  : [...current, pin.id],
-                              )
-                            }
-                            className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-subtle)]"
-                          >
-                            {isDescriptionExpanded ? "Collapse" : "Edit"}
-                          </button>
-                        </div>
-                        {isDescriptionExpanded ? (
-                          <label className="mt-3 block text-sm font-semibold text-[var(--dashboard-subtle)]">
-                            <span className="flex items-center justify-between gap-3">
-                              <span>Manual description</span>
-                              <span className="text-xs font-medium text-[var(--dashboard-muted)]">
-                                {(copy?.description ?? "").length}/{DESCRIPTION_MAX_LENGTH}
-                              </span>
-                            </span>
-                            <textarea
-                              value={copy?.description ?? ""}
-                              onChange={(event) => updateCopy(pin.id, "description", event.target.value)}
-                              maxLength={DESCRIPTION_MAX_LENGTH}
-                              rows={4}
-                              className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-white px-3 py-2"
-                            />
-                            <div className="mt-3 flex flex-wrap gap-2">
-                              <button
-                                type="button"
-                                onClick={() => triggerQueueGenerateDescriptions([pin.id], true)}
-                                disabled={
-                                  isPending ||
-                                  Boolean(activeAction) ||
-                                  !integrationReady.canUseAiApiKey ||
-                                  !selectedAiCredentialId ||
-                                  !canUseSelectedAiCredential
-                                }
-                                className={getActionButtonClass({
-                                  tone: "secondary",
-                                  disabled:
-                                    isPending ||
-                                    Boolean(activeAction) ||
-                                    !integrationReady.canUseAiApiKey ||
-                                    !selectedAiCredentialId ||
-                                    !canUseSelectedAiCredential,
-                                })}
-                              >
-                                Regenerate description
-                              </button>
-                            </div>
-                          </label>
-                        ) : (
-                          <p className="mt-3 line-clamp-2 text-sm text-[var(--dashboard-subtle)]">
-                            {copy?.description?.trim() || "No saved description."}
+                      <div className="grid gap-3 text-sm text-[var(--dashboard-subtle)] md:grid-cols-2">
+                        <div className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-3">
+                          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--dashboard-muted)]">
+                            Publishing title
                           </p>
-                        )}
+                          <p className="mt-2 line-clamp-2 text-sm text-[var(--dashboard-text)]">
+                            {currentTitle || "Missing"}
+                          </p>
+                        </div>
+                        <div className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-3">
+                          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--dashboard-muted)]">
+                            Description
+                          </p>
+                          <p className="mt-2 line-clamp-2 text-sm text-[var(--dashboard-text)]">
+                            {currentDescription || "Missing"}
+                          </p>
+                        </div>
                       </div>
 
                       <div className="grid gap-2 text-sm text-[var(--dashboard-subtle)]">
                         <p>
-                          <strong>Media ID:</strong> {pin.mediaId || "No Publer media saved yet"}
+                          <strong>Media:</strong> {pin.mediaId || pin.mediaError || "No Publer media saved yet"}
                         </p>
                         <p>
-                          <strong>Scheduled for:</strong>{" "}
+                          <strong>Schedule:</strong>{" "}
                           {pin.scheduledFor ? new Date(pin.scheduledFor).toLocaleString() : "No schedule submitted"}
                         </p>
-                        {pin.mediaError ? (
-                          <p className="text-[var(--dashboard-danger)]">
-                            <strong>Media error:</strong> {pin.mediaError}
-                          </p>
-                        ) : null}
                         {pin.scheduleError ? (
                           <p className="text-[var(--dashboard-danger)]">
                             <strong>Schedule error:</strong> {pin.scheduleError}
@@ -3592,6 +3584,51 @@ function SummaryCard({ label, value }: { label: string; value: string }) {
       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">{label}</p>
       <p className="mt-2 text-2xl font-bold text-[var(--dashboard-text)]">{value}</p>
     </div>
+  );
+}
+
+function StepSection({
+  id,
+  title,
+  summary,
+  description,
+  collapsed,
+  onToggle,
+  children,
+}: {
+  id: string;
+  title: string;
+  summary?: import("react").ReactNode;
+  description?: import("react").ReactNode;
+  collapsed: boolean;
+  onToggle: () => void;
+  children: import("react").ReactNode;
+}) {
+  return (
+    <section
+      id={id}
+      className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-5 shadow-[var(--dashboard-shadow-sm)]"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-bold">{title}</h2>
+          {description ? (
+            <div className="mt-1 text-sm text-[var(--dashboard-subtle)]">{description}</div>
+          ) : null}
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          {summary ? <div className="text-sm font-semibold text-[var(--dashboard-muted)]">{summary}</div> : null}
+          <button
+            type="button"
+            onClick={onToggle}
+            className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)]"
+          >
+            {collapsed ? "Expand" : "Collapse"}
+          </button>
+        </div>
+      </div>
+      {!collapsed ? children : null}
+    </section>
   );
 }
 
@@ -3964,7 +4001,7 @@ function isPinReadyForTitleGeneration(pin: PinItem) {
     return false;
   }
 
-  return pin.titleOptions.length === 0 && !pin.title.trim();
+  return pin.titleOptions.length === 0;
 }
 
 function isPinReadyForTitleSelection(pin: PinItem, currentTitle: string) {
@@ -3972,7 +4009,11 @@ function isPinReadyForTitleSelection(pin: PinItem, currentTitle: string) {
     return false;
   }
 
-  return pin.titleOptions.length > 0 || currentTitle.trim().length > 0;
+  if (pin.titleOptions.length > 0) {
+    return true;
+  }
+
+  return pin.titleStatus === "FINALIZED" && currentTitle.trim().length > 0;
 }
 
 function buildTitleNotReadyReason(pin: PinItem) {
