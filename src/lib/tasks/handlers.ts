@@ -5,7 +5,11 @@ import {
 } from "@prisma/client";
 import { z } from "zod";
 import { cleanupStaleTempAssets } from "@/lib/housekeeping/storageMaintenance";
-import { renderPlansForJobTask } from "@/lib/jobs/generatePins";
+import {
+  generateDescriptionsForJobPins,
+  generateTitlesForJobPins,
+  renderPlansForJobTask,
+} from "@/lib/jobs/generatePins";
 import { normalizeErrorForLogging } from "@/lib/observability/operationContext";
 
 const cleanTempAssetsPayloadSchema = z.object({
@@ -17,6 +21,20 @@ const renderPlansPayloadSchema = z.object({
   userId: z.string().min(1),
   jobId: z.string().min(1),
   planIds: z.array(z.string().min(1)).optional(),
+  aiCredentialId: z.string().min(1).nullable().optional(),
+});
+
+const generateTitleBatchPayloadSchema = z.object({
+  userId: z.string().min(1),
+  jobId: z.string().min(1),
+  generatedPinIds: z.array(z.string().min(1)).optional(),
+  aiCredentialId: z.string().min(1).nullable().optional(),
+});
+
+const generateDescriptionBatchPayloadSchema = z.object({
+  userId: z.string().min(1),
+  jobId: z.string().min(1),
+  generatedPinIds: z.array(z.string().min(1)).optional(),
   aiCredentialId: z.string().min(1).nullable().optional(),
 });
 
@@ -37,6 +55,10 @@ export async function executeBackgroundTask(
     case BackgroundTaskKind.RENDER_PLANS:
     case BackgroundTaskKind.RERENDER_PLAN:
       return executeRenderPlansTask(task, context);
+    case BackgroundTaskKind.GENERATE_TITLE_BATCH:
+      return executeGenerateTitleBatchTask(task, context);
+    case BackgroundTaskKind.GENERATE_DESCRIPTION_BATCH:
+      return executeGenerateDescriptionBatchTask(task, context);
     case BackgroundTaskKind.CLEAN_TEMP_ASSETS:
       return executeCleanTempAssetsTask(task, context);
     default:
@@ -61,6 +83,82 @@ async function executeRenderPlansTask(
 
   return {
     progressJson: result.progress satisfies Prisma.InputJsonValue,
+  };
+}
+
+async function executeGenerateTitleBatchTask(
+  task: BackgroundTask,
+  context: BackgroundTaskHandlerContext,
+): Promise<BackgroundTaskExecutionResult> {
+  const payload = generateTitleBatchPayloadSchema.parse(task.payloadJson);
+
+  await context.reportProgress({
+    stage: "running",
+    total: payload.generatedPinIds?.length ?? 0,
+    completed: 0,
+    workerId: context.workerId,
+    startedAt: new Date().toISOString(),
+  });
+
+  const result = await generateTitlesForJobPins({
+    userId: payload.userId,
+    jobId: payload.jobId,
+    generatedPinIds: payload.generatedPinIds,
+    aiCredentialId: payload.aiCredentialId ?? undefined,
+  });
+
+  const completed = result.succeeded + result.failed + result.skipped;
+  const progressJson = {
+    stage: result.failed > 0 ? "completed_with_failures" : "completed",
+    total: result.processed,
+    completed,
+    workerId: context.workerId,
+    finishedAt: new Date().toISOString(),
+    result,
+  } satisfies Prisma.InputJsonValue;
+
+  await context.reportProgress(progressJson);
+
+  return {
+    progressJson,
+  };
+}
+
+async function executeGenerateDescriptionBatchTask(
+  task: BackgroundTask,
+  context: BackgroundTaskHandlerContext,
+): Promise<BackgroundTaskExecutionResult> {
+  const payload = generateDescriptionBatchPayloadSchema.parse(task.payloadJson);
+
+  await context.reportProgress({
+    stage: "running",
+    total: payload.generatedPinIds?.length ?? 0,
+    completed: 0,
+    workerId: context.workerId,
+    startedAt: new Date().toISOString(),
+  });
+
+  const result = await generateDescriptionsForJobPins({
+    userId: payload.userId,
+    jobId: payload.jobId,
+    generatedPinIds: payload.generatedPinIds,
+    aiCredentialId: payload.aiCredentialId ?? undefined,
+  });
+
+  const completed = result.succeeded + result.failed + result.skipped;
+  const progressJson = {
+    stage: result.failed > 0 ? "completed_with_failures" : "completed",
+    total: result.processed,
+    completed,
+    workerId: context.workerId,
+    finishedAt: new Date().toISOString(),
+    result,
+  } satisfies Prisma.InputJsonValue;
+
+  await context.reportProgress(progressJson);
+
+  return {
+    progressJson,
   };
 }
 

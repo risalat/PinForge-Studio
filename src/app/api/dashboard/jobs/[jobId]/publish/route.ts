@@ -1,3 +1,4 @@
+import { BackgroundTaskKind, BackgroundTaskStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAuthenticatedDashboardApiUser } from "@/lib/auth/dashboardSession";
@@ -5,9 +6,9 @@ import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
 import { EditablePinDescriptionSchema, EditablePinTitleSchema } from "@/lib/ai/validators";
 import { isDatabaseConfigured } from "@/lib/env";
 import {
-  generateDescriptionsForJobPins,
-  generateTitlesForJobPins,
   getOwnedGeneratedPinsForPublish,
+  queueDescriptionGenerationForJobPins,
+  queueTitleGenerationForJobPins,
   saveJobPinCopyEdits,
   scheduleJobPins,
   uploadJobPinsToPubler,
@@ -18,6 +19,11 @@ import {
   runWithOperationContext,
 } from "@/lib/observability/operationContext";
 import { resolveStoredAssetUrl } from "@/lib/storage/assetUrl";
+import {
+  getActiveBackgroundTaskStatuses,
+  listBackgroundTasksForJob,
+  serializeBackgroundTaskSummary,
+} from "@/lib/tasks/backgroundTasks";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -32,6 +38,7 @@ const publishSchema = z.discriminatedUnion("action", [
     action: z.literal("generate_titles"),
     generatedPinIds: z.array(z.string().min(1)).optional(),
     aiCredentialId: z.string().optional(),
+    forceRegenerate: z.boolean().optional(),
   }),
   z.object({
     action: z.literal("save_copy"),
@@ -47,6 +54,7 @@ const publishSchema = z.discriminatedUnion("action", [
     action: z.literal("generate_descriptions"),
     generatedPinIds: z.array(z.string().min(1)).optional(),
     aiCredentialId: z.string().optional(),
+    forceRegenerate: z.boolean().optional(),
   }),
   z.object({
     action: z.literal("schedule"),
@@ -104,12 +112,36 @@ export async function GET(_request: Request, { params }: RouteProps) {
         const { jobId } = await params;
         const user = await getOrCreateDashboardUser();
         const job = await getOwnedGeneratedPinsForPublish(jobId, user.id);
+        const backgroundTasks = await listBackgroundTasksForJob({
+          jobId,
+          kinds: [BackgroundTaskKind.GENERATE_TITLE_BATCH, BackgroundTaskKind.GENERATE_DESCRIPTION_BATCH],
+          statuses: [
+            ...getActiveBackgroundTaskStatuses(),
+            BackgroundTaskStatus.SUCCEEDED,
+            BackgroundTaskStatus.FAILED,
+          ],
+          limit: 40,
+        });
+        const titleTasks = backgroundTasks.filter((task) => task.kind === BackgroundTaskKind.GENERATE_TITLE_BATCH);
+        const descriptionTasks = backgroundTasks.filter(
+          (task) => task.kind === BackgroundTaskKind.GENERATE_DESCRIPTION_BATCH,
+        );
 
         return withCorrelationHeader(
           NextResponse.json({
             ok: true,
             jobStatus: job.status,
             pins: job.generatedPins.map(serializePin),
+            titleTasks: titleTasks.map((task) => ({
+              ...serializeBackgroundTaskSummary(task),
+              payloadJson: task.payloadJson,
+              progressJson: task.progressJson,
+            })),
+            descriptionTasks: descriptionTasks.map((task) => ({
+              ...serializeBackgroundTaskSummary(task),
+              payloadJson: task.payloadJson,
+              progressJson: task.progressJson,
+            })),
             latestScheduleRun: job.scheduleRuns[0]
               ? {
                   id: job.scheduleRuns[0].id,
@@ -174,11 +206,12 @@ export async function POST(request: Request, { params }: RouteProps) {
             });
             break;
           case "generate_titles":
-            result = await generateTitlesForJobPins({
+            result = await queueTitleGenerationForJobPins({
               userId: user.id,
               jobId,
               generatedPinIds: payload.generatedPinIds,
               aiCredentialId: payload.aiCredentialId,
+              forceRegenerate: payload.forceRegenerate,
             });
             break;
           case "save_copy":
@@ -189,11 +222,12 @@ export async function POST(request: Request, { params }: RouteProps) {
             });
             break;
           case "generate_descriptions":
-            result = await generateDescriptionsForJobPins({
+            result = await queueDescriptionGenerationForJobPins({
               userId: user.id,
               jobId,
               generatedPinIds: payload.generatedPinIds,
               aiCredentialId: payload.aiCredentialId,
+              forceRegenerate: payload.forceRegenerate,
             });
             break;
           case "schedule":
@@ -240,6 +274,8 @@ function serializePin(pin: Awaited<ReturnType<typeof getOwnedGeneratedPinsForPub
   return {
     id: pin.id,
     templateId: pin.templateId,
+    artworkReviewState: pin.plan.artworkReviewState,
+    artworkFlagReason: pin.plan.artworkFlagReason,
     exportPath: resolveStoredAssetUrl({
       storageKey: pin.storageKey,
       exportPath: pin.exportPath,

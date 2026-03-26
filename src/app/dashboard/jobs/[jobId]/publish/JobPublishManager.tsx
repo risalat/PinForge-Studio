@@ -40,6 +40,24 @@ type PinItem = {
   scheduleError: string | null;
 };
 
+type TitleTaskItem = {
+  id: string;
+  kind: string;
+  status: string;
+  attempts: number;
+  maxAttempts: number;
+  runAfter: string;
+  lastError: string | null;
+  payloadJson?: {
+    generatedPinIds?: string[];
+  } | null;
+  progressJson?: {
+    stage?: string;
+    total?: number;
+    completed?: number;
+  } | null;
+};
+
 type PublerWorkspace = {
   id: string;
   name: string;
@@ -133,6 +151,8 @@ type PublishStatusResponse = {
   error?: string;
   jobStatus?: string;
   pins?: PinItem[];
+  titleTasks?: TitleTaskItem[];
+  descriptionTasks?: TitleTaskItem[];
   latestScheduleRun?: JobPublishManagerProps["latestScheduleRun"];
 };
 
@@ -150,6 +170,14 @@ type PersistedPublishSelection = {
   primaryBoardPercent: number;
 };
 
+type QueueTitleGenerationResult = {
+  queuedTaskCount: number;
+  queuedPinCount: number;
+  skippedPinCount: number;
+  message: string;
+  tasks: TitleTaskItem[];
+};
+
 export function JobPublishManager({
   jobId,
   workspaceProfiles,
@@ -165,6 +193,11 @@ export function JobPublishManager({
   const { notify, updateNotification, dismissNotification } = useAppFeedback();
   const [livePins, setLivePins] = useState<PinItem[]>(pins);
   const [liveLatestScheduleRun, setLiveLatestScheduleRun] = useState(latestScheduleRun);
+  const [titleTasks, setTitleTasks] = useState<TitleTaskItem[]>([]);
+  const [trackedTitleTaskIds, setTrackedTitleTaskIds] = useState<string[]>([]);
+  const [descriptionTasks, setDescriptionTasks] = useState<TitleTaskItem[]>([]);
+  const [trackedDescriptionTaskIds, setTrackedDescriptionTaskIds] = useState<string[]>([]);
+  const [expandedDescriptionPinIds, setExpandedDescriptionPinIds] = useState<string[]>([]);
   const [copyState, setCopyState] = useState(
     pins.map((pin) => ({
       generatedPinId: pin.id,
@@ -349,10 +382,49 @@ export function JobPublishManager({
     () => orderedPins.filter((pin) => !isPinArtworkUnresolved(pin)),
     [orderedPins],
   );
+  const titleReadyForGenerationPins = useMemo(
+    () => publishReadyArtworkPins.filter((pin) => isPinReadyForTitleGeneration(pin)),
+    [publishReadyArtworkPins],
+  );
+  const titleReadyForSelectionPins = useMemo(
+    () =>
+      publishReadyArtworkPins.filter((pin) =>
+        isPinReadyForTitleSelection(pin, copyByPinId.get(pin.id)?.title ?? ""),
+      ),
+    [copyByPinId, publishReadyArtworkPins],
+  );
+  const titleNotReadyPins = useMemo(
+    () => orderedPins.filter((pin) => !isPinReadyForTitleWork(pin)),
+    [orderedPins],
+  );
+  const activeTitleTasks = useMemo(
+    () => titleTasks.filter((task) => ["QUEUED", "RUNNING"].includes(task.status)),
+    [titleTasks],
+  );
+  const activeDescriptionTasks = useMemo(
+    () => descriptionTasks.filter((task) => ["QUEUED", "RUNNING"].includes(task.status)),
+    [descriptionTasks],
+  );
 
   const selectedPins = useMemo(
     () => orderedPins.filter((pin) => selectedPinIds.includes(pin.id)),
     [orderedPins, selectedPinIds],
+  );
+  const selectedTitleReadyPins = useMemo(
+    () => selectedPins.filter((pin) => isPinReadyForTitleGeneration(pin)),
+    [selectedPins],
+  );
+  const descriptionReadyForGenerationPins = useMemo(
+    () => publishReadyArtworkPins.filter((pin) => isPinReadyForDescriptionGeneration(pin)),
+    [publishReadyArtworkPins],
+  );
+  const selectedDescriptionReadyPins = useMemo(
+    () => selectedPins.filter((pin) => isPinReadyForDescriptionGeneration(pin)),
+    [selectedPins],
+  );
+  const descriptionNeedsAttentionPins = useMemo(
+    () => orderedPins.filter((pin) => isPinDescriptionNeedsAttention(pin)),
+    [orderedPins],
   );
 
   const selectedBoards = useMemo(
@@ -677,7 +749,12 @@ export function JobPublishManager({
       return;
     }
 
-    if (!currentPins.some((pin) => pin.mediaStatus === "UPLOADING")) {
+    const shouldPollUploads = currentPins.some((pin) => pin.mediaStatus === "UPLOADING");
+    const shouldPollTitleTasks = trackedTitleTaskIds.length > 0 || activeTitleTasks.length > 0;
+    const shouldPollDescriptionTasks =
+      trackedDescriptionTaskIds.length > 0 || activeDescriptionTasks.length > 0;
+
+    if (!shouldPollUploads && !shouldPollTitleTasks && !shouldPollDescriptionTasks) {
       return;
     }
 
@@ -701,6 +778,65 @@ export function JobPublishManager({
         if (data.pins) {
           setLivePins(data.pins);
           setCopyState((current) => mergeCopyStateWithPins(current, data.pins ?? []));
+          setTitleCandidatesByPinId(buildTitleCandidatesByPinId(data.pins));
+        }
+        setTitleTasks(data.titleTasks ?? []);
+        setDescriptionTasks(data.descriptionTasks ?? []);
+
+        if (!isCancelled && trackedTitleTaskIds.length > 0 && data.titleTasks) {
+          const trackedTasks = data.titleTasks.filter((task) => trackedTitleTaskIds.includes(task.id));
+          if (trackedTasks.length > 0 && trackedTasks.every((task) => ["SUCCEEDED", "FAILED"].includes(task.status))) {
+            const failedTaskCount = trackedTasks.filter((task) => task.status === "FAILED").length;
+            setTrackedTitleTaskIds([]);
+            setSectionFeedback((current) => ({
+              ...current,
+              titles: {
+                tone: failedTaskCount > 0 ? "warning" : "success",
+                message:
+                  failedTaskCount > 0
+                    ? `Title generation finished with ${failedTaskCount} failed batch${failedTaskCount === 1 ? "" : "es"}. Review the affected pins below.`
+                    : "Title generation finished. Review and choose the best options below.",
+              },
+            }));
+            notify({
+              tone: failedTaskCount > 0 ? "info" : "success",
+              title: failedTaskCount > 0 ? "Title generation finished with issues" : "Title generation complete",
+              message:
+                failedTaskCount > 0
+                  ? `${trackedTasks.length - failedTaskCount} batches completed and ${failedTaskCount} failed.`
+                  : "Title options are ready for review.",
+            });
+          }
+        }
+        if (!isCancelled && trackedDescriptionTaskIds.length > 0 && data.descriptionTasks) {
+          const trackedTasks = data.descriptionTasks.filter((task) =>
+            trackedDescriptionTaskIds.includes(task.id),
+          );
+          if (trackedTasks.length > 0 && trackedTasks.every((task) => ["SUCCEEDED", "FAILED"].includes(task.status))) {
+            const failedTaskCount = trackedTasks.filter((task) => task.status === "FAILED").length;
+            setTrackedDescriptionTaskIds([]);
+            setSectionFeedback((current) => ({
+              ...current,
+              descriptions: {
+                tone: failedTaskCount > 0 ? "warning" : "success",
+                message:
+                  failedTaskCount > 0
+                    ? `Description generation finished with ${failedTaskCount} failed batch${failedTaskCount === 1 ? "" : "es"}. Only pins needing attention are expanded below.`
+                    : "Descriptions are ready. Pins without issues stay collapsed below.",
+              },
+            }));
+            notify({
+              tone: failedTaskCount > 0 ? "info" : "success",
+              title:
+                failedTaskCount > 0
+                  ? "Description generation finished with issues"
+                  : "Description generation complete",
+              message:
+                failedTaskCount > 0
+                  ? `${trackedTasks.length - failedTaskCount} batches completed and ${failedTaskCount} failed.`
+                  : "Descriptions generated successfully.",
+            });
+          }
         }
       } catch {
         // Keep the last known UI state if polling fails temporarily.
@@ -720,7 +856,17 @@ export function JobPublishManager({
       isCancelled = true;
       clearInterval(interval);
     };
-  }, [activeAction, currentPins, jobId, uploadTracking]);
+  }, [
+    activeAction,
+    activeDescriptionTasks.length,
+    activeTitleTasks.length,
+    currentPins,
+    jobId,
+    notify,
+    trackedDescriptionTaskIds,
+    trackedTitleTaskIds,
+    uploadTracking,
+  ]);
 
   useEffect(() => {
     if (!uploadTracking?.active) {
@@ -935,6 +1081,34 @@ export function JobPublishManager({
 
     if (!response.ok || !data.ok) {
       throw new Error(data.error ?? extractResponseErrorMessage(rawBody) ?? "Request failed.");
+    }
+
+    return data.result;
+  }
+
+  async function queueTitleGeneration(input: {
+    generatedPinIds: string[];
+    forceRegenerate?: boolean;
+  }) {
+    const response = await fetch(`/api/dashboard/jobs/${jobId}/publish`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "generate_titles",
+        generatedPinIds: input.generatedPinIds,
+        aiCredentialId: selectedAiCredentialId,
+        forceRegenerate: input.forceRegenerate,
+      }),
+    });
+    const rawBody = await response.text();
+    const data = parsePublishActionResponse(rawBody) as {
+      ok?: boolean;
+      error?: string;
+      result?: QueueTitleGenerationResult;
+    };
+
+    if (!response.ok || !data.ok || !data.result) {
+      throw new Error(data.error ?? extractResponseErrorMessage(rawBody) ?? "Unable to queue title generation.");
     }
 
     return data.result;
@@ -1228,7 +1402,7 @@ export function JobPublishManager({
     });
   }
 
-  async function refreshPublishSnapshot() {
+  const refreshPublishSnapshot = useCallback(async () => {
     const response = await fetch(`/api/dashboard/jobs/${jobId}/publish`, {
       method: "GET",
       cache: "no-store",
@@ -1245,9 +1419,15 @@ export function JobPublishManager({
       setCopyState((current) => mergeCopyStateWithPins(current, data.pins ?? []));
       setTitleCandidatesByPinId(buildTitleCandidatesByPinId(data.pins));
     }
+    setTitleTasks(data.titleTasks ?? []);
+    setDescriptionTasks(data.descriptionTasks ?? []);
 
     return data.pins ?? null;
-  }
+  }, [jobId]);
+
+  useEffect(() => {
+    void refreshPublishSnapshot().catch(() => null);
+  }, [refreshPublishSnapshot]);
 
   function saveProfileDefaults() {
     if (!currentWorkspaceProfile || !workspaceId || !accountId) {
@@ -1591,22 +1771,140 @@ function formatDateLabel(value: string) {
   }
 
   function triggerGenerateTitles() {
-    void handlePinBatchAction({
-      action: "generate_titles",
-      generatedPinIds: selectedPinIds,
-      aiCredentialId: selectedAiCredentialId,
-      fallbackMessage: "Unable to generate titles.",
-      section: "titles",
+    void triggerQueueGenerateTitles(selectedTitleReadyPins.map((pin) => pin.id));
+  }
+
+  function triggerQueueGenerateTitles(generatedPinIds: string[], forceRegenerate = false) {
+    startTransition(async () => {
+      try {
+        setSectionFeedback((current) => ({
+          ...current,
+          titles: null,
+        }));
+        setActiveAction("generate_titles");
+
+        const result = await queueTitleGeneration({
+          generatedPinIds,
+          forceRegenerate,
+        });
+
+        setTitleTasks(result.tasks);
+        setTrackedTitleTaskIds(result.tasks.map((task) => task.id));
+        setSectionFeedback((current) => ({
+          ...current,
+          titles: {
+            tone: "success",
+            message: result.message,
+          },
+        }));
+        notify({
+          tone: "success",
+          title: "Title generation queued",
+          message: result.message,
+        });
+        await refreshPublishSnapshot().catch(() => null);
+      } catch (error) {
+        setSectionFeedback((current) => ({
+          ...current,
+          titles: {
+            tone: "error",
+            message: error instanceof Error ? error.message : "Unable to queue title generation.",
+          },
+        }));
+        notify({
+          tone: "error",
+          title: "Title generation failed",
+          message: error instanceof Error ? error.message : "Unable to queue title generation.",
+          sticky: true,
+        });
+      } finally {
+        setActiveAction(null);
+      }
     });
   }
 
+  async function queueDescriptionGeneration(input: {
+    generatedPinIds: string[];
+    forceRegenerate?: boolean;
+  }) {
+    const response = await fetch(`/api/dashboard/jobs/${jobId}/publish`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "generate_descriptions",
+        generatedPinIds: input.generatedPinIds,
+        aiCredentialId: selectedAiCredentialId,
+        forceRegenerate: input.forceRegenerate,
+      }),
+    });
+    const rawBody = await response.text();
+    const data = parsePublishActionResponse(rawBody) as {
+      ok?: boolean;
+      error?: string;
+      result?: QueueTitleGenerationResult;
+    };
+
+    if (!response.ok || !data.ok || !data.result) {
+      throw new Error(
+        data.error ?? extractResponseErrorMessage(rawBody) ?? "Unable to queue description generation.",
+      );
+    }
+
+    return data.result;
+  }
+
   function triggerGenerateDescriptions() {
-    void handlePinBatchAction({
-      action: "generate_descriptions",
-      generatedPinIds: selectedPinIds,
-      aiCredentialId: selectedAiCredentialId,
-      fallbackMessage: "Unable to generate descriptions.",
-      section: "descriptions",
+    void triggerQueueGenerateDescriptions(selectedDescriptionReadyPins.map((pin) => pin.id));
+  }
+
+  function triggerQueueGenerateDescriptions(generatedPinIds: string[], forceRegenerate = false) {
+    startTransition(async () => {
+      try {
+        setSectionFeedback((current) => ({
+          ...current,
+          descriptions: null,
+        }));
+        setActiveAction("generate_descriptions");
+
+        const result = await queueDescriptionGeneration({
+          generatedPinIds,
+          forceRegenerate,
+        });
+
+        setDescriptionTasks(result.tasks);
+        setTrackedDescriptionTaskIds(result.tasks.map((task) => task.id));
+        setSectionFeedback((current) => ({
+          ...current,
+          descriptions: {
+            tone: "success",
+            message: result.message,
+          },
+        }));
+        notify({
+          tone: "success",
+          title: "Description generation queued",
+          message: result.message,
+        });
+        await refreshPublishSnapshot().catch(() => null);
+      } catch (error) {
+        setSectionFeedback((current) => ({
+          ...current,
+          descriptions: {
+            tone: "error",
+            message:
+              error instanceof Error ? error.message : "Unable to queue description generation.",
+          },
+        }));
+        notify({
+          tone: "error",
+          title: "Description generation failed",
+          message:
+            error instanceof Error ? error.message : "Unable to queue description generation.",
+          sticky: true,
+        });
+      } finally {
+        setActiveAction(null);
+      }
     });
   }
 
@@ -2281,75 +2579,505 @@ function formatDateLabel(value: string) {
             </div>
           </section>
 
-          <StepCard
-            id="publish-titles"
-            title="Step 2 - Titles"
-            countLabel={`${summary.titlesReady} ready`}
-            actionLabel="Generate titles for selected pins"
-            actionBusy={isGeneratingTitles}
-            actionBusyLabel="Generating titles..."
-            disabled={
-              isPending ||
-              Boolean(activeAction) ||
-              selectedPins.length === 0 ||
-              !integrationReady.canUseAiApiKey ||
-              !selectedAiCredentialId ||
-              !canUseSelectedAiCredential
-            }
-            feedback={sectionFeedback.titles}
-            onClick={() =>
-              void handlePinBatchAction({
-                action: "generate_titles",
-                generatedPinIds: selectedPinIds,
-                aiCredentialId: selectedAiCredentialId,
-                fallbackMessage: "Unable to generate titles.",
-                section: "titles",
-              })
-            }
-            secondaryAction={{
-              label: "Save copy edits",
-              busy: isSavingCopy,
-              busyLabel: "Saving copy...",
-              onClick: () =>
-                handleAction(
-                  { action: "save_copy", copies: dirtyCopyPayload },
-                  "Unable to save copy edits.",
-                  "titles",
-                ),
-              disabled:
-                isPending ||
-                Boolean(activeAction) ||
-                currentPins.length === 0 ||
-                dirtyCopyPayload.length === 0,
-            }}
-          />
+          <section id="publish-titles" className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-5 shadow-[var(--dashboard-shadow-sm)]">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-bold">Step 2 - Titles</h2>
+                <p className="mt-1 text-sm text-[var(--dashboard-subtle)]">
+                  Generate title options in background batches, then choose or override the best one per pin.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2 text-sm font-semibold text-[var(--dashboard-muted)]">
+                <span>{titleReadyForGenerationPins.length} ready</span>
+                <span>{titleReadyForSelectionPins.length} ready to pick</span>
+                <span>{titleNotReadyPins.length} not ready</span>
+              </div>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={triggerGenerateTitles}
+                disabled={
+                  isPending ||
+                  Boolean(activeAction) ||
+                  selectedTitleReadyPins.length === 0 ||
+                  !integrationReady.canUseAiApiKey ||
+                  !selectedAiCredentialId ||
+                  !canUseSelectedAiCredential
+                }
+                aria-busy={isGeneratingTitles}
+                className={getActionButtonClass({
+                  tone: "primary",
+                  busy: isGeneratingTitles,
+                  disabled:
+                    isPending ||
+                    Boolean(activeAction) ||
+                    selectedTitleReadyPins.length === 0 ||
+                    !integrationReady.canUseAiApiKey ||
+                    !selectedAiCredentialId ||
+                    !canUseSelectedAiCredential,
+                })}
+              >
+                <ActionButtonContent
+                  busy={isGeneratingTitles}
+                  label="Generate titles for selected eligible pins"
+                  busyLabel="Queueing titles..."
+                  inverse
+                />
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  handleAction(
+                    { action: "save_copy", copies: dirtyCopyPayload },
+                    "Unable to save copy edits.",
+                    "titles",
+                  )
+                }
+                disabled={
+                  isPending ||
+                  Boolean(activeAction) ||
+                  currentPins.length === 0 ||
+                  dirtyCopyPayload.length === 0
+                }
+                aria-busy={isSavingCopy}
+                className={getActionButtonClass({
+                  tone: "secondary",
+                  busy: isSavingCopy,
+                  disabled:
+                    isPending ||
+                    Boolean(activeAction) ||
+                    currentPins.length === 0 ||
+                    dirtyCopyPayload.length === 0,
+                })}
+              >
+                <ActionButtonContent
+                  busy={isSavingCopy}
+                  label="Save title edits"
+                  busyLabel="Saving..."
+                />
+              </button>
+            </div>
+            {sectionFeedback.titles ? <SectionFeedback feedback={sectionFeedback.titles} className="mt-4" /> : null}
 
-          <StepCard
-            id="publish-descriptions"
-            title="Step 3 - Descriptions"
-            countLabel={`${summary.descriptionsReady} ready`}
-            actionLabel="Generate descriptions for selected pins"
-            actionBusy={isGeneratingDescriptions}
-            actionBusyLabel="Generating descriptions..."
-            disabled={
-              isPending ||
-              Boolean(activeAction) ||
-              selectedPins.length === 0 ||
-              !integrationReady.canUseAiApiKey ||
-              !selectedAiCredentialId ||
-              !canUseSelectedAiCredential
-            }
-            feedback={sectionFeedback.descriptions}
-            onClick={() =>
-              void handlePinBatchAction({
-                action: "generate_descriptions",
-                generatedPinIds: selectedPinIds,
-                aiCredentialId: selectedAiCredentialId,
-                fallbackMessage: "Unable to generate descriptions.",
-                section: "descriptions",
-              })
-            }
-          />
+            {activeTitleTasks.length > 0 ? (
+              <div className="mt-4 rounded-2xl border border-[var(--dashboard-accent-border)] bg-[linear-gradient(135deg,#ffffff_0%,#eef4ff_100%)] p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--dashboard-accent-strong)]">
+                      Title generation running
+                    </p>
+                    <p className="mt-2 text-sm text-[var(--dashboard-subtle)]">
+                      {activeTitleTasks.length} batch{activeTitleTasks.length === 1 ? "" : "es"} queued or running in the worker.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {activeTitleTasks.map((task) => (
+                      <StatusChip
+                        key={task.id}
+                        label={`${formatLabel(task.status)} ${task.progressJson?.completed ?? 0}/${task.progressJson?.total ?? task.payloadJson?.generatedPinIds?.length ?? 0}`}
+                        tone={task.status === "FAILED" ? "bad" : task.status === "SUCCEEDED" ? "good" : "warning"}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            <div className="mt-5 space-y-5">
+              <article className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-base font-bold text-[var(--dashboard-text)]">Ready for title generation</h3>
+                    <p className="mt-1 text-sm text-[var(--dashboard-subtle)]">
+                      Rendered pins with usable artwork that still need title options.
+                    </p>
+                  </div>
+                  <StatusChip label={`${titleReadyForGenerationPins.length} pins`} tone="neutral" />
+                </div>
+                {titleReadyForGenerationPins.length === 0 ? (
+                  <p className="mt-4 text-sm text-[var(--dashboard-subtle)]">No pins are currently waiting for title generation.</p>
+                ) : (
+                  <div className="mt-4 grid gap-4 xl:grid-cols-2">
+                    {titleReadyForGenerationPins.map((pin) => {
+                      const copy = copyByPinId.get(pin.id);
+                      const isSelected = selectedPinIds.includes(pin.id);
+
+                      return (
+                        <article key={`title-ready-${pin.id}`} className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-3">
+                          <div className="grid gap-4 sm:grid-cols-[120px_minmax(0,1fr)]">
+                            <img
+                              src={pin.exportPath}
+                              alt={copy?.title || pin.templateId}
+                              className="w-full rounded-xl border border-[var(--dashboard-line)]"
+                              onError={() => markPinAssetMissing(pin.id)}
+                            />
+                            <div className="space-y-3">
+                              <div className="flex items-center justify-between gap-3">
+                                <label className="flex items-center gap-2 text-sm font-semibold text-[var(--dashboard-subtle)]">
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={(event) => togglePin(pin.id, event.target.checked)}
+                                  />
+                                  Select
+                                </label>
+                                <StatusChip label={pin.templateId} tone="neutral" />
+                              </div>
+                              <p className="text-sm text-[var(--dashboard-subtle)]">
+                                No saved title options yet. Queue this pin for background title generation.
+                              </p>
+                              <div className="flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => triggerQueueGenerateTitles([pin.id])}
+                                  disabled={
+                                    isPending ||
+                                    Boolean(activeAction) ||
+                                    !integrationReady.canUseAiApiKey ||
+                                    !selectedAiCredentialId ||
+                                    !canUseSelectedAiCredential
+                                  }
+                                  className={getActionButtonClass({
+                                    tone: "secondary",
+                                    disabled:
+                                      isPending ||
+                                      Boolean(activeAction) ||
+                                      !integrationReady.canUseAiApiKey ||
+                                      !selectedAiCredentialId ||
+                                      !canUseSelectedAiCredential,
+                                  })}
+                                >
+                                  Generate this pin
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                )}
+              </article>
+
+              <article className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-base font-bold text-[var(--dashboard-text)]">Titles ready for selection</h3>
+                    <p className="mt-1 text-sm text-[var(--dashboard-subtle)]">
+                      Pick the best option, edit it if needed, then save your title choices.
+                    </p>
+                  </div>
+                  <StatusChip label={`${titleReadyForSelectionPins.length} pins`} tone="good" />
+                </div>
+                {titleReadyForSelectionPins.length === 0 ? (
+                  <p className="mt-4 text-sm text-[var(--dashboard-subtle)]">No generated title options are ready to review yet.</p>
+                ) : (
+                  <div className="mt-4 space-y-4">
+                    {titleReadyForSelectionPins.map((pin) => {
+                      const copy = copyByPinId.get(pin.id);
+                      const candidates = titleCandidatesByPinId[pin.id] ?? [];
+                      const isSelected = selectedPinIds.includes(pin.id);
+
+                      return (
+                        <article key={`title-select-${pin.id}`} className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-4">
+                          <div className="grid gap-4 lg:grid-cols-[180px_minmax(0,1fr)]">
+                            <div className="space-y-3">
+                              <img
+                                src={pin.exportPath}
+                                alt={copy?.title || pin.templateId}
+                                className="w-full rounded-xl border border-[var(--dashboard-line)]"
+                                onError={() => markPinAssetMissing(pin.id)}
+                              />
+                              <label className="flex items-center gap-2 text-sm font-semibold text-[var(--dashboard-subtle)]">
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={(event) => togglePin(pin.id, event.target.checked)}
+                                />
+                                Select
+                              </label>
+                            </div>
+                            <div className="space-y-4">
+                              <div className="flex flex-wrap gap-2">
+                                <StatusChip label={pin.templateId} tone="neutral" />
+                                <StatusChip label={`Title ${formatLabel(pin.titleStatus)}`} tone={toneForStatus(pin.titleStatus)} />
+                              </div>
+                              {candidates.length > 0 ? (
+                                <div>
+                                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--dashboard-muted)]">
+                                    Generated options
+                                  </p>
+                                  <div className="mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                                    {candidates.map((candidate, candidateIndex) => {
+                                      const active = (copy?.title ?? "") === candidate;
+                                      return (
+                                        <button
+                                          key={`${pin.id}-title-option-${candidateIndex}`}
+                                          type="button"
+                                          onClick={() => updateCopy(pin.id, "title", candidate)}
+                                          className={`rounded-2xl border px-3 py-3 text-left text-sm font-semibold ${
+                                            active
+                                              ? "border-[var(--dashboard-accent)] bg-[var(--dashboard-accent-soft-strong)] text-[var(--dashboard-accent-strong)]"
+                                              : "border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] text-[var(--dashboard-subtle)]"
+                                          }`}
+                                        >
+                                          {candidate}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              ) : null}
+                              <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
+                                <span className="flex items-center justify-between gap-3">
+                                  <span>Selected / manual title</span>
+                                  <span className="text-xs font-medium text-[var(--dashboard-muted)]">
+                                    {(copy?.title ?? "").length}/{TITLE_MAX_LENGTH}
+                                  </span>
+                                </span>
+                                <input
+                                  value={copy?.title ?? ""}
+                                  onChange={(event) => updateCopy(pin.id, "title", event.target.value)}
+                                  maxLength={TITLE_MAX_LENGTH}
+                                  className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-white px-3 py-2"
+                                />
+                              </label>
+                              <div className="flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => triggerQueueGenerateTitles([pin.id], true)}
+                                  disabled={
+                                    isPending ||
+                                    Boolean(activeAction) ||
+                                    !integrationReady.canUseAiApiKey ||
+                                    !selectedAiCredentialId ||
+                                    !canUseSelectedAiCredential
+                                  }
+                                  className={getActionButtonClass({
+                                    tone: "secondary",
+                                    disabled:
+                                      isPending ||
+                                      Boolean(activeAction) ||
+                                      !integrationReady.canUseAiApiKey ||
+                                      !selectedAiCredentialId ||
+                                      !canUseSelectedAiCredential,
+                                  })}
+                                >
+                                  Regenerate options
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                )}
+              </article>
+
+              <article className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-base font-bold text-[var(--dashboard-text)]">Not ready</h3>
+                    <p className="mt-1 text-sm text-[var(--dashboard-subtle)]">
+                      These pins are separated from title generation because the artwork still needs attention.
+                    </p>
+                  </div>
+                  <StatusChip label={`${titleNotReadyPins.length} pins`} tone="warning" />
+                </div>
+                {titleNotReadyPins.length === 0 ? (
+                  <p className="mt-4 text-sm text-[var(--dashboard-subtle)]">All current pins are title-ready.</p>
+                ) : (
+                  <div className="mt-4 grid gap-4 xl:grid-cols-2">
+                    {titleNotReadyPins.map((pin) => (
+                      <article key={`title-not-ready-${pin.id}`} className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-3">
+                        <div className="grid gap-4 sm:grid-cols-[120px_minmax(0,1fr)]">
+                          <img
+                            src={pin.exportPath}
+                            alt={copyByPinId.get(pin.id)?.title || pin.templateId}
+                            className="w-full rounded-xl border border-[var(--dashboard-line)]"
+                            onError={() => markPinAssetMissing(pin.id)}
+                          />
+                          <div className="space-y-3">
+                            <div className="flex flex-wrap gap-2">
+                              <StatusChip label={pin.templateId} tone="neutral" />
+                              <StatusChip
+                                label={`Artwork ${formatLabel(pin.artworkReviewState)}`}
+                                tone={toneForArtworkStatus(pin.artworkReviewState)}
+                              />
+                            </div>
+                            <p className="text-sm text-[var(--dashboard-subtle)]">
+                              {pin.artworkFlagReason || buildTitleNotReadyReason(pin)}
+                            </p>
+                          </div>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </article>
+            </div>
+          </section>
+
+          <section id="publish-descriptions" className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-5 shadow-[var(--dashboard-shadow-sm)]">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-bold">Step 3 - Descriptions</h2>
+                <p className="mt-1 text-sm text-[var(--dashboard-subtle)]">
+                  Keep descriptions mostly invisible. Generate them in background for ready pins, then only expand pins that need attention.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2 text-sm font-semibold text-[var(--dashboard-muted)]">
+                <span>{descriptionReadyForGenerationPins.length} ready</span>
+                <span>{descriptionNeedsAttentionPins.length} need attention</span>
+                <span>{summary.descriptionsReady} completed</span>
+              </div>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={triggerGenerateDescriptions}
+                disabled={
+                  isPending ||
+                  Boolean(activeAction) ||
+                  selectedDescriptionReadyPins.length === 0 ||
+                  !integrationReady.canUseAiApiKey ||
+                  !selectedAiCredentialId ||
+                  !canUseSelectedAiCredential
+                }
+                aria-busy={isGeneratingDescriptions}
+                className={getActionButtonClass({
+                  tone: "primary",
+                  busy: isGeneratingDescriptions,
+                  disabled:
+                    isPending ||
+                    Boolean(activeAction) ||
+                    selectedDescriptionReadyPins.length === 0 ||
+                    !integrationReady.canUseAiApiKey ||
+                    !selectedAiCredentialId ||
+                    !canUseSelectedAiCredential,
+                })}
+              >
+                <ActionButtonContent
+                  busy={isGeneratingDescriptions}
+                  label="Generate remaining descriptions now"
+                  busyLabel="Queueing descriptions..."
+                  inverse
+                />
+              </button>
+            </div>
+            {sectionFeedback.descriptions ? <SectionFeedback feedback={sectionFeedback.descriptions} className="mt-4" /> : null}
+
+            {activeDescriptionTasks.length > 0 ? (
+              <div className="mt-4 rounded-2xl border border-[var(--dashboard-accent-border)] bg-[linear-gradient(135deg,#ffffff_0%,#eef4ff_100%)] p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--dashboard-accent-strong)]">
+                      Description generation running
+                    </p>
+                    <p className="mt-2 text-sm text-[var(--dashboard-subtle)]">
+                      {activeDescriptionTasks.length} batch{activeDescriptionTasks.length === 1 ? "" : "es"} queued or running in the worker.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {activeDescriptionTasks.map((task) => (
+                      <StatusChip
+                        key={task.id}
+                        label={`${formatLabel(task.status)} ${task.progressJson?.completed ?? 0}/${task.progressJson?.total ?? task.payloadJson?.generatedPinIds?.length ?? 0}`}
+                        tone={task.status === "FAILED" ? "bad" : task.status === "SUCCEEDED" ? "good" : "warning"}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            <div className="mt-5 rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-base font-bold text-[var(--dashboard-text)]">Needs attention</h3>
+                  <p className="mt-1 text-sm text-[var(--dashboard-subtle)]">
+                    Only pins with missing or failed descriptions show up here by default.
+                  </p>
+                </div>
+                <StatusChip label={`${descriptionNeedsAttentionPins.length} pins`} tone={descriptionNeedsAttentionPins.length > 0 ? "warning" : "good"} />
+              </div>
+              {descriptionNeedsAttentionPins.length === 0 ? (
+                <p className="mt-4 text-sm text-[var(--dashboard-subtle)]">
+                  No description issues right now. Most description work can stay collapsed below.
+                </p>
+              ) : (
+                <div className="mt-4 grid gap-4 xl:grid-cols-2">
+                  {descriptionNeedsAttentionPins.map((pin) => {
+                    const copy = copyByPinId.get(pin.id);
+                    return (
+                      <article key={`description-attention-${pin.id}`} className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-3">
+                        <div className="grid gap-4 sm:grid-cols-[120px_minmax(0,1fr)]">
+                          <img
+                            src={pin.exportPath}
+                            alt={copy?.title || pin.templateId}
+                            className="w-full rounded-xl border border-[var(--dashboard-line)]"
+                            onError={() => markPinAssetMissing(pin.id)}
+                          />
+                          <div className="space-y-3">
+                            <div className="flex flex-wrap gap-2">
+                              <StatusChip label={pin.templateId} tone="neutral" />
+                              <StatusChip
+                                label={`Description ${formatLabel(pin.descriptionStatus)}`}
+                                tone={toneForStatus(pin.descriptionStatus)}
+                              />
+                            </div>
+                            <p className="text-sm text-[var(--dashboard-subtle)]">
+                              {buildDescriptionAttentionReason(pin, copy?.description ?? "")}
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => triggerQueueGenerateDescriptions([pin.id], true)}
+                                disabled={
+                                  isPending ||
+                                  Boolean(activeAction) ||
+                                  !integrationReady.canUseAiApiKey ||
+                                  !selectedAiCredentialId ||
+                                  !canUseSelectedAiCredential
+                                }
+                                className={getActionButtonClass({
+                                  tone: "secondary",
+                                  disabled:
+                                    isPending ||
+                                    Boolean(activeAction) ||
+                                    !integrationReady.canUseAiApiKey ||
+                                    !selectedAiCredentialId ||
+                                    !canUseSelectedAiCredential,
+                                })}
+                              >
+                                Regenerate description
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setExpandedDescriptionPinIds((current) =>
+                                    current.includes(pin.id) ? current : [...current, pin.id],
+                                  )
+                                }
+                                className={getActionButtonClass({
+                                  tone: "secondary",
+                                  disabled: false,
+                                })}
+                              >
+                                Edit manually
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </section>
 
           <section id="publish-schedule" className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-5 shadow-[var(--dashboard-shadow-sm)]">
             <div className="flex flex-wrap items-start justify-between gap-4">
@@ -2651,6 +3379,9 @@ function formatDateLabel(value: string) {
             {orderedPins.map((pin) => {
               const copy = copyByPinId.get(pin.id);
               const isSelected = selectedPinIds.includes(pin.id);
+              const isDescriptionExpanded =
+                expandedDescriptionPinIds.includes(pin.id) ||
+                isPinDescriptionNeedsAttention(pin);
 
               return (
                 <article
@@ -2753,21 +3484,76 @@ function formatDateLabel(value: string) {
                         ) : null}
                       </label>
 
-                      <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
-                        <span className="flex items-center justify-between gap-3">
-                          <span>Description</span>
-                          <span className="text-xs font-medium text-[var(--dashboard-muted)]">
-                            {(copy?.description ?? "").length}/{DESCRIPTION_MAX_LENGTH}
-                          </span>
-                        </span>
-                        <textarea
-                          value={copy?.description ?? ""}
-                          onChange={(event) => updateCopy(pin.id, "description", event.target.value)}
-                          maxLength={DESCRIPTION_MAX_LENGTH}
-                          rows={4}
-                          className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-white px-3 py-2"
-                        />
-                      </label>
+                      <div className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-3 py-3">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-[var(--dashboard-subtle)]">Description</p>
+                            <p className="mt-1 text-xs text-[var(--dashboard-muted)]">
+                              {copy?.description?.trim()
+                                ? `Ready (${(copy?.description ?? "").length}/${DESCRIPTION_MAX_LENGTH})`
+                                : "Missing"}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setExpandedDescriptionPinIds((current) =>
+                                current.includes(pin.id)
+                                  ? current.filter((value) => value !== pin.id)
+                                  : [...current, pin.id],
+                              )
+                            }
+                            className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-subtle)]"
+                          >
+                            {isDescriptionExpanded ? "Collapse" : "Edit"}
+                          </button>
+                        </div>
+                        {isDescriptionExpanded ? (
+                          <label className="mt-3 block text-sm font-semibold text-[var(--dashboard-subtle)]">
+                            <span className="flex items-center justify-between gap-3">
+                              <span>Manual description</span>
+                              <span className="text-xs font-medium text-[var(--dashboard-muted)]">
+                                {(copy?.description ?? "").length}/{DESCRIPTION_MAX_LENGTH}
+                              </span>
+                            </span>
+                            <textarea
+                              value={copy?.description ?? ""}
+                              onChange={(event) => updateCopy(pin.id, "description", event.target.value)}
+                              maxLength={DESCRIPTION_MAX_LENGTH}
+                              rows={4}
+                              className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-white px-3 py-2"
+                            />
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => triggerQueueGenerateDescriptions([pin.id], true)}
+                                disabled={
+                                  isPending ||
+                                  Boolean(activeAction) ||
+                                  !integrationReady.canUseAiApiKey ||
+                                  !selectedAiCredentialId ||
+                                  !canUseSelectedAiCredential
+                                }
+                                className={getActionButtonClass({
+                                  tone: "secondary",
+                                  disabled:
+                                    isPending ||
+                                    Boolean(activeAction) ||
+                                    !integrationReady.canUseAiApiKey ||
+                                    !selectedAiCredentialId ||
+                                    !canUseSelectedAiCredential,
+                                })}
+                              >
+                                Regenerate description
+                              </button>
+                            </div>
+                          </label>
+                        ) : (
+                          <p className="mt-3 line-clamp-2 text-sm text-[var(--dashboard-subtle)]">
+                            {copy?.description?.trim() || "No saved description."}
+                          </p>
+                        )}
+                      </div>
 
                       <div className="grid gap-2 text-sm text-[var(--dashboard-subtle)]">
                         <p>
@@ -2914,76 +3700,6 @@ function ToolbarButton({
         inverse={tone === "primary"}
       />
     </button>
-  );
-}
-
-function StepCard(input: {
-  id?: string;
-  title: string;
-  countLabel: string;
-  actionLabel: string;
-  actionBusy?: boolean;
-  actionBusyLabel?: string;
-  disabled: boolean;
-  onClick: () => void;
-  feedback?: BannerState;
-  secondaryAction?: {
-    label: string;
-    busy?: boolean;
-    busyLabel?: string;
-    onClick: () => void;
-    disabled: boolean;
-  };
-}) {
-  return (
-    <section id={input.id} className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-5 shadow-[var(--dashboard-shadow-sm)]">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-bold">{input.title}</h2>
-        </div>
-        <p className="text-sm font-semibold text-[var(--dashboard-muted)]">{input.countLabel}</p>
-      </div>
-      <div className="mt-4 flex flex-wrap gap-3">
-        <button
-          type="button"
-          onClick={input.onClick}
-          disabled={input.disabled}
-          aria-busy={input.actionBusy}
-          className={getActionButtonClass({
-            tone: "primary",
-            busy: input.actionBusy,
-            disabled: input.disabled,
-          })}
-        >
-          <ActionButtonContent
-            busy={input.actionBusy}
-            label={input.actionLabel}
-            busyLabel={input.actionBusyLabel}
-            inverse
-          />
-        </button>
-        {input.secondaryAction ? (
-          <button
-            type="button"
-            onClick={input.secondaryAction.onClick}
-            disabled={input.secondaryAction.disabled}
-            aria-busy={input.secondaryAction.busy}
-            className={getActionButtonClass({
-              tone: "secondary",
-              busy: input.secondaryAction.busy,
-              disabled: input.secondaryAction.disabled,
-            })}
-          >
-            <ActionButtonContent
-              busy={input.secondaryAction.busy}
-              label={input.secondaryAction.label}
-              busyLabel={input.secondaryAction.busyLabel}
-            />
-          </button>
-        ) : null}
-      </div>
-      {input.feedback ? <SectionFeedback feedback={input.feedback} className="mt-4" /> : null}
-    </section>
   );
 }
 
@@ -3233,6 +3949,91 @@ function isPinArtworkUnresolved(pin: PinItem) {
   return ["FLAGGED", "RERENDER_QUEUED", "RERENDERING", "RERENDER_FAILED"].includes(
     pin.artworkReviewState,
   );
+}
+
+function isPinReadyForTitleWork(pin: PinItem) {
+  return !isPinArtworkUnresolved(pin);
+}
+
+function isPinReadyForTitleGeneration(pin: PinItem) {
+  if (!isPinReadyForTitleWork(pin)) {
+    return false;
+  }
+
+  if (pin.titleStatus === "FINALIZED") {
+    return false;
+  }
+
+  return pin.titleOptions.length === 0 && !pin.title.trim();
+}
+
+function isPinReadyForTitleSelection(pin: PinItem, currentTitle: string) {
+  if (!isPinReadyForTitleWork(pin)) {
+    return false;
+  }
+
+  return pin.titleOptions.length > 0 || currentTitle.trim().length > 0;
+}
+
+function buildTitleNotReadyReason(pin: PinItem) {
+  if (pin.artworkReviewState === "FLAGGED") {
+    return "Artwork is flagged for fixes before title selection.";
+  }
+  if (pin.artworkReviewState === "RERENDER_QUEUED") {
+    return "Artwork rerender is queued.";
+  }
+  if (pin.artworkReviewState === "RERENDERING") {
+    return "Artwork rerender is currently running.";
+  }
+  if (pin.artworkReviewState === "RERENDER_FAILED") {
+    return "Artwork rerender failed and needs attention.";
+  }
+
+  return "This pin is not ready for title generation yet.";
+}
+
+function isPinReadyForDescriptionGeneration(pin: PinItem) {
+  if (!isPinReadyForTitleWork(pin)) {
+    return false;
+  }
+
+  if (!pin.title.trim()) {
+    return false;
+  }
+
+  if (pin.descriptionStatus === "FINALIZED" && pin.description.trim()) {
+    return false;
+  }
+
+  return !pin.description.trim();
+}
+
+function isPinDescriptionNeedsAttention(pin: PinItem) {
+  if (!isPinReadyForTitleWork(pin)) {
+    return false;
+  }
+
+  if (!pin.title.trim()) {
+    return true;
+  }
+
+  return !pin.description.trim() || pin.descriptionStatus === "FAILED";
+}
+
+function buildDescriptionAttentionReason(pin: PinItem, currentDescription: string) {
+  if (!pin.title.trim()) {
+    return "Finalize a title before generating a description.";
+  }
+
+  if (pin.descriptionStatus === "FAILED") {
+    return "Description generation failed. Retry or edit manually.";
+  }
+
+  if (!currentDescription.trim()) {
+    return "Description is missing for this pin.";
+  }
+
+  return "Description needs attention.";
 }
 
 function getDefaultSelectedPinIds(pins: PinItem[]) {

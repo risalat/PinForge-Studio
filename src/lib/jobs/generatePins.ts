@@ -56,6 +56,8 @@ import {
 import { getStorageProvider } from "@/lib/storage";
 import { buildStorageAssetUrl, resolveStoredAssetUrl } from "@/lib/storage/assetUrl";
 import {
+  buildGenerateTitleBatchTaskDedupeKey,
+  buildGenerateDescriptionBatchTaskDedupeKey,
   buildRenderPlansTaskDedupeKey,
   buildRerenderPlanTaskDedupeKey,
   enqueueBackgroundTask,
@@ -1880,6 +1882,85 @@ export async function generateTitlesForJobPins(input: {
   );
 }
 
+export async function queueTitleGenerationForJobPins(input: {
+  userId: string;
+  jobId: string;
+  generatedPinIds?: string[];
+  aiCredentialId?: string;
+  forceRegenerate?: boolean;
+}) {
+  return runWithOperationContext(
+    {
+      action: "workflow.queue_generate_titles",
+      userId: input.userId,
+      jobId: input.jobId,
+    },
+    async () => {
+      const job = await getOwnedGeneratedPinsForPublish(input.jobId, input.userId, input.generatedPinIds);
+      const aiCredentials = await resolveAiCredentialCandidatesForUserId({
+        userId: input.userId,
+        aiCredentialId: input.aiCredentialId,
+      });
+
+      if (aiCredentials.length === 0) {
+        throw new Error("Save an AI credential in Integrations before generating titles.");
+      }
+
+      const selectedPins = selectPinsForWorkflowAction(job, input.generatedPinIds);
+      const eligiblePins = selectedPins.filter((pin) =>
+        isPinEligibleForQueuedTitleGeneration(pin, Boolean(input.forceRegenerate)),
+      );
+
+      if (eligiblePins.length === 0) {
+        return {
+          queuedTaskCount: 0,
+          queuedPinCount: 0,
+          skippedPinCount: selectedPins.length,
+          tasks: [] as ReturnType<typeof serializeBackgroundTaskSummary>[],
+          message: input.forceRegenerate
+            ? "No selected pins are ready for title regeneration."
+            : "No selected pins are ready for title generation.",
+        };
+      }
+
+      const taskResults = await Promise.all(
+        chunkArray(eligiblePins, 4).map((chunk) =>
+          enqueueBackgroundTask({
+            kind: BackgroundTaskKind.GENERATE_TITLE_BATCH,
+            userId: input.userId,
+            jobId: input.jobId,
+            priority: 40,
+            dedupeKey: buildGenerateTitleBatchTaskDedupeKey(
+              input.jobId,
+              chunk.map((pin) => pin.id),
+              input.aiCredentialId,
+            ),
+            payloadJson: {
+              userId: input.userId,
+              jobId: input.jobId,
+              generatedPinIds: chunk.map((pin) => pin.id),
+              aiCredentialId: input.aiCredentialId ?? null,
+            } satisfies Prisma.InputJsonValue,
+            progressJson: {
+              stage: "queued",
+              total: chunk.length,
+              completed: 0,
+            } satisfies Prisma.InputJsonValue,
+          }),
+        ),
+      );
+
+      return {
+        queuedTaskCount: taskResults.length,
+        queuedPinCount: eligiblePins.length,
+        skippedPinCount: Math.max(0, selectedPins.length - eligiblePins.length),
+        tasks: taskResults.map((result) => serializeBackgroundTaskSummary(result.task)),
+        message: `Queued title generation for ${eligiblePins.length} pin${eligiblePins.length === 1 ? "" : "s"} in ${taskResults.length} batch${taskResults.length === 1 ? "" : "es"}.`,
+      };
+    },
+  );
+}
+
 export async function saveJobPinCopyEdits(input: {
   userId: string;
   jobId: string;
@@ -2086,6 +2167,85 @@ export async function generateDescriptionsForJobPins(input: {
           return finalizeStepResult("Description generation", result);
         },
       ),
+  );
+}
+
+export async function queueDescriptionGenerationForJobPins(input: {
+  userId: string;
+  jobId: string;
+  generatedPinIds?: string[];
+  aiCredentialId?: string;
+  forceRegenerate?: boolean;
+}) {
+  return runWithOperationContext(
+    {
+      action: "workflow.queue_generate_descriptions",
+      userId: input.userId,
+      jobId: input.jobId,
+    },
+    async () => {
+      const job = await getOwnedGeneratedPinsForPublish(input.jobId, input.userId, input.generatedPinIds);
+      const aiCredentials = await resolveAiCredentialCandidatesForUserId({
+        userId: input.userId,
+        aiCredentialId: input.aiCredentialId,
+      });
+
+      if (aiCredentials.length === 0) {
+        throw new Error("Save an AI credential in Integrations before generating descriptions.");
+      }
+
+      const selectedPins = selectPinsForWorkflowAction(job, input.generatedPinIds);
+      const eligiblePins = selectedPins.filter((pin) =>
+        isPinEligibleForQueuedDescriptionGeneration(pin, Boolean(input.forceRegenerate)),
+      );
+
+      if (eligiblePins.length === 0) {
+        return {
+          queuedTaskCount: 0,
+          queuedPinCount: 0,
+          skippedPinCount: selectedPins.length,
+          tasks: [] as ReturnType<typeof serializeBackgroundTaskSummary>[],
+          message: input.forceRegenerate
+            ? "No selected pins are ready for description regeneration."
+            : "No selected pins are ready for description generation.",
+        };
+      }
+
+      const taskResults = await Promise.all(
+        chunkArray(eligiblePins, 5).map((chunk) =>
+          enqueueBackgroundTask({
+            kind: BackgroundTaskKind.GENERATE_DESCRIPTION_BATCH,
+            userId: input.userId,
+            jobId: input.jobId,
+            priority: 35,
+            dedupeKey: buildGenerateDescriptionBatchTaskDedupeKey(
+              input.jobId,
+              chunk.map((pin) => pin.id),
+              input.aiCredentialId,
+            ),
+            payloadJson: {
+              userId: input.userId,
+              jobId: input.jobId,
+              generatedPinIds: chunk.map((pin) => pin.id),
+              aiCredentialId: input.aiCredentialId ?? null,
+            } satisfies Prisma.InputJsonValue,
+            progressJson: {
+              stage: "queued",
+              total: chunk.length,
+              completed: 0,
+            } satisfies Prisma.InputJsonValue,
+          }),
+        ),
+      );
+
+      return {
+        queuedTaskCount: taskResults.length,
+        queuedPinCount: eligiblePins.length,
+        skippedPinCount: Math.max(0, selectedPins.length - eligiblePins.length),
+        tasks: taskResults.map((result) => serializeBackgroundTaskSummary(result.task)),
+        message: `Queued description generation for ${eligiblePins.length} pin${eligiblePins.length === 1 ? "" : "s"} in ${taskResults.length} batch${taskResults.length === 1 ? "" : "es"}.`,
+      };
+    },
   );
 }
 
@@ -4715,6 +4875,60 @@ function selectPinsForWorkflowAction(
   }
 
   return selectedPins;
+}
+
+function isPinEligibleForQueuedTitleGeneration(
+  pin: WorkflowPublishPin,
+  forceRegenerate: boolean,
+) {
+  if (isPinArtworkUnresolvedForPublishing(pin)) {
+    return false;
+  }
+
+  if (forceRegenerate) {
+    return true;
+  }
+
+  const existingTitle = pin.pinCopy?.title?.trim();
+  if (existingTitle && pin.pinCopy?.titleStatus === PinCopyFieldStatus.FINALIZED) {
+    return false;
+  }
+
+  return true;
+}
+
+function isPinEligibleForQueuedDescriptionGeneration(
+  pin: WorkflowPublishPin,
+  forceRegenerate: boolean,
+) {
+  if (isPinArtworkUnresolvedForPublishing(pin)) {
+    return false;
+  }
+
+  const finalizedTitle = pin.pinCopy?.title?.trim();
+  if (!finalizedTitle) {
+    return false;
+  }
+
+  if (forceRegenerate) {
+    return true;
+  }
+
+  const existingDescription = pin.pinCopy?.description?.trim();
+  if (existingDescription && pin.pinCopy?.descriptionStatus === PinCopyFieldStatus.FINALIZED) {
+    return false;
+  }
+
+  return true;
+}
+
+function isPinArtworkUnresolvedForPublishing(pin: WorkflowPublishPin) {
+  return (
+    pin.plan.artworkReviewState === ArtworkReviewState.FLAGGED ||
+    pin.plan.artworkReviewState === ArtworkReviewState.RERENDER_QUEUED ||
+    pin.plan.artworkReviewState === ArtworkReviewState.RERENDERING ||
+    pin.plan.artworkReviewState === ArtworkReviewState.RERENDER_FAILED
+  );
 }
 
 function hasSuccessfulSchedule(pin: WorkflowPublishPin) {
