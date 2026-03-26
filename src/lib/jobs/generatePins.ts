@@ -3731,6 +3731,8 @@ function getArtworkTitleRule(templateId: string) {
       return { maxWords: 5, maxChars: 34, maxLines: 2, singleLine: false };
     case "four-image-split-band-number":
       return { maxWords: 3, maxChars: 24, maxLines: 2, singleLine: false };
+    case "four-image-grid-number-title":
+      return { maxWords: 3, maxChars: 28, maxLines: 3, singleLine: false };
     case "two-image-slant-band-number-domain":
       return { maxWords: 6, maxChars: 34, maxLines: 3, singleLine: false };
     case "five-image-center-band-number-domain":
@@ -3790,6 +3792,10 @@ function getArtworkGoal(templateId: string, templateSupportsSubtitle: boolean) {
     return "Create a short Pinterest artwork headline for a hero-number listicle band. It must read like a count-based roundup, not a generic slogan. Use exactly 3 strong words total, with a punchy first word and a clear ideas-style finish.";
   }
 
+  if (templateId === "four-image-grid-number-title") {
+    return "Create a short Pinterest artwork headline for a four-image grid with a centered number badge and a stacked title card. Use exactly 3 strong words total, one word per line, do not include the count in the headline itself, and make the final word a roundup closer like Ideas, Decor, Looks, Colors, or Style.";
+  }
+
   if (templateId === "six-image-triple-split-slant-hero-footer") {
     return "Create a number-aware Pinterest artwork headline for a six-image collage with a separate count and a separate script subtitle. Use 3 to 5 strong words total, do not include the count in the headline itself, and keep the last word visually punchy for the emphasized lower line. If the title already ends with a natural roundup closer like Ideas, Looks, Decor, or Colors, keep it instead of padding another filler word.";
   }
@@ -3827,6 +3833,12 @@ function enforceArtworkTitleRule(templateId: string, title: string) {
 
   if (templateId === "four-image-split-band-number") {
     headline = ensureHeroNumberArtworkTitle(headline);
+    headline = ensureExactThreeWordGridTitle(headline);
+  }
+
+  if (templateId === "four-image-grid-number-title") {
+    headline = ensureHeroNumberArtworkTitle(headline);
+    headline = ensureExactThreeWordGridTitle(headline);
   }
 
   if (templateId === "five-image-center-band-number-domain") {
@@ -3927,6 +3939,32 @@ function ensureFourOrFiveWordSidebarTitle(title: string) {
   }
 
   return toTitleCase([words[0] ?? "Bedroom", "Decor", "Ideas", "Looks"].join(" "));
+}
+
+function ensureExactThreeWordGridTitle(title: string) {
+  const safeTitle = normalizeRenderText(title);
+  if (!safeTitle) {
+    return "Wood Floor Ideas";
+  }
+
+  const closers = new Set(["ideas", "decor", "looks", "colors", "style", "styles"]);
+  const words = safeTitle.split(/\s+/).filter(Boolean).slice(0, 6);
+
+  if (words.length >= 3) {
+    const exact = words.slice(0, 3);
+    const lastWord = exact[2]?.toLowerCase().replace(/[^a-z0-9]/g, "") ?? "";
+    if (closers.has(lastWord)) {
+      return toTitleCase(exact.join(" "));
+    }
+
+    return toTitleCase([exact[0], exact[1], "Ideas"].join(" "));
+  }
+
+  if (words.length === 2) {
+    return toTitleCase([words[0], words[1], "Ideas"].join(" "));
+  }
+
+  return toTitleCase([words[0] ?? "Wood", "Floor", "Ideas"].join(" "));
 }
 
 function ensureFourToSixWordCenterBandTitle(title: string) {

@@ -81,6 +81,19 @@ export const sampleTemplateDataFourImageGridNumberTitleDomain: TemplateRenderPro
   visualPreset: "terracotta-ink",
 };
 
+export const sampleTemplateDataFourImageGridNumberTitle: TemplateRenderProps = {
+  title: "Wood Floor Ideas",
+  images: [
+    "/sample-images/1.jpg",
+    "/sample-images/2.jpg",
+    "/sample-images/3.jpg",
+    "/sample-images/4.jpg",
+  ],
+  domain: "mightypaint.com",
+  itemNumber: 25,
+  visualPreset: "terracotta-ink",
+};
+
 export const sampleTemplateDataFourImageGridTitleFooter: TemplateRenderProps = {
   title: "20+ Kitchen Lights To Match Your Vibe",
   images: [
