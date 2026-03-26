@@ -303,6 +303,8 @@ export function JobPublishManager({
         {
           title: pin.title,
           description: pin.description,
+          titleStatus: pin.titleStatus,
+          titleOptions: pin.titleOptions,
         },
       ]),
     );
@@ -322,7 +324,14 @@ export function JobPublishManager({
           generatedPinId: copy.generatedPinId,
         };
 
-        if (copy.title !== persisted.title) {
+        const needsTitleFinalization =
+          typeof copy.title === "string" &&
+          copy.title.trim().length > 0 &&
+          persisted.titleStatus !== "FINALIZED" &&
+          Array.isArray(persisted.titleOptions) &&
+          persisted.titleOptions.length > 0;
+
+        if (copy.title !== persisted.title || needsTitleFinalization) {
           payload.title = copy.title;
         }
 

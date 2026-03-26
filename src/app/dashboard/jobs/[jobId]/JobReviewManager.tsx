@@ -134,6 +134,7 @@ type PlanDraft = {
 };
 
 const RECENTLY_FIXED_STORAGE_KEY_PREFIX = "pinforge:review:recently-fixed:";
+const REVIEW_FILTER_STORAGE_KEY_PREFIX = "pinforge:review:grid-filter:";
 
 type JobReviewManagerProps = {
   jobId: string;
@@ -232,7 +233,9 @@ export function JobReviewManager({
   const [renderProgress, setRenderProgress] = useState<RenderProgressState | null>(null);
   const [isRenderingPlans, setIsRenderingPlans] = useState(false);
   const [currentRenderTaskId, setCurrentRenderTaskId] = useState<string | null>(null);
-  const [reviewGridFilter, setReviewGridFilter] = useState<ReviewGridFilter>("all");
+  const [reviewGridFilter, setReviewGridFilter] = useState<ReviewGridFilter>(() =>
+    readReviewGridFilter(jobId),
+  );
   const [isPlanEditorOpen, setIsPlanEditorOpen] = useState(false);
   const [recentlyFixedPlanIds, setRecentlyFixedPlanIds] = useState<string[]>(() =>
     readRecentlyFixedPlanIds(jobId),
@@ -572,6 +575,10 @@ export function JobReviewManager({
   useEffect(() => {
     persistRecentlyFixedPlanIds(jobId, recentlyFixedPlanIds);
   }, [jobId, recentlyFixedPlanIds]);
+
+  useEffect(() => {
+    persistReviewGridFilter(jobId, reviewGridFilter);
+  }, [jobId, reviewGridFilter]);
 
   function handleSaveReview(source: "review" | "images") {
     startTransition(async () => {
@@ -3028,6 +3035,10 @@ function buildRecentlyFixedStorageKey(jobId: string) {
   return `${RECENTLY_FIXED_STORAGE_KEY_PREFIX}${jobId}`;
 }
 
+function buildReviewGridFilterStorageKey(jobId: string) {
+  return `${REVIEW_FILTER_STORAGE_KEY_PREFIX}${jobId}`;
+}
+
 function readRecentlyFixedPlanIds(jobId: string) {
   if (typeof window === "undefined") {
     return [];
@@ -3058,6 +3069,42 @@ function persistRecentlyFixedPlanIds(jobId: string, planIds: string[]) {
       buildRecentlyFixedStorageKey(jobId),
       JSON.stringify(planIds),
     );
+  } catch {
+    // Ignore session storage failures and keep the current review flow usable.
+  }
+}
+
+function readReviewGridFilter(jobId: string): ReviewGridFilter {
+  if (typeof window === "undefined") {
+    return "all";
+  }
+
+  try {
+    const raw = window.sessionStorage.getItem(buildReviewGridFilterStorageKey(jobId));
+    if (
+      raw === "all" ||
+      raw === "actionable" ||
+      raw === "flagged" ||
+      raw === "rerendering" ||
+      raw === "failed" ||
+      raw === "recently_fixed"
+    ) {
+      return raw;
+    }
+  } catch {
+    // Ignore session storage failures and keep the current review flow usable.
+  }
+
+  return "all";
+}
+
+function persistReviewGridFilter(jobId: string, value: ReviewGridFilter) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.sessionStorage.setItem(buildReviewGridFilterStorageKey(jobId), value);
   } catch {
     // Ignore session storage failures and keep the current review flow usable.
   }
