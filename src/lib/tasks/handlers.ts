@@ -5,6 +5,7 @@ import {
 } from "@prisma/client";
 import { z } from "zod";
 import { cleanupStaleTempAssets } from "@/lib/housekeeping/storageMaintenance";
+import { syncPublerPublicationRecordsForUser } from "@/lib/dashboard/publerSync";
 import {
   generateDescriptionsForJobPins,
   generateTitlesForJobPins,
@@ -73,6 +74,11 @@ const schedulePinsPayloadSchema = z.object({
   generatedPinIds: z.array(z.string().min(1)).optional(),
 });
 
+const syncPublicationsPayloadSchema = z.object({
+  userId: z.string().min(1),
+  workspaceId: z.string().min(1),
+});
+
 export type BackgroundTaskExecutionResult = {
   progressJson?: Prisma.InputJsonValue;
 };
@@ -98,6 +104,8 @@ export async function executeBackgroundTask(
       return executeGenerateDescriptionBatchTask(task, context);
     case BackgroundTaskKind.SCHEDULE_PINS:
       return executeSchedulePinsTask(task, context);
+    case BackgroundTaskKind.SYNC_PUBLICATIONS:
+      return executeSyncPublicationsTask(task, context);
     case BackgroundTaskKind.CLEAN_TEMP_ASSETS:
       return executeCleanTempAssetsTask(task, context);
     default:
@@ -279,6 +287,38 @@ async function executeSchedulePinsTask(
     completed,
     workerId: context.workerId,
     scheduleRunId: payload.scheduleRunId ?? result.scheduleRunId ?? null,
+    finishedAt: new Date().toISOString(),
+    result,
+  } satisfies Prisma.InputJsonValue;
+
+  await context.reportProgress(progressJson);
+
+  return {
+    progressJson,
+  };
+}
+
+async function executeSyncPublicationsTask(
+  task: BackgroundTask,
+  context: BackgroundTaskHandlerContext,
+): Promise<BackgroundTaskExecutionResult> {
+  const payload = syncPublicationsPayloadSchema.parse(task.payloadJson);
+
+  await context.reportProgress({
+    stage: "running",
+    workerId: context.workerId,
+    workspaceId: payload.workspaceId,
+    startedAt: new Date().toISOString(),
+  });
+
+  const result = await syncPublerPublicationRecordsForUser(payload.userId, {
+    workspaceId: payload.workspaceId,
+  });
+
+  const progressJson = {
+    stage: "completed",
+    workerId: context.workerId,
+    workspaceId: payload.workspaceId,
     finishedAt: new Date().toISOString(),
     result,
   } satisfies Prisma.InputJsonValue;

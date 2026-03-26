@@ -8,6 +8,8 @@
     "start": "next start",
     "worker": "tsx scripts/background-worker.ts",
     "worker:once": "tsx scripts/background-worker.ts --once",
+    "scheduler": "tsx scripts/background-scheduler.ts",
+    "scheduler:once": "tsx scripts/background-scheduler.ts --once",
     "lint": "eslint",
     "postinstall": "prisma generate",
     "prisma:generate": "prisma generate",
