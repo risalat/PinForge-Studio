@@ -105,7 +105,7 @@ export function TemplateColorPopLadderNumberCard({
       </div>
 
       <div
-        className="absolute left-[84px] top-[706px] z-30 flex h-[188px] w-[188px] -rotate-[4deg] items-center justify-center rounded-[34px] shadow-[0_22px_44px_rgba(12,22,38,0.22)]"
+        className="absolute left-[58px] top-[642px] z-40 flex h-[188px] w-[188px] -rotate-[4deg] items-center justify-center rounded-[34px] shadow-[0_22px_44px_rgba(12,22,38,0.22)]"
         style={{ backgroundColor: numberTileBackground }}
       >
         <AutoFitText
@@ -124,28 +124,30 @@ export function TemplateColorPopLadderNumberCard({
       </div>
 
       <div
-        className="absolute left-[118px] top-[808px] z-20 h-[404px] w-[844px] -rotate-[4deg] rounded-[38px] px-[56px] py-[48px] shadow-[0_28px_58px_rgba(9,19,33,0.30)]"
+        className="absolute left-[128px] top-[770px] z-30 h-[412px] w-[844px] -rotate-[4deg] rounded-[38px] px-[60px] py-[46px] shadow-[0_28px_58px_rgba(9,19,33,0.30)]"
         style={{ backgroundColor: titleCardBackground }}
       >
         <div
-          className="absolute left-[46px] top-[164px] h-[98px] w-[500px] rounded-[28px]"
+          className="absolute left-[102px] top-[170px] h-[96px] w-[566px] rounded-[28px]"
           style={{ backgroundColor: titleAccentStripe }}
         />
         <div className="relative z-10 h-full w-full rotate-[4deg]">
-          <AutoFitLineStack
-            lines={titleLines}
-            minFontSize={62}
-            maxFontSize={92}
-            lineHeight={TEMPLATE_TYPOGRAPHY.title.lineHeight}
-            gap={14}
-            className="w-full"
-            textAlign="left"
-            fontFamily={TEMPLATE_TYPOGRAPHY.title.fontFamily}
-            fontWeight={TEMPLATE_TYPOGRAPHY.title.fontWeight}
-            letterSpacing={TEMPLATE_TYPOGRAPHY.title.letterSpacing}
-            textTransform={TEMPLATE_TYPOGRAPHY.title.textTransform}
-            colors={[titleColor, titleAccentText, titleColor]}
-          />
+          <div className="flex h-full flex-col justify-center pl-[82px] pr-[28px]">
+            <AutoFitLineStack
+              lines={titleLines}
+              minFontSize={62}
+              maxFontSize={92}
+              lineHeight={TEMPLATE_TYPOGRAPHY.title.lineHeight}
+              gap={18}
+              className="w-full"
+              textAlign="left"
+              fontFamily={TEMPLATE_TYPOGRAPHY.title.fontFamily}
+              fontWeight={TEMPLATE_TYPOGRAPHY.title.fontWeight}
+              letterSpacing={TEMPLATE_TYPOGRAPHY.title.letterSpacing}
+              textTransform={TEMPLATE_TYPOGRAPHY.title.textTransform}
+              colors={[titleColor, titleAccentText, titleColor]}
+            />
+          </div>
         </div>
       </div>
 
