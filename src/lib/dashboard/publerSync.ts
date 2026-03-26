@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { resolveCanonicalPost } from "@/lib/posts/canonicalPost";
 import { prisma } from "@/lib/prisma";
 import { createPublerClient, type PublerClient, type PublerPost } from "@/lib/publer/publerClient";
+import { runWithWorkspaceOperationLock } from "@/lib/publer/workspaceOperationLock";
 import { getIntegrationSettingsForUserId } from "@/lib/settings/integrationSettings";
 import { buildArticleUrlCandidates, normalizeArticleUrl, resolveDomain } from "@/lib/types";
 
@@ -55,91 +56,129 @@ export async function syncPublerPublicationRecordsForUser(
     throw new Error("Select a Publer workspace before syncing post activity.");
   }
 
-  const client = createPublerClient({
-    apiKey: settings.publerApiKey,
+  return runWithWorkspaceOperationLock({
+    scope: "SYNC",
     workspaceId,
-  });
-
-  const syncState = await prisma.publicationSyncState.upsert({
-    where: {
-      userId_workspaceId: {
-        userId,
-        workspaceId,
-      },
-    },
-    update: {},
-    create: {
+    ownerContext: {
       userId,
-      workspaceId,
-    },
-  });
-
-  const isBackfill = syncState.mode === PUBLICATION_SYNC_MODE.BACKFILL;
-  const startPage = Math.max(syncState.nextPage, 1);
-  const pageBudget = isBackfill ? BACKFILL_PAGES_PER_RUN : INCREMENTAL_PAGES_PER_RUN;
-  const incrementalWindow = isBackfill
-    ? null
-    : buildIncrementalWindow(syncState.lastCompletedAt);
-
-  let fetched = 0;
-  let created = 0;
-  let updated = 0;
-  let pagesProcessed = 0;
-  let hasMore = false;
-  let nextPage: number | null = null;
-
-  try {
-    for (let offset = 0; offset < pageBudget; offset += 1) {
-      const pageNumber = startPage + offset;
-      const result = await client.getPostsPage({
-        states: FULL_SYNC_STATES,
-        page: pageNumber,
-        limit: POSTS_PER_PAGE,
-        from: incrementalWindow?.from ?? undefined,
-        to: incrementalWindow?.to ?? undefined,
-      });
-
-      pagesProcessed += 1;
-
-      if (result.posts.length === 0) {
-        if (isBackfill) {
-          await markBackfillCompleted(userId, workspaceId);
-        } else {
-          await markIncrementalCompleted(userId, workspaceId);
-        }
-        hasMore = false;
-        nextPage = null;
-        break;
-      }
-
-      const pageOutcome = await upsertPublerPostsForUser({
-        userId,
+      requestedWorkspaceId: options?.workspaceId?.trim() || null,
+    } satisfies Prisma.InputJsonValue,
+    operation: async () => {
+      const client = createPublerClient({
+        apiKey: settings.publerApiKey,
         workspaceId,
-        posts: result.posts,
       });
-      fetched += pageOutcome.fetched;
-      created += pageOutcome.created;
-      updated += pageOutcome.updated;
 
-      const reachedLastPage = didReachLastPage(result, pageNumber, POSTS_PER_PAGE);
-      if (isBackfill && reachedLastPage) {
-        await markBackfillCompleted(userId, workspaceId);
-        hasMore = false;
-        nextPage = null;
-        break;
-      }
+      const syncState = await prisma.publicationSyncState.upsert({
+        where: {
+          userId_workspaceId: {
+            userId,
+            workspaceId,
+          },
+        },
+        update: {},
+        create: {
+          userId,
+          workspaceId,
+        },
+      });
 
-      if (!isBackfill && reachedLastPage) {
-        await markIncrementalCompleted(userId, workspaceId);
-        hasMore = false;
-        nextPage = null;
-        break;
-      }
+      const isBackfill = syncState.mode === PUBLICATION_SYNC_MODE.BACKFILL;
+      const startPage = Math.max(syncState.nextPage, 1);
+      const pageBudget = isBackfill ? BACKFILL_PAGES_PER_RUN : INCREMENTAL_PAGES_PER_RUN;
+      const incrementalWindow = isBackfill
+        ? null
+        : buildIncrementalWindow(syncState.lastCompletedAt);
 
-      const processedFullBudget = offset + 1 >= pageBudget;
-      if (processedFullBudget) {
-        hasMore = true;
-        nextPage = pageNumber + 1;
+      let fetched = 0;
+      let created = 0;
+      let updated = 0;
+      let pagesProcessed = 0;
+      let hasMore = false;
+      let nextPage: number | null = null;
+
+      try {
+        for (let offset = 0; offset < pageBudget; offset += 1) {
+          const pageNumber = startPage + offset;
+          const result = await client.getPostsPage({
+            states: FULL_SYNC_STATES,
+            page: pageNumber,
+            limit: POSTS_PER_PAGE,
+            from: incrementalWindow?.from ?? undefined,
+            to: incrementalWindow?.to ?? undefined,
+          });
+
+          pagesProcessed += 1;
+
+          if (result.posts.length === 0) {
+            if (isBackfill) {
+              await markBackfillCompleted(userId, workspaceId);
+            } else {
+              await markIncrementalCompleted(userId, workspaceId);
+            }
+            hasMore = false;
+            nextPage = null;
+            break;
+          }
+
+          const pageOutcome = await upsertPublerPostsForUser({
+            userId,
+            workspaceId,
+            posts: result.posts,
+          });
+          fetched += pageOutcome.fetched;
+          created += pageOutcome.created;
+          updated += pageOutcome.updated;
+
+          const reachedLastPage = didReachLastPage(result, pageNumber, POSTS_PER_PAGE);
+          if (isBackfill && reachedLastPage) {
+            await markBackfillCompleted(userId, workspaceId);
+            hasMore = false;
+            nextPage = null;
+            break;
+          }
+
+          if (!isBackfill && reachedLastPage) {
+            await markIncrementalCompleted(userId, workspaceId);
+            hasMore = false;
+            nextPage = null;
+            break;
+          }
+
+          const processedFullBudget = offset + 1 >= pageBudget;
+          if (processedFullBudget) {
+            hasMore = true;
+            nextPage = pageNumber + 1;
+            await prisma.publicationSyncState.update({
+              where: {
+                userId_workspaceId: {
+                  userId,
+                  workspaceId,
+                },
+              },
+              data: {
+                nextPage,
+                lastRunAt: new Date(),
+                lastError: null,
+              },
+            });
+            break;
+          }
+        }
+
+        return {
+          workspaceId,
+          fetched,
+          created,
+          updated,
+          pagesProcessed,
+          hasMore,
+          mode: isBackfill ? "backfill" : "incremental",
+          nextPage,
+          windowFrom: incrementalWindow?.from.toISOString() ?? null,
+          windowTo: incrementalWindow?.to.toISOString() ?? null,
+        };
+      } catch (error) {
         await prisma.publicationSyncState.update({
           where: {
             userId_workspaceId: {
@@ -148,42 +187,14 @@ export async function syncPublerPublicationRecordsForUser(
             },
           },
           data: {
-            nextPage,
             lastRunAt: new Date(),
-            lastError: null,
+            lastError: error instanceof Error ? error.message : "Unknown Publer sync error.",
           },
         });
-        break;
+        throw error;
       }
-    }
-
-    return {
-      workspaceId,
-      fetched,
-      created,
-      updated,
-      pagesProcessed,
-      hasMore,
-      mode: isBackfill ? "backfill" : "incremental",
-      nextPage,
-      windowFrom: incrementalWindow?.from.toISOString() ?? null,
-      windowTo: incrementalWindow?.to.toISOString() ?? null,
-    };
-  } catch (error) {
-    await prisma.publicationSyncState.update({
-      where: {
-        userId_workspaceId: {
-          userId,
-          workspaceId,
-        },
-      },
-      data: {
-        lastRunAt: new Date(),
-        lastError: error instanceof Error ? error.message : "Unknown Publer sync error.",
-      },
-    });
-    throw error;
-  }
+    },
+  });
 }
 
 async function upsertPublerPostsForUser(input: {

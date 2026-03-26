@@ -81,6 +81,7 @@ export function SettingsManager({
   const [success, setSuccess] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingPublerWorkspaces, setIsLoadingPublerWorkspaces] = useState(false);
+  const [isRefreshingPublerMetadata, setIsRefreshingPublerMetadata] = useState(false);
   const [loadingWorkspaceProfileIndex, setLoadingWorkspaceProfileIndex] = useState<number | null>(
     null,
   );
@@ -142,6 +143,9 @@ export function SettingsManager({
     index: number,
     workspaceId: string,
     accountId?: string,
+    options?: {
+      refresh?: boolean;
+    },
   ) {
     if (!workspaceId || !canLoadPublerWorkspaces) {
       return;
@@ -158,6 +162,7 @@ export function SettingsManager({
           apiKey: publerApiKey || undefined,
           workspaceId,
           accountId: accountId || undefined,
+          refresh: options?.refresh ?? false,
         }),
       });
       const json = (await response.json()) as DashboardPublerOptionsResponse;
@@ -395,7 +400,7 @@ export function SettingsManager({
     }
   }
 
-  async function loadPublerWorkspaces(options?: { silent?: boolean }) {
+  async function loadPublerWorkspaces(options?: { silent?: boolean; refresh?: boolean }) {
     if (!canLoadPublerWorkspaces) {
       return;
     }
@@ -415,6 +420,7 @@ export function SettingsManager({
         body: JSON.stringify({
           apiKey: publerApiKey || undefined,
           workspaceId: workspaceProfiles.find((profile) => profile.isDefault)?.workspaceId || undefined,
+          refresh: options?.refresh ?? false,
         }),
       });
       const json = (await response.json()) as DashboardPublerOptionsResponse;
@@ -440,6 +446,40 @@ export function SettingsManager({
       setError(message);
     } finally {
       setIsLoadingPublerWorkspaces(false);
+    }
+  }
+
+  async function refreshPublerMetadata() {
+    if (!canLoadPublerWorkspaces) {
+      return;
+    }
+
+    setIsRefreshingPublerMetadata(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      await loadPublerWorkspaces({ refresh: true, silent: true });
+
+      for (const [index, profile] of workspaceProfiles.entries()) {
+        if (!profile.workspaceId) {
+          continue;
+        }
+
+        await loadWorkspaceProfileOptions(index, profile.workspaceId, profile.defaultAccountId, {
+          refresh: true,
+        });
+      }
+
+      setSuccess("Publer workspaces, accounts, and boards refreshed.");
+    } catch (refreshError) {
+      const message =
+        refreshError instanceof Error
+          ? refreshError.message
+          : "Unable to refresh Publer metadata.";
+      setError(message);
+    } finally {
+      setIsRefreshingPublerMetadata(false);
     }
   }
 
@@ -573,13 +613,29 @@ export function SettingsManager({
               <button
                 type="button"
                 onClick={() => void loadPublerWorkspaces()}
-                disabled={isLoadingPublerWorkspaces || !canLoadPublerWorkspaces}
+                disabled={
+                  isLoadingPublerWorkspaces || isRefreshingPublerMetadata || !canLoadPublerWorkspaces
+                }
                 className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] disabled:opacity-60"
               >
                 <BusyActionLabel
                   busy={isLoadingPublerWorkspaces}
                   label="Load workspaces"
                   busyLabel="Loading..."
+                />
+              </button>
+              <button
+                type="button"
+                onClick={() => void refreshPublerMetadata()}
+                disabled={
+                  isLoadingPublerWorkspaces || isRefreshingPublerMetadata || !canLoadPublerWorkspaces
+                }
+                className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] disabled:opacity-60"
+              >
+                <BusyActionLabel
+                  busy={isRefreshingPublerMetadata}
+                  label="Refresh Publer data"
+                  busyLabel="Refreshing..."
                 />
               </button>
               <button

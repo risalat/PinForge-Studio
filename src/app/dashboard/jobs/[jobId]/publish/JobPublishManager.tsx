@@ -1034,6 +1034,7 @@ export function JobPublishManager({
       preserveCurrentSelection?: boolean;
       nextWorkspaceId?: string;
       nextAccountId?: string;
+      refresh?: boolean;
     }) => {
       setIsLoadingOptions(true);
       setOptionsError(null);
@@ -1045,6 +1046,7 @@ export function JobPublishManager({
           body: JSON.stringify({
             workspaceId: input?.nextWorkspaceId ?? workspaceId,
             accountId: input?.nextAccountId ?? accountId,
+            refresh: input?.refresh ?? false,
           }),
         });
         const data = (await response.json()) as PublerOptionsResponse;
@@ -2150,6 +2152,7 @@ function formatDateLabel(value: string) {
                   preserveCurrentSelection: true,
                   nextWorkspaceId: workspaceId,
                   nextAccountId: accountId,
+                  refresh: true,
                 })
               }
               disabled={isLoadingOptions || !integrationReady.canUsePublerApiKey}

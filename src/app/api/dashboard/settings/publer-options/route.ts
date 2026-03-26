@@ -1,14 +1,21 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAuthenticatedDashboardApiUser } from "@/lib/auth/dashboardSession";
+import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
 import { isDatabaseConfigured } from "@/lib/env";
 import { PublerClient } from "@/lib/publer/publerClient";
+import {
+  getCachedPublerAccounts,
+  getCachedPublerBoards,
+  getCachedPublerWorkspaces,
+} from "@/lib/publer/metadataCache";
 import { getIntegrationSettings } from "@/lib/settings/integrationSettings";
 
 const schema = z.object({
   apiKey: z.string().trim().optional(),
   workspaceId: z.string().trim().optional(),
   accountId: z.union([z.string(), z.number()]).optional(),
+  refresh: z.boolean().optional(),
 });
 
 export async function POST(request: Request) {
@@ -21,6 +28,7 @@ export async function POST(request: Request) {
     const rawPayload = await request.json();
     const payload = schema.parse(rawPayload);
     const savedSettings = isDatabaseConfigured() ? await getIntegrationSettings() : null;
+    const user = isDatabaseConfigured() ? await getOrCreateDashboardUser() : null;
     const apiKey = payload.apiKey?.trim() || savedSettings?.publerApiKey || "";
 
     if (!apiKey) {
@@ -32,7 +40,14 @@ export async function POST(request: Request) {
       workspaceId: "",
     });
 
-    const workspaces = await baseClient.getWorkspaces();
+    const workspaces =
+      user && isDatabaseConfigured()
+        ? await getCachedPublerWorkspaces({
+            userId: user.id,
+            forceRefresh: payload.refresh,
+            loader: () => baseClient.getWorkspaces(),
+          })
+        : await baseClient.getWorkspaces();
     const accessibleWorkspaceIds = new Set(workspaces.map((workspace) => workspace.id));
     const requestedWorkspaceId =
       payload.workspaceId?.trim() || savedSettings?.publerWorkspaceId || "";
@@ -47,7 +62,20 @@ export async function POST(request: Request) {
           workspaceId: selectedWorkspaceId,
         })
       : null;
-    const accounts = workspaceClient ? await workspaceClient.getPinterestAccounts() : [];
+    const selectedWorkspaceLabel =
+      workspaces.find((workspace) => workspace.id === selectedWorkspaceId)?.name ?? "";
+    const accounts =
+      workspaceClient && user && isDatabaseConfigured()
+        ? await getCachedPublerAccounts({
+            userId: user.id,
+            workspaceId: selectedWorkspaceId,
+            workspaceLabel: selectedWorkspaceLabel,
+            forceRefresh: payload.refresh,
+            loader: () => workspaceClient.getPinterestAccounts(),
+          })
+        : workspaceClient
+          ? await workspaceClient.getPinterestAccounts()
+          : [];
     const accessibleAccountIds = new Set(accounts.map((account) => String(account.id)));
     const requestedAccountId =
       String(payload.accountId ?? "").trim() || savedSettings?.publerAccountId || "";
@@ -61,7 +89,19 @@ export async function POST(request: Request) {
     let boards: Awaited<ReturnType<PublerClient["getPinterestBoards"]>> = [];
 
     if (workspaceClient && selectedAccountId) {
-      boards = await workspaceClient.getPinterestBoards(selectedAccountId);
+      const selectedAccountLabel =
+        accounts.find((account) => String(account.id) === selectedAccountId)?.name ?? "";
+      boards =
+        user && isDatabaseConfigured()
+          ? await getCachedPublerBoards({
+              userId: user.id,
+              workspaceId: selectedWorkspaceId,
+              accountId: selectedAccountId,
+              accountLabel: selectedAccountLabel,
+              forceRefresh: payload.refresh,
+              loader: () => workspaceClient.getPinterestBoards(selectedAccountId),
+            })
+          : await workspaceClient.getPinterestBoards(selectedAccountId);
     }
 
     return NextResponse.json({

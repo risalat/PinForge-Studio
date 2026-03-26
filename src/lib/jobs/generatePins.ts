@@ -44,7 +44,6 @@ import {
   uploadMediaWithQueueHandling,
   waitForPublerJobCompletion,
 } from "@/lib/publer/publerClient";
-import { runSerializedPublerUpload } from "@/lib/publer/uploadQueue";
 import { buildCapacityAwareSchedulePreview } from "@/lib/jobs/schedulePreview";
 import { buildTemplateDiverseOrder } from "@/lib/jobs/templateDiversity";
 import { getPublishQueueCapacitySummary } from "@/lib/jobs/publishQueueCapacity";
@@ -55,6 +54,7 @@ import {
 } from "@/lib/settings/integrationSettings";
 import { getStorageProvider } from "@/lib/storage";
 import { buildStorageAssetUrl, resolveStoredAssetUrl } from "@/lib/storage/assetUrl";
+import { runWithWorkspaceOperationLock } from "@/lib/publer/workspaceOperationLock";
 import {
   buildGenerateTitleBatchTaskDedupeKey,
   buildGenerateDescriptionBatchTaskDedupeKey,
@@ -1643,7 +1643,15 @@ export async function uploadJobPinsToPubler(input: {
               });
               const selectedPins = selectPinsForWorkflowAction(job);
               const result = createStepResultAccumulator();
-              await runSerializedPublerUpload(workspaceId, async () => {
+              await runWithWorkspaceOperationLock({
+                scope: "MEDIA_UPLOAD",
+                workspaceId,
+                ownerContext: {
+                  userId: input.userId,
+                  jobId: input.jobId,
+                  pinIds: selectedPins.map((pin) => pin.id),
+                } satisfies Prisma.InputJsonValue,
+                operation: async () => {
                 for (const pin of selectedPins) {
                   const pinAssetUrl = getPinAssetUrl(pin);
 
@@ -1772,6 +1780,7 @@ export async function uploadJobPinsToPubler(input: {
                     });
                   }
                 }
+                },
               });
 
               await finalizeStepOutcome(job.id, result, {
@@ -2600,6 +2609,16 @@ export async function scheduleJobPins(input: {
 
   if (schedulablePins.length > 0) {
     try {
+      await runWithWorkspaceOperationLock({
+        scope: "SCHEDULING",
+        workspaceId,
+        ownerContext: {
+          userId: input.userId,
+          jobId: input.jobId,
+          scheduleRunId: scheduleRun.id,
+          pinIds: schedulablePins.map((entry) => entry.pin.id),
+        } satisfies Prisma.InputJsonValue,
+        operation: async () => {
       const scheduleJob = await publerClient.schedulePosts({
         bulk: {
           state: "scheduled",
@@ -2684,6 +2703,8 @@ export async function scheduleJobPins(input: {
         }
         result.succeeded += 1;
       }
+        },
+      });
     } catch (error) {
       const reason =
         error instanceof Error ? error.message : "Unable to schedule pins in Publer.";
