@@ -7,11 +7,11 @@ import { EditablePinDescriptionSchema, EditablePinTitleSchema } from "@/lib/ai/v
 import { isDatabaseConfigured } from "@/lib/env";
 import {
   getOwnedGeneratedPinsForPublish,
+  queueScheduleJobPins,
   queueDescriptionGenerationForJobPins,
   queueTitleGenerationForJobPins,
+  queueUploadMediaForJobPins,
   saveJobPinCopyEdits,
-  scheduleJobPins,
-  uploadJobPinsToPubler,
 } from "@/lib/jobs/generatePins";
 import {
   createCorrelationId,
@@ -114,7 +114,12 @@ export async function GET(_request: Request, { params }: RouteProps) {
         const job = await getOwnedGeneratedPinsForPublish(jobId, user.id);
         const backgroundTasks = await listBackgroundTasksForJob({
           jobId,
-          kinds: [BackgroundTaskKind.GENERATE_TITLE_BATCH, BackgroundTaskKind.GENERATE_DESCRIPTION_BATCH],
+          kinds: [
+            BackgroundTaskKind.UPLOAD_MEDIA_BATCH,
+            BackgroundTaskKind.GENERATE_TITLE_BATCH,
+            BackgroundTaskKind.GENERATE_DESCRIPTION_BATCH,
+            BackgroundTaskKind.SCHEDULE_PINS,
+          ],
           statuses: [
             ...getActiveBackgroundTaskStatuses(),
             BackgroundTaskStatus.SUCCEEDED,
@@ -123,21 +128,33 @@ export async function GET(_request: Request, { params }: RouteProps) {
           limit: 40,
         });
         const titleTasks = backgroundTasks.filter((task) => task.kind === BackgroundTaskKind.GENERATE_TITLE_BATCH);
+        const uploadTasks = backgroundTasks.filter((task) => task.kind === BackgroundTaskKind.UPLOAD_MEDIA_BATCH);
         const descriptionTasks = backgroundTasks.filter(
           (task) => task.kind === BackgroundTaskKind.GENERATE_DESCRIPTION_BATCH,
         );
+        const scheduleTasks = backgroundTasks.filter((task) => task.kind === BackgroundTaskKind.SCHEDULE_PINS);
 
         return withCorrelationHeader(
           NextResponse.json({
             ok: true,
             jobStatus: job.status,
             pins: job.generatedPins.map(serializePin),
+            uploadTasks: uploadTasks.map((task) => ({
+              ...serializeBackgroundTaskSummary(task),
+              payloadJson: task.payloadJson,
+              progressJson: task.progressJson,
+            })),
             titleTasks: titleTasks.map((task) => ({
               ...serializeBackgroundTaskSummary(task),
               payloadJson: task.payloadJson,
               progressJson: task.progressJson,
             })),
             descriptionTasks: descriptionTasks.map((task) => ({
+              ...serializeBackgroundTaskSummary(task),
+              payloadJson: task.payloadJson,
+              progressJson: task.progressJson,
+            })),
+            scheduleTasks: scheduleTasks.map((task) => ({
               ...serializeBackgroundTaskSummary(task),
               payloadJson: task.payloadJson,
               progressJson: task.progressJson,
@@ -198,7 +215,7 @@ export async function POST(request: Request, { params }: RouteProps) {
 
         switch (payload.action) {
           case "upload_media":
-            result = await uploadJobPinsToPubler({
+            result = await queueUploadMediaForJobPins({
               userId: user.id,
               jobId,
               generatedPinIds: payload.generatedPinIds,
@@ -231,7 +248,7 @@ export async function POST(request: Request, { params }: RouteProps) {
             });
             break;
           case "schedule":
-            result = await scheduleJobPins({
+            result = await queueScheduleJobPins({
               userId: user.id,
               jobId,
               firstPublishAt: payload.firstPublishAt,

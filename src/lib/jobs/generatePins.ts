@@ -60,6 +60,8 @@ import {
   buildGenerateDescriptionBatchTaskDedupeKey,
   buildRenderPlansTaskDedupeKey,
   buildRerenderPlanTaskDedupeKey,
+  buildSchedulePinsTaskDedupeKey,
+  buildUploadMediaBatchTaskDedupeKey,
   enqueueBackgroundTask,
   serializeBackgroundTaskSummary,
 } from "@/lib/tasks/backgroundTasks";
@@ -1785,6 +1787,80 @@ export async function uploadJobPinsToPubler(input: {
   );
 }
 
+export async function queueUploadMediaForJobPins(input: {
+  userId: string;
+  jobId: string;
+  generatedPinIds?: string[];
+  workspaceId?: string;
+}) {
+  return runWithOperationContext(
+    {
+      action: "workflow.queue_upload_media",
+      userId: input.userId,
+      jobId: input.jobId,
+    },
+    async () => {
+      const job = await getOwnedGeneratedPinsForPublish(input.jobId, input.userId, input.generatedPinIds);
+      const settings = await getIntegrationSettingsForUserId(input.userId);
+      const workspaceId = await resolveAccessiblePublerWorkspaceId({
+        apiKey: settings.publerApiKey,
+        requestedWorkspaceId: input.workspaceId?.trim() || settings.publerWorkspaceId,
+      });
+
+      if (!workspaceId) {
+        throw new Error("Select a Publer workspace before uploading media.");
+      }
+
+      const selectedPins = selectPinsForWorkflowAction(job, input.generatedPinIds);
+      const eligiblePins = selectedPins.filter(
+        (pin) => pin.publerMedia?.status !== MediaUploadStatus.UPLOADED || !pin.publerMedia?.mediaId,
+      );
+
+      if (eligiblePins.length === 0) {
+        return {
+          queuedTaskCount: 0,
+          queuedPinCount: 0,
+          skippedPinCount: selectedPins.length,
+          tasks: [] as ReturnType<typeof serializeBackgroundTaskSummary>[],
+          message: "No selected pins are ready for media upload.",
+        };
+      }
+
+      const taskResult = await enqueueBackgroundTask({
+        kind: BackgroundTaskKind.UPLOAD_MEDIA_BATCH,
+        userId: input.userId,
+        jobId: input.jobId,
+        workspaceId,
+        priority: 50,
+        dedupeKey: buildUploadMediaBatchTaskDedupeKey(
+          input.jobId,
+          workspaceId,
+          eligiblePins.map((pin) => pin.id),
+        ),
+        payloadJson: {
+          userId: input.userId,
+          jobId: input.jobId,
+          generatedPinIds: eligiblePins.map((pin) => pin.id),
+          workspaceId,
+        } satisfies Prisma.InputJsonValue,
+        progressJson: {
+          stage: "queued",
+          total: eligiblePins.length,
+          completed: 0,
+        } satisfies Prisma.InputJsonValue,
+      });
+
+      return {
+        queuedTaskCount: 1,
+        queuedPinCount: eligiblePins.length,
+        skippedPinCount: Math.max(0, selectedPins.length - eligiblePins.length),
+        tasks: [serializeBackgroundTaskSummary(taskResult.task)],
+        message: `Queued media upload for ${eligiblePins.length} pin${eligiblePins.length === 1 ? "" : "s"}.`,
+      };
+    },
+  );
+}
+
 export async function generateTitlesForJobPins(input: {
   userId: string;
   jobId: string;
@@ -2252,6 +2328,7 @@ export async function queueDescriptionGenerationForJobPins(input: {
 export async function scheduleJobPins(input: {
   userId: string;
   jobId: string;
+  scheduleRunId?: string;
   firstPublishAt: string;
   intervalMinutes: number;
   jitterMinutes?: number;
@@ -2385,25 +2462,47 @@ export async function scheduleJobPins(input: {
     }
   }
 
-  const scheduleRun = await prisma.scheduleRun.create({
-    data: {
-      jobId: job.id,
-      status: ScheduleRunStatus.SUBMITTING,
-      workspaceId,
-      accountId,
-      boardId: selectedBoardIds[0] ?? null,
-      firstPublishAt,
-      intervalMinutes: input.intervalMinutes,
-      jitterMinutes: input.jitterMinutes ?? 0,
-      rawResponse: {
-        boardIds: selectedBoardIds,
-        boardDistributionMode,
-        primaryBoardId,
-        primaryBoardPercent,
-      } satisfies Prisma.InputJsonValue,
-      submittedAt: new Date(),
-    },
-  });
+  const scheduleRun = input.scheduleRunId
+    ? await prisma.scheduleRun.update({
+        where: { id: input.scheduleRunId },
+        data: {
+          status: ScheduleRunStatus.SUBMITTING,
+          workspaceId,
+          accountId,
+          boardId: selectedBoardIds[0] ?? null,
+          firstPublishAt,
+          intervalMinutes: input.intervalMinutes,
+          jitterMinutes: input.jitterMinutes ?? 0,
+          rawResponse: {
+            boardIds: selectedBoardIds,
+            boardDistributionMode,
+            primaryBoardId,
+            primaryBoardPercent,
+          } satisfies Prisma.InputJsonValue,
+          submittedAt: new Date(),
+          completedAt: null,
+          errorMessage: null,
+        },
+      })
+    : await prisma.scheduleRun.create({
+        data: {
+          jobId: job.id,
+          status: ScheduleRunStatus.SUBMITTING,
+          workspaceId,
+          accountId,
+          boardId: selectedBoardIds[0] ?? null,
+          firstPublishAt,
+          intervalMinutes: input.intervalMinutes,
+          jitterMinutes: input.jitterMinutes ?? 0,
+          rawResponse: {
+            boardIds: selectedBoardIds,
+            boardDistributionMode,
+            primaryBoardId,
+            primaryBoardPercent,
+          } satisfies Prisma.InputJsonValue,
+          submittedAt: new Date(),
+        },
+      });
   const result = createStepResultAccumulator();
   result.skipped = requestedPins.length - selectedPins.length;
   const scheduleAssignments: Array<{
@@ -2652,6 +2751,96 @@ export async function scheduleJobPins(input: {
   };
         },
       ),
+  );
+}
+
+export async function queueScheduleJobPins(input: {
+  userId: string;
+  jobId: string;
+  firstPublishAt: string;
+  intervalMinutes: number;
+  jitterMinutes?: number;
+  schedulePlan?: Array<{
+    pinId: string;
+    scheduledFor: string;
+    boardId?: string;
+  }>;
+  workspaceId?: string;
+  accountId?: string;
+  boardId?: string;
+  boardIds?: string[];
+  boardDistributionMode?: "round_robin" | "first_selected" | "primary_weighted";
+  primaryBoardId?: string;
+  primaryBoardPercent?: number;
+  generatedPinIds?: string[];
+}) {
+  return runWithOperationContext(
+    {
+      action: "workflow.queue_schedule_pins",
+      userId: input.userId,
+      jobId: input.jobId,
+    },
+    async () => {
+      const scheduleRun = await prisma.scheduleRun.create({
+        data: {
+          jobId: input.jobId,
+          status: ScheduleRunStatus.DRAFT,
+          workspaceId: input.workspaceId?.trim() || null,
+          accountId: input.accountId?.trim() || null,
+          boardId: input.boardId?.trim() || null,
+          firstPublishAt: input.firstPublishAt ? new Date(input.firstPublishAt) : null,
+          intervalMinutes: input.intervalMinutes,
+          jitterMinutes: input.jitterMinutes ?? 0,
+          rawResponse: {
+            boardIds: input.boardIds ?? [],
+            boardDistributionMode: input.boardDistributionMode ?? "round_robin",
+            primaryBoardId: input.primaryBoardId?.trim() || null,
+            primaryBoardPercent: input.primaryBoardPercent ?? null,
+            generatedPinIds: input.generatedPinIds ?? [],
+          } satisfies Prisma.InputJsonValue,
+        },
+      });
+
+      const taskResult = await enqueueBackgroundTask({
+        kind: BackgroundTaskKind.SCHEDULE_PINS,
+        userId: input.userId,
+        jobId: input.jobId,
+        workspaceId: input.workspaceId?.trim() || null,
+        priority: 45,
+        dedupeKey: buildSchedulePinsTaskDedupeKey(scheduleRun.id),
+        payloadJson: {
+          userId: input.userId,
+          jobId: input.jobId,
+          scheduleRunId: scheduleRun.id,
+          firstPublishAt: input.firstPublishAt,
+          intervalMinutes: input.intervalMinutes,
+          jitterMinutes: input.jitterMinutes ?? 0,
+          schedulePlan: input.schedulePlan ?? [],
+          workspaceId: input.workspaceId?.trim() || null,
+          accountId: input.accountId?.trim() || null,
+          boardId: input.boardId?.trim() || null,
+          boardIds: input.boardIds ?? [],
+          boardDistributionMode: input.boardDistributionMode ?? "round_robin",
+          primaryBoardId: input.primaryBoardId?.trim() || null,
+          primaryBoardPercent: input.primaryBoardPercent ?? null,
+          generatedPinIds: input.generatedPinIds ?? [],
+        } satisfies Prisma.InputJsonValue,
+        progressJson: {
+          stage: "queued",
+          total: input.generatedPinIds?.length ?? 0,
+          completed: 0,
+          scheduleRunId: scheduleRun.id,
+        } satisfies Prisma.InputJsonValue,
+      });
+
+      return {
+        scheduleRunId: scheduleRun.id,
+        queuedTaskCount: 1,
+        queuedPinCount: input.generatedPinIds?.length ?? 0,
+        tasks: [serializeBackgroundTaskSummary(taskResult.task)],
+        message: `Queued scheduling for ${(input.generatedPinIds?.length ?? 0)} pin${(input.generatedPinIds?.length ?? 0) === 1 ? "" : "s"}.`,
+      };
+    },
   );
 }
 

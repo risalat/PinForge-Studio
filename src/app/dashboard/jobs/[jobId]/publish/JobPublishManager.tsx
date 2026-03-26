@@ -144,16 +144,16 @@ type PublerOptionsResponse = {
 type BoardDistributionMode = "round_robin" | "first_selected" | "primary_weighted";
 const TITLE_MAX_LENGTH = 100;
 const DESCRIPTION_MAX_LENGTH = 500;
-const TITLE_ACTION_CHUNK_SIZE = 4;
-const DESCRIPTION_ACTION_CHUNK_SIZE = 5;
 
 type PublishStatusResponse = {
   ok: boolean;
   error?: string;
   jobStatus?: string;
   pins?: PinItem[];
+  uploadTasks?: TitleTaskItem[];
   titleTasks?: TitleTaskItem[];
   descriptionTasks?: TitleTaskItem[];
+  scheduleTasks?: TitleTaskItem[];
   latestScheduleRun?: JobPublishManagerProps["latestScheduleRun"];
 };
 
@@ -177,6 +177,7 @@ type QueueTitleGenerationResult = {
   skippedPinCount: number;
   message: string;
   tasks: TitleTaskItem[];
+  scheduleRunId?: string;
 };
 
 export function JobPublishManager({
@@ -194,10 +195,14 @@ export function JobPublishManager({
   const { notify, updateNotification, dismissNotification } = useAppFeedback();
   const [livePins, setLivePins] = useState<PinItem[]>(pins);
   const [liveLatestScheduleRun, setLiveLatestScheduleRun] = useState(latestScheduleRun);
+  const [uploadTasks, setUploadTasks] = useState<TitleTaskItem[]>([]);
+  const [trackedUploadTaskIds, setTrackedUploadTaskIds] = useState<string[]>([]);
   const [titleTasks, setTitleTasks] = useState<TitleTaskItem[]>([]);
   const [trackedTitleTaskIds, setTrackedTitleTaskIds] = useState<string[]>([]);
   const [descriptionTasks, setDescriptionTasks] = useState<TitleTaskItem[]>([]);
   const [trackedDescriptionTaskIds, setTrackedDescriptionTaskIds] = useState<string[]>([]);
+  const [scheduleTasks, setScheduleTasks] = useState<TitleTaskItem[]>([]);
+  const [trackedScheduleTaskIds, setTrackedScheduleTaskIds] = useState<string[]>([]);
   const [expandedDescriptionPinIds, setExpandedDescriptionPinIds] = useState<string[]>([]);
   const [copyState, setCopyState] = useState(
     pins.map((pin) => ({
@@ -257,7 +262,6 @@ export function JobPublishManager({
   const [hasLoadedSavedDestination, setHasLoadedSavedDestination] = useState(false);
   const [isPending, startTransition] = useTransition();
   const uploadProgressToastIdRef = useRef<string | null>(null);
-  const copyProgressToastIdRef = useRef<string | null>(null);
   const hasInitializedOptionsRef = useRef(false);
   const currentPins = livePins;
   const isUploadingMedia = activeAction === "upload_media";
@@ -418,6 +422,10 @@ export function JobPublishManager({
     () => orderedPins.filter((pin) => !isPinReadyForTitleWork(pin)),
     [orderedPins],
   );
+  const activeUploadTasks = useMemo(
+    () => uploadTasks.filter((task) => ["QUEUED", "RUNNING"].includes(task.status)),
+    [uploadTasks],
+  );
   const activeTitleTasks = useMemo(
     () => titleTasks.filter((task) => ["QUEUED", "RUNNING"].includes(task.status)),
     [titleTasks],
@@ -425,6 +433,10 @@ export function JobPublishManager({
   const activeDescriptionTasks = useMemo(
     () => descriptionTasks.filter((task) => ["QUEUED", "RUNNING"].includes(task.status)),
     [descriptionTasks],
+  );
+  const activeScheduleTasks = useMemo(
+    () => scheduleTasks.filter((task) => ["QUEUED", "RUNNING"].includes(task.status)),
+    [scheduleTasks],
   );
 
   const selectedPins = useMemo(
@@ -766,16 +778,22 @@ export function JobPublishManager({
   }, [schedulePreview, selectedBoardIds]);
 
   useEffect(() => {
-    if (uploadTracking?.active || activeAction) {
+    if (activeAction && activeAction !== "upload_media" && activeAction !== "schedule") {
       return;
     }
 
-    const shouldPollUploads = currentPins.some((pin) => pin.mediaStatus === "UPLOADING");
+    const shouldPollUploads =
+      currentPins.some((pin) => pin.mediaStatus === "UPLOADING") ||
+      trackedUploadTaskIds.length > 0 ||
+      activeUploadTasks.length > 0 ||
+      Boolean(uploadTracking?.active);
     const shouldPollTitleTasks = trackedTitleTaskIds.length > 0 || activeTitleTasks.length > 0;
     const shouldPollDescriptionTasks =
       trackedDescriptionTaskIds.length > 0 || activeDescriptionTasks.length > 0;
+    const shouldPollScheduleTasks =
+      trackedScheduleTaskIds.length > 0 || activeScheduleTasks.length > 0;
 
-    if (!shouldPollUploads && !shouldPollTitleTasks && !shouldPollDescriptionTasks) {
+    if (!shouldPollUploads && !shouldPollTitleTasks && !shouldPollDescriptionTasks && !shouldPollScheduleTasks) {
       return;
     }
 
@@ -801,8 +819,44 @@ export function JobPublishManager({
           setCopyState((current) => mergeCopyStateWithPins(current, data.pins ?? []));
           setTitleCandidatesByPinId(buildTitleCandidatesByPinId(data.pins));
         }
+        setUploadTasks(data.uploadTasks ?? []);
         setTitleTasks(data.titleTasks ?? []);
         setDescriptionTasks(data.descriptionTasks ?? []);
+        setScheduleTasks(data.scheduleTasks ?? []);
+
+        if (!isCancelled && trackedUploadTaskIds.length > 0 && data.uploadTasks) {
+          const trackedTasks = data.uploadTasks.filter((task) => trackedUploadTaskIds.includes(task.id));
+          if (trackedTasks.length > 0 && trackedTasks.every((task) => ["SUCCEEDED", "FAILED"].includes(task.status))) {
+            const failedTaskCount = trackedTasks.filter((task) => task.status === "FAILED").length;
+            const uploadedPins = data.pins ?? [];
+            const failedPinIds = uploadedPins
+              .filter((pin) => trackedUploadPins.some((trackedPin) => trackedPin.id === pin.id) && pin.mediaStatus === "FAILED")
+              .map((pin) => pin.id);
+
+            setTrackedUploadTaskIds([]);
+            setUploadTracking((current) =>
+              current
+                ? {
+                    ...current,
+                    active: false,
+                  }
+                : null,
+            );
+            if (failedPinIds.length > 0) {
+              setSelectedPinIds(failedPinIds);
+            }
+            setSectionFeedback((current) => ({
+              ...current,
+              upload: {
+                tone: failedTaskCount > 0 || failedPinIds.length > 0 ? "warning" : "success",
+                message:
+                  failedTaskCount > 0 || failedPinIds.length > 0
+                    ? "Media upload finished with issues. Failed pins are selected so you can retry them."
+                    : "Media upload finished successfully.",
+              },
+            }));
+          }
+        }
 
         if (!isCancelled && trackedTitleTaskIds.length > 0 && data.titleTasks) {
           const trackedTasks = data.titleTasks.filter((task) => trackedTitleTaskIds.includes(task.id));
@@ -859,6 +913,41 @@ export function JobPublishManager({
             });
           }
         }
+        if (!isCancelled && trackedScheduleTaskIds.length > 0 && data.scheduleTasks) {
+          const trackedTasks = data.scheduleTasks.filter((task) =>
+            trackedScheduleTaskIds.includes(task.id),
+          );
+          if (trackedTasks.length > 0 && trackedTasks.every((task) => ["SUCCEEDED", "FAILED"].includes(task.status))) {
+            const failedTaskCount = trackedTasks.filter((task) => task.status === "FAILED").length;
+            setTrackedScheduleTaskIds([]);
+            setSectionFeedback((current) => ({
+              ...current,
+              schedule: {
+                tone: failedTaskCount > 0 ? "warning" : "success",
+                message:
+                  failedTaskCount > 0
+                    ? `Scheduling finished with ${failedTaskCount} failed task${failedTaskCount === 1 ? "" : "s"}. Review failed schedule items below.`
+                    : "Scheduling finished successfully.",
+              },
+            }));
+            notify({
+              tone: failedTaskCount > 0 ? "info" : "success",
+              title: failedTaskCount > 0 ? "Scheduling finished with issues" : "Scheduling complete",
+              message:
+                failedTaskCount > 0
+                  ? "Some selected pins still need scheduling attention."
+                  : "Selected pins were scheduled successfully.",
+            });
+            if (data.latestScheduleRun?.status === "FAILED") {
+              const failedPinIds = (data.pins ?? [])
+                .filter((pin) => pin.scheduleStatus === "FAILED")
+                .map((pin) => pin.id);
+              if (failedPinIds.length > 0) {
+                setSelectedPinIds(failedPinIds);
+              }
+            }
+          }
+        }
       } catch {
         // Keep the last known UI state if polling fails temporarily.
       } finally {
@@ -880,12 +969,17 @@ export function JobPublishManager({
   }, [
     activeAction,
     activeDescriptionTasks.length,
+    activeScheduleTasks.length,
     activeTitleTasks.length,
+    activeUploadTasks.length,
     currentPins,
     jobId,
     notify,
     trackedDescriptionTaskIds,
+    trackedUploadPins,
+    trackedScheduleTaskIds,
     trackedTitleTaskIds,
+    trackedUploadTaskIds,
     uploadTracking,
   ]);
 
@@ -1135,292 +1229,30 @@ export function JobPublishManager({
     return data.result;
   }
 
-  function createEmptyPublishResult(message: string): PublishActionResult {
-    return {
-      processed: 0,
-      succeeded: 0,
-      failed: 0,
-      skipped: 0,
-      message,
-      failures: [],
-    };
-  }
-
-  async function handlePinBatchAction(input: {
-    action: "upload_media" | "generate_titles" | "generate_descriptions";
+  async function queueUploadMedia(input: {
     generatedPinIds: string[];
-    workspaceId?: string;
-    aiCredentialId?: string;
-    fallbackMessage: string;
-    section: PublishSectionKey;
   }) {
-    startTransition(async () => {
-      const result = createEmptyPublishResult(input.fallbackMessage);
-      let progressToastId: string | null = null;
-
-      try {
-        setSectionFeedback((current) => ({
-          ...current,
-          [input.section]: null,
-        }));
-        setActiveAction(input.action);
-
-        if (input.action === "upload_media") {
-          setUploadTracking({
-            active: true,
-            pinIds: input.generatedPinIds,
-          });
-          setLivePins((current) =>
-            current.map((pin) =>
-              input.generatedPinIds.includes(pin.id) && pin.mediaStatus !== "UPLOADED"
-                ? {
-                    ...pin,
-                    mediaStatus: "UPLOADING",
-                    mediaError: null,
-                  }
-                : pin,
-            ),
-          );
-        } else {
-          const title =
-            input.action === "generate_titles"
-              ? `0 of ${input.generatedPinIds.length} titles generated`
-              : `0 of ${input.generatedPinIds.length} descriptions generated`;
-          const message =
-            input.action === "generate_titles"
-              ? "Preparing title generation."
-              : "Preparing description generation.";
-          progressToastId = notify({
-            tone: "progress",
-            title,
-            message,
-            sticky: true,
-          });
-          copyProgressToastIdRef.current = progressToastId;
-        }
-
-        const pinIdChunks =
-          input.action === "upload_media"
-            ? input.generatedPinIds.map((pinId) => [pinId])
-            : chunkPinIds(
-                input.generatedPinIds,
-                input.action === "generate_titles"
-                  ? TITLE_ACTION_CHUNK_SIZE
-                  : DESCRIPTION_ACTION_CHUNK_SIZE,
-              );
-
-        let completedPins = 0;
-
-        for (const [chunkIndex, pinIdChunk] of pinIdChunks.entries()) {
-          if (progressToastId) {
-            updateNotification(progressToastId, {
-              tone: "progress",
-              title:
-                input.action === "generate_titles"
-                  ? `${completedPins} of ${input.generatedPinIds.length} titles generated`
-                  : `${completedPins} of ${input.generatedPinIds.length} descriptions generated`,
-              message: buildChunkProgressMessage({
-                action:
-                  input.action === "generate_titles"
-                    ? "generate_titles"
-                    : "generate_descriptions",
-                completed: completedPins,
-                total: input.generatedPinIds.length,
-                currentChunk: chunkIndex + 1,
-                chunkCount: pinIdChunks.length,
-                chunkPinIds: pinIdChunk,
-                pins: currentPins,
-              }),
-              sticky: true,
-            });
-          }
-
-          try {
-            const nextResult = await runAction({
-              action: input.action,
-              generatedPinIds: pinIdChunk,
-              ...(input.action !== "upload_media" && input.aiCredentialId
-                ? { aiCredentialId: input.aiCredentialId }
-                : {}),
-              ...(input.action === "upload_media" && input.workspaceId
-                ? { workspaceId: input.workspaceId }
-                : {}),
-            });
-
-            result.processed += nextResult?.processed ?? 0;
-            result.succeeded += nextResult?.succeeded ?? 0;
-            result.failed += nextResult?.failed ?? 0;
-            result.skipped += nextResult?.skipped ?? 0;
-            result.failures.push(...(nextResult?.failures ?? []));
-            const generatedTitleOptions = nextResult?.generatedTitleOptions ?? [];
-            if (generatedTitleOptions.length > 0) {
-              result.generatedTitleOptions = [
-                ...(result.generatedTitleOptions ?? []),
-                ...generatedTitleOptions,
-              ];
-              setTitleCandidatesByPinId((current) => ({
-                ...current,
-                ...Object.fromEntries(
-                  generatedTitleOptions.map((item) => [item.pinId, item.titles]),
-                ),
-              }));
-            }
-          } catch (error) {
-            result.processed += pinIdChunk.length;
-            result.failed += pinIdChunk.length;
-            result.failures.push(
-              ...pinIdChunk.map((pinId) => ({
-                pinId,
-                reason: error instanceof Error ? error.message : input.fallbackMessage,
-              })),
-            );
-          }
-
-          completedPins = Math.min(
-            input.generatedPinIds.length,
-            result.succeeded + result.failed + result.skipped,
-          );
-          await refreshPublishSnapshot().catch(() => null);
-        }
-
-        result.message =
-          input.action === "generate_titles"
-            ? `Generated titles for ${result.succeeded} pin${result.succeeded === 1 ? "" : "s"}.`
-            : input.action === "generate_descriptions"
-              ? `Generated descriptions for ${result.succeeded} pin${result.succeeded === 1 ? "" : "s"}.`
-              : `Uploaded ${result.succeeded} pin${result.succeeded === 1 ? "" : "s"}.`;
-
-        if (progressToastId) {
-          dismissNotification(progressToastId);
-          copyProgressToastIdRef.current = null;
-        }
-
-        const pins = await refreshPublishSnapshot().catch(() => null);
-        if (input.action === "upload_media") {
-          const evaluatedPins = pins ?? currentPins;
-          const remainingPinIds = evaluatedPins
-            .filter(
-              (pin) =>
-                input.generatedPinIds.includes(pin.id) && pin.mediaStatus !== "UPLOADED",
-            )
-            .map((pin) => pin.id);
-          const failedPinIds = evaluatedPins
-            .filter(
-              (pin) =>
-                input.generatedPinIds.includes(pin.id) && pin.mediaStatus === "FAILED",
-            )
-            .map((pin) => pin.id);
-
-          if (remainingPinIds.length > 0) {
-            setSelectedPinIds(remainingPinIds);
-          }
-
-          setSectionFeedback((current) => ({
-            ...current,
-            upload: {
-              tone: remainingPinIds.length > 0 ? "warning" : "success",
-              message:
-                remainingPinIds.length > 0
-                  ? buildUploadRecoveryMessage({
-                      uploadedCount: result.succeeded,
-                      remainingCount: remainingPinIds.length,
-                      failedCount: failedPinIds.length,
-                      pendingCount: Math.max(0, remainingPinIds.length - failedPinIds.length),
-                    })
-                  : `${result.succeeded} pin${result.succeeded === 1 ? "" : "s"} uploaded successfully.`,
-            },
-          }));
-
-          notify({
-            tone: remainingPinIds.length > 0 ? "info" : "success",
-            title:
-              remainingPinIds.length > 0
-                ? "Upload finished with remaining pins"
-                : "Media upload complete",
-            message:
-              remainingPinIds.length > 0
-                ? `${result.succeeded} uploaded. ${remainingPinIds.length} still need attention.`
-                : `${result.succeeded} pin${result.succeeded === 1 ? "" : "s"} uploaded to Publer.`,
-          });
-        } else {
-          const failedPinIds = Array.from(
-            new Set(
-              (result.failures ?? [])
-                .map((failure) => failure.pinId)
-                .filter((pinId) => input.generatedPinIds.includes(pinId)),
-            ),
-          );
-
-          if (failedPinIds.length > 0) {
-            setSelectedPinIds(failedPinIds);
-          }
-
-          setSectionFeedback((current) => ({
-            ...current,
-            [input.section]: {
-              tone: result.failed > 0 ? "warning" : "success",
-              message:
-                result.failed > 0
-                  ? `${result.succeeded} completed, ${result.failed} failed. Failed pins are selected so retry runs only on them.`
-                  : result.message,
-            },
-          }));
-        }
-
-        if (input.action === "generate_titles" || input.action === "generate_descriptions") {
-          notify({
-            tone: result.failed > 0 ? "info" : "success",
-            title:
-              input.action === "generate_titles"
-                ? "Title generation complete"
-                : "Description generation complete",
-            message:
-              result.failed > 0
-                ? `${result.succeeded} completed, ${result.failed} failed. Failed pins are selected for retry.`
-                : result.message,
-          });
-        }
-      } catch (error) {
-        if (progressToastId) {
-          dismissNotification(progressToastId);
-          copyProgressToastIdRef.current = null;
-        }
-        setSectionFeedback((current) => ({
-          ...current,
-          [input.section]: {
-            tone: "error",
-            message: error instanceof Error ? error.message : input.fallbackMessage,
-          },
-        }));
-        notify({
-          tone: "error",
-          title:
-            input.action === "upload_media"
-              ? "Media upload failed"
-              : input.action === "generate_titles"
-                ? "Title generation failed"
-                : "Description generation failed",
-          message: error instanceof Error ? error.message : input.fallbackMessage,
-          sticky: true,
-        });
-      } finally {
-        if (input.action === "upload_media") {
-          setUploadTracking((current) =>
-            current
-              ? {
-                  ...current,
-                  active: false,
-                }
-              : null,
-          );
-        }
-        if (copyProgressToastIdRef.current) {
-          dismissNotification(copyProgressToastIdRef.current);
-          copyProgressToastIdRef.current = null;
-        }
-        setActiveAction(null);
-      }
+    const response = await fetch(`/api/dashboard/jobs/${jobId}/publish`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "upload_media",
+        generatedPinIds: input.generatedPinIds,
+        workspaceId,
+      }),
     });
+    const rawBody = await response.text();
+    const data = parsePublishActionResponse(rawBody) as {
+      ok?: boolean;
+      error?: string;
+      result?: QueueTitleGenerationResult;
+    };
+
+    if (!response.ok || !data.ok || !data.result) {
+      throw new Error(data.error ?? extractResponseErrorMessage(rawBody) ?? "Unable to queue media upload.");
+    }
+
+    return data.result;
   }
 
   const refreshPublishSnapshot = useCallback(async () => {
@@ -1440,8 +1272,10 @@ export function JobPublishManager({
       setCopyState((current) => mergeCopyStateWithPins(current, data.pins ?? []));
       setTitleCandidatesByPinId(buildTitleCandidatesByPinId(data.pins));
     }
+    setUploadTasks(data.uploadTasks ?? []);
     setTitleTasks(data.titleTasks ?? []);
     setDescriptionTasks(data.descriptionTasks ?? []);
+    setScheduleTasks(data.scheduleTasks ?? []);
 
     return data.pins ?? null;
   }, [jobId]);
@@ -1782,12 +1616,77 @@ function formatDateLabel(value: string) {
 }
 
   function triggerUploadSelected() {
-    void handlePinBatchAction({
-      action: "upload_media",
-      generatedPinIds: selectedPinIds,
-      workspaceId,
-      fallbackMessage: "Unable to upload media.",
-      section: "upload",
+    void triggerQueueUpload(selectedPinIds);
+  }
+
+  function triggerQueueUpload(generatedPinIds: string[]) {
+    startTransition(async () => {
+      try {
+        setSectionFeedback((current) => ({
+          ...current,
+          upload: null,
+        }));
+        setActiveAction("upload_media");
+        setUploadTracking({
+          active: true,
+          pinIds: generatedPinIds,
+        });
+        setLivePins((current) =>
+          current.map((pin) =>
+            generatedPinIds.includes(pin.id) && pin.mediaStatus !== "UPLOADED"
+              ? {
+                  ...pin,
+                  mediaStatus: "UPLOADING",
+                  mediaError: null,
+                }
+              : pin,
+          ),
+        );
+
+        const result = await queueUploadMedia({
+          generatedPinIds,
+        });
+
+        setUploadTasks(result.tasks);
+        setTrackedUploadTaskIds(result.tasks.map((task) => task.id));
+        setSectionFeedback((current) => ({
+          ...current,
+          upload: {
+            tone: "success",
+            message: result.message,
+          },
+        }));
+        notify({
+          tone: "success",
+          title: "Media upload queued",
+          message: result.message,
+        });
+        await refreshPublishSnapshot().catch(() => null);
+      } catch (error) {
+        setUploadTracking((current) =>
+          current
+            ? {
+                ...current,
+                active: false,
+              }
+            : null,
+        );
+        setSectionFeedback((current) => ({
+          ...current,
+          upload: {
+            tone: "error",
+            message: error instanceof Error ? error.message : "Unable to queue media upload.",
+          },
+        }));
+        notify({
+          tone: "error",
+          title: "Media upload failed",
+          message: error instanceof Error ? error.message : "Unable to queue media upload.",
+          sticky: true,
+        });
+      } finally {
+        setActiveAction(null);
+      }
     });
   }
 
@@ -1874,6 +1773,49 @@ function formatDateLabel(value: string) {
     return data.result;
   }
 
+  async function queueScheduleAction(input: {
+    generatedPinIds: string[];
+    firstPublishAt: string;
+    intervalMinutes: number;
+    jitterMinutes: number;
+    schedulePlan: Array<{
+      pinId: string;
+      scheduledFor: string;
+      boardId?: string;
+    }>;
+  }) {
+    const response = await fetch(`/api/dashboard/jobs/${jobId}/publish`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "schedule",
+        generatedPinIds: input.generatedPinIds,
+        firstPublishAt: input.firstPublishAt,
+        intervalMinutes: input.intervalMinutes,
+        jitterMinutes: input.jitterMinutes,
+        schedulePlan: input.schedulePlan,
+        workspaceId,
+        accountId,
+        boardIds: selectedBoardIds,
+        boardDistributionMode,
+        primaryBoardId,
+        primaryBoardPercent,
+      }),
+    });
+    const rawBody = await response.text();
+    const data = parsePublishActionResponse(rawBody) as {
+      ok?: boolean;
+      error?: string;
+      result?: QueueTitleGenerationResult;
+    };
+
+    if (!response.ok || !data.ok || !data.result) {
+      throw new Error(data.error ?? extractResponseErrorMessage(rawBody) ?? "Unable to queue scheduling.");
+    }
+
+    return data.result;
+  }
+
   function triggerGenerateDescriptions() {
     void triggerQueueGenerateDescriptions(selectedDescriptionReadyPins.map((pin) => pin.id));
   }
@@ -1921,6 +1863,63 @@ function formatDateLabel(value: string) {
           title: "Description generation failed",
           message:
             error instanceof Error ? error.message : "Unable to queue description generation.",
+          sticky: true,
+        });
+      } finally {
+        setActiveAction(null);
+      }
+    });
+  }
+
+  function triggerQueueSchedule() {
+    startTransition(async () => {
+      try {
+        setSectionFeedback((current) => ({
+          ...current,
+          schedule: null,
+        }));
+        setActiveAction("schedule");
+
+        const result = await queueScheduleAction({
+          generatedPinIds: selectedPinIds,
+          firstPublishAt,
+          intervalMinutes: intervalDays * 24 * 60,
+          jitterMinutes: jitterDays * 24 * 60,
+          schedulePlan: schedulePreview.map((item) => ({
+            pinId: item.pinId,
+            scheduledFor: item.scheduledFor.toISOString(),
+            boardId:
+              schedulePreviewRows.find((row) => row.pinId === item.pinId)?.assignedBoardId,
+          })),
+        });
+
+        setScheduleTasks(result.tasks);
+        setTrackedScheduleTaskIds(result.tasks.map((task) => task.id));
+        setSectionFeedback((current) => ({
+          ...current,
+          schedule: {
+            tone: "success",
+            message: result.message,
+          },
+        }));
+        notify({
+          tone: "success",
+          title: "Scheduling queued",
+          message: result.message,
+        });
+        await refreshPublishSnapshot().catch(() => null);
+      } catch (error) {
+        setSectionFeedback((current) => ({
+          ...current,
+          schedule: {
+            tone: "error",
+            message: error instanceof Error ? error.message : "Unable to queue scheduling.",
+          },
+        }));
+        notify({
+          tone: "error",
+          title: "Scheduling failed",
+          message: error instanceof Error ? error.message : "Unable to queue scheduling.",
           sticky: true,
         });
       } finally {
@@ -2425,7 +2424,8 @@ function formatDateLabel(value: string) {
             onToggle={() => toggleStepCollapsed("upload")}
             summary={
               <>
-                {summary.uploaded} uploaded - {summary.mediaFailed} failed
+                <StepSummaryPill label={`${summary.uploaded} uploaded`} />
+                <StepSummaryPill label={`${summary.mediaFailed} failed`} tone={summary.mediaFailed > 0 ? "warning" : "neutral"} />
               </>
             }
           >
@@ -2469,13 +2469,7 @@ function formatDateLabel(value: string) {
                     return;
                   }
                   setSelectedPinIds(failedPinIds);
-                  void handlePinBatchAction({
-                    action: "upload_media",
-                    generatedPinIds: failedPinIds,
-                    workspaceId,
-                    fallbackMessage: "Unable to retry failed uploads.",
-                    section: "upload",
-                  });
+                  void triggerQueueUpload(failedPinIds);
                 }}
                 disabled={
                   isPending ||
@@ -2505,6 +2499,30 @@ function formatDateLabel(value: string) {
               </button>
             </div>
             {sectionFeedback.upload ? <SectionFeedback feedback={sectionFeedback.upload} className="mt-4" /> : null}
+
+            {activeUploadTasks.length > 0 ? (
+              <div className="mt-4 rounded-2xl border border-[var(--dashboard-accent-border)] bg-[linear-gradient(135deg,#ffffff_0%,#eef4ff_100%)] p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--dashboard-accent-strong)]">
+                      Media upload running
+                    </p>
+                    <p className="mt-2 text-sm text-[var(--dashboard-subtle)]">
+                      {activeUploadTasks.length} batch{activeUploadTasks.length === 1 ? "" : "es"} queued or running in the worker.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {activeUploadTasks.map((task) => (
+                      <StatusChip
+                        key={task.id}
+                        label={`${formatLabel(task.status)} ${task.progressJson?.completed ?? 0}/${task.progressJson?.total ?? task.payloadJson?.generatedPinIds?.length ?? 0}`}
+                        tone={task.status === "FAILED" ? "bad" : task.status === "SUCCEEDED" ? "good" : "warning"}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ) : null}
 
             <div className="mt-4 rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-alt)] p-4">
               <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-[var(--dashboard-subtle)]">
@@ -2573,12 +2591,12 @@ function formatDateLabel(value: string) {
           </StepSection>
 
           <section className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-5 shadow-[var(--dashboard-shadow-sm)]">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div>
+            <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-[var(--dashboard-accent-border)] bg-[var(--dashboard-accent-soft)] px-4 py-4">
+              <div className="flex items-center gap-3">
+                <span className="rounded-full border border-[var(--dashboard-accent-border)] bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--dashboard-accent-strong)]">
+                  AI
+                </span>
                 <h2 className="text-xl font-bold">AI credential</h2>
-                <p className="mt-1 text-sm text-[var(--dashboard-subtle)]">
-                  Titles and descriptions use the selected saved key.
-                </p>
               </div>
               <div className="min-w-[280px]">
                 <select
@@ -2605,15 +2623,14 @@ function formatDateLabel(value: string) {
           <StepSection
             id="publish-titles"
             title="Step 2 - Titles"
-            description="Generate title options in background batches, then choose or override the best one per pin."
             collapsed={collapsedSteps.titles}
             onToggle={() => toggleStepCollapsed("titles")}
             summary={
               <>
-                <span>{titleReadyForGenerationPins.length} ready</span>
-                <span>{titleReadyForSelectionPins.length} ready to pick</span>
-                <span>{titleFinalizedPins.length} finalized</span>
-                <span>{titleNotReadyPins.length} not ready</span>
+                <StepSummaryPill label={`${titleReadyForGenerationPins.length} ready`} />
+                <StepSummaryPill label={`${titleReadyForSelectionPins.length} ready to pick`} tone={titleReadyForSelectionPins.length > 0 ? "good" : "neutral"} />
+                <StepSummaryPill label={`${titleFinalizedPins.length} finalized`} tone={titleFinalizedPins.length > 0 ? "good" : "neutral"} />
+                <StepSummaryPill label={`${titleNotReadyPins.length} not ready`} tone={titleNotReadyPins.length > 0 ? "warning" : "neutral"} />
               </>
             }
           >
@@ -2711,12 +2728,7 @@ function formatDateLabel(value: string) {
             <div className="mt-5 space-y-5">
               <article className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <h3 className="text-base font-bold text-[var(--dashboard-text)]">Ready for title generation</h3>
-                    <p className="mt-1 text-sm text-[var(--dashboard-subtle)]">
-                      Rendered pins with usable artwork that still need title options.
-                    </p>
-                  </div>
+                  <h3 className="text-base font-bold text-[var(--dashboard-text)]">Ready for title generation</h3>
                   <StatusChip label={`${titleReadyForGenerationPins.length} pins`} tone="neutral" />
                 </div>
                 {titleReadyForGenerationPins.length === 0 ? (
@@ -2786,12 +2798,7 @@ function formatDateLabel(value: string) {
 
               <article className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <h3 className="text-base font-bold text-[var(--dashboard-text)]">Titles ready for selection</h3>
-                    <p className="mt-1 text-sm text-[var(--dashboard-subtle)]">
-                      Pick the best option, edit it if needed, then save your title choices.
-                    </p>
-                  </div>
+                  <h3 className="text-base font-bold text-[var(--dashboard-text)]">Titles ready for selection</h3>
                   <StatusChip label={`${titleReadyForSelectionPins.length} pins`} tone="good" />
                 </div>
                 {titleReadyForSelectionPins.length === 0 ? (
@@ -2902,12 +2909,7 @@ function formatDateLabel(value: string) {
 
               <article className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <h3 className="text-base font-bold text-[var(--dashboard-text)]">Finalized titles</h3>
-                    <p className="mt-1 text-sm text-[var(--dashboard-subtle)]">
-                      These pins already have a chosen publish title and do not need Step 2 attention.
-                    </p>
-                  </div>
+                  <h3 className="text-base font-bold text-[var(--dashboard-text)]">Finalized titles</h3>
                   <StatusChip label={`${titleFinalizedPins.length} pins`} tone="good" />
                 </div>
                 {titleFinalizedPins.length === 0 ? (
@@ -2921,12 +2923,7 @@ function formatDateLabel(value: string) {
 
               <article className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <h3 className="text-base font-bold text-[var(--dashboard-text)]">Not ready</h3>
-                    <p className="mt-1 text-sm text-[var(--dashboard-subtle)]">
-                      These pins are separated from title generation because the artwork still needs attention.
-                    </p>
-                  </div>
+                  <h3 className="text-base font-bold text-[var(--dashboard-text)]">Not ready</h3>
                   <StatusChip label={`${titleNotReadyPins.length} pins`} tone="warning" />
                 </div>
                 {titleNotReadyPins.length === 0 ? (
@@ -2966,14 +2963,13 @@ function formatDateLabel(value: string) {
           <StepSection
             id="publish-descriptions"
             title="Step 3 - Descriptions"
-            description="Keep descriptions mostly invisible. Generate them in background for ready pins, then only expand pins that need attention."
             collapsed={collapsedSteps.descriptions}
             onToggle={() => toggleStepCollapsed("descriptions")}
             summary={
               <>
-                <span>{descriptionReadyForGenerationPins.length} ready</span>
-                <span>{descriptionNeedsAttentionPins.length} need attention</span>
-                <span>{summary.descriptionsReady} completed</span>
+                <StepSummaryPill label={`${descriptionReadyForGenerationPins.length} ready`} />
+                <StepSummaryPill label={`${descriptionNeedsAttentionPins.length} need attention`} tone={descriptionNeedsAttentionPins.length > 0 ? "warning" : "neutral"} />
+                <StepSummaryPill label={`${summary.descriptionsReady} completed`} tone={summary.descriptionsReady > 0 ? "good" : "neutral"} />
               </>
             }
           >
@@ -3068,12 +3064,7 @@ function formatDateLabel(value: string) {
 
             <div className="mt-5 rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h3 className="text-base font-bold text-[var(--dashboard-text)]">Needs attention</h3>
-                  <p className="mt-1 text-sm text-[var(--dashboard-subtle)]">
-                    Only pins with missing or failed descriptions show up here by default.
-                  </p>
-                </div>
+                <h3 className="text-base font-bold text-[var(--dashboard-text)]">Needs attention</h3>
                 <StatusChip label={`${descriptionNeedsAttentionPins.length} pins`} tone={descriptionNeedsAttentionPins.length > 0 ? "warning" : "good"} />
               </div>
               {descriptionNeedsAttentionPins.length === 0 ? (
@@ -3179,12 +3170,8 @@ function formatDateLabel(value: string) {
             onToggle={() => toggleStepCollapsed("schedule")}
             summary={
               <>
-                <p>
-                  <strong>{summary.scheduled}</strong> scheduled
-                </p>
-                <p>
-                  <strong>{summary.scheduleFailed}</strong> failed
-                </p>
+                <StepSummaryPill label={`${summary.scheduled} scheduled`} tone={summary.scheduled > 0 ? "good" : "neutral"} />
+                <StepSummaryPill label={`${summary.scheduleFailed} failed`} tone={summary.scheduleFailed > 0 ? "warning" : "neutral"} />
               </>
             }
           >
@@ -3316,34 +3303,34 @@ function formatDateLabel(value: string) {
             </div>
             {sectionFeedback.schedule ? <SectionFeedback feedback={sectionFeedback.schedule} className="mt-4" /> : null}
 
+            {activeScheduleTasks.length > 0 ? (
+              <div className="mt-4 rounded-2xl border border-[var(--dashboard-accent-border)] bg-[linear-gradient(135deg,#ffffff_0%,#eef4ff_100%)] p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--dashboard-accent-strong)]">
+                      Scheduling running
+                    </p>
+                    <p className="mt-2 text-sm text-[var(--dashboard-subtle)]">
+                      {activeScheduleTasks.length} task{activeScheduleTasks.length === 1 ? "" : "s"} queued or running in the worker.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {activeScheduleTasks.map((task) => (
+                      <StatusChip
+                        key={task.id}
+                        label={`${formatLabel(task.status)} ${task.progressJson?.completed ?? 0}/${task.progressJson?.total ?? task.payloadJson?.generatedPinIds?.length ?? 0}`}
+                        tone={task.status === "FAILED" ? "bad" : task.status === "SUCCEEDED" ? "good" : "warning"}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
             <div className="mt-4 flex flex-wrap gap-3">
               <button
                 type="button"
-                onClick={() =>
-                  handleAction(
-                    {
-                      action: "schedule",
-                      generatedPinIds: selectedPinIds,
-                      firstPublishAt,
-                      intervalMinutes: intervalDays * 24 * 60,
-                      jitterMinutes: jitterDays * 24 * 60,
-                      schedulePlan: schedulePreview.map((item) => ({
-                        pinId: item.pinId,
-                        scheduledFor: item.scheduledFor.toISOString(),
-                        boardId:
-                          schedulePreviewRows.find((row) => row.pinId === item.pinId)?.assignedBoardId,
-                      })),
-                      workspaceId,
-                      accountId,
-                      boardIds: selectedBoardIds,
-                      boardDistributionMode,
-                      primaryBoardId,
-                      primaryBoardPercent,
-                    },
-                    "Unable to schedule pins.",
-                    "schedule",
-                  )
-                }
+                onClick={triggerQueueSchedule}
                 disabled={
                   isPending ||
                   !firstPublishAt ||
@@ -3618,7 +3605,6 @@ function StepSection({
   id,
   title,
   summary,
-  description,
   collapsed,
   onToggle,
   children,
@@ -3626,7 +3612,6 @@ function StepSection({
   id: string;
   title: string;
   summary?: import("react").ReactNode;
-  description?: import("react").ReactNode;
   collapsed: boolean;
   onToggle: () => void;
   children: import("react").ReactNode;
@@ -3636,19 +3621,19 @@ function StepSection({
       id={id}
       className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-5 shadow-[var(--dashboard-shadow-sm)]"
     >
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-bold">{title}</h2>
-          {description ? (
-            <div className="mt-1 text-sm text-[var(--dashboard-subtle)]">{description}</div>
+      <div className="flex items-center justify-between gap-4">
+        <h2 className="min-w-0 truncate whitespace-nowrap text-xl font-bold">{title}</h2>
+        <div className="ml-auto flex min-w-0 items-center gap-3 overflow-hidden">
+          {summary ? (
+            <div className="flex max-w-full min-w-0 flex-nowrap items-center gap-2 overflow-x-auto pr-1 text-sm font-semibold text-[var(--dashboard-muted)] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+              {summary}
+            </div>
           ) : null}
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          {summary ? <div className="text-sm font-semibold text-[var(--dashboard-muted)]">{summary}</div> : null}
+          {summary ? <span className="h-6 w-px shrink-0 bg-[var(--dashboard-line)]" /> : null}
           <button
             type="button"
             onClick={onToggle}
-            className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)]"
+            className="shrink-0 rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)]"
           >
             {collapsed ? "Expand" : "Collapse"}
           </button>
@@ -3656,6 +3641,29 @@ function StepSection({
       </div>
       {!collapsed ? children : null}
     </section>
+  );
+}
+
+function StepSummaryPill({
+  label,
+  tone = "neutral",
+}: {
+  label: string;
+  tone?: "neutral" | "good" | "warning";
+}) {
+  const className =
+    tone === "good"
+      ? "border-[var(--dashboard-success-border)] bg-[var(--dashboard-success-soft)] text-[var(--dashboard-success-ink)]"
+      : tone === "warning"
+        ? "border-[var(--dashboard-warning-border)] bg-[var(--dashboard-warning-soft)] text-[var(--dashboard-warning-ink)]"
+        : "border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] text-[var(--dashboard-subtle)]";
+
+  return (
+    <span
+      className={`whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-semibold tracking-[0.08em] ${className}`}
+    >
+      {label}
+    </span>
   );
 }
 
@@ -3877,46 +3885,6 @@ function buildUploadRecoveryMessage(input: {
   return `${input.uploadedCount} uploaded. ${input.remainingCount} pin${
     input.remainingCount === 1 ? "" : "s"
   } still need attention and are selected${detail}.`;
-}
-
-function buildChunkProgressMessage(input: {
-  action: "generate_titles" | "generate_descriptions";
-  completed: number;
-  total: number;
-  currentChunk: number;
-  chunkCount: number;
-  chunkPinIds: string[];
-  pins: PinItem[];
-}) {
-  const labels = input.chunkPinIds
-    .map((pinId) => input.pins.find((candidate) => candidate.id === pinId)?.templateId)
-    .filter((value): value is string => Boolean(value));
-  const labelPreview =
-    labels.length === 0
-      ? "selected pins"
-      : labels.length === 1
-        ? labels[0]
-        : `${labels[0]} and ${labels.length - 1} more`;
-
-  if (input.action === "generate_titles") {
-    return input.completed === 0
-      ? `Starting title generation for chunk ${input.currentChunk} of ${input.chunkCount}: ${labelPreview}.`
-      : `Working on chunk ${input.currentChunk} of ${input.chunkCount}: ${labelPreview}.`;
-  }
-
-  return input.completed === 0
-    ? `Starting description generation for chunk ${input.currentChunk} of ${input.chunkCount}: ${labelPreview}.`
-    : `Working on chunk ${input.currentChunk} of ${input.chunkCount}: ${labelPreview}.`;
-}
-
-function chunkPinIds(pinIds: string[], size: number) {
-  const chunks: string[][] = [];
-
-  for (let index = 0; index < pinIds.length; index += size) {
-    chunks.push(pinIds.slice(index, index + size));
-  }
-
-  return chunks;
 }
 
 function buildTitleCandidatesByPinId(pins: PinItem[]) {
