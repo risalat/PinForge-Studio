@@ -260,3 +260,15 @@ export const sampleTemplateDataHeroTwoSplitText: TemplateRenderProps = {
   itemNumber: 15,
   visualPreset: "midnight-gold",
 };
+
+export const sampleTemplateDataColorPopLadderNumberCard: TemplateRenderProps = {
+  title: "Color Pop Ideas",
+  images: [
+    "/sample-images/7.jpg",
+    "/sample-images/3.jpg",
+    "/sample-images/8.jpg",
+  ],
+  domain: "mightypaint.com",
+  itemNumber: 21,
+  visualPreset: "sunset-punch",
+};

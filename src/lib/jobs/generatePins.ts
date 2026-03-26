@@ -3721,6 +3721,8 @@ function getArtworkTitleRule(templateId: string) {
       return { maxWords: 4, maxChars: 28, maxLines: 1, singleLine: true };
     case "hero-two-split-text":
       return { maxWords: 5, maxChars: 36, maxLines: 3, singleLine: false };
+    case "color-pop-ladder-number-card":
+      return { maxWords: 4, maxChars: 30, maxLines: 3, singleLine: false };
     case "hero-arch-sidebar-triptych":
       return { maxWords: 5, maxChars: 30, maxLines: 5, singleLine: false };
     case "three-image-center-poster-number-footer":
@@ -3762,6 +3764,10 @@ function getArtworkTitleRule(templateId: string) {
 function getArtworkGoal(templateId: string, templateSupportsSubtitle: boolean) {
   if (templateId === "four-image-grid-center-band-title-domain") {
     return "Create a bold Pinterest artwork headline for a three-line center band. Use 4 to 5 strong words total, avoid filler clauses, and make each line feel visually substantial. Prefer one or two words per line, with a punchy magazine-cover feel rather than an article sentence.";
+  }
+
+  if (templateId === "color-pop-ladder-number-card") {
+    return "Create a bright Pinterest artwork headline for a colorful tilted title card with a separate hero number tile. Use 3 to 4 strong words total, do not include the count in the headline itself, avoid filler, and make it feel feed-first and punchy. Favor roundup closers like Ideas, Decor, Colors, or Looks.";
   }
 
   if (templateId === "five-image-center-band-number-domain") {
@@ -3829,6 +3835,11 @@ function enforceArtworkTitleRule(templateId: string, title: string) {
 
   if (templateId === "hero-two-split-text" && !isHeroTwoSplitTextTitleWithinLimit(headline)) {
     headline = compactHeroTwoSplitTextTitle(headline);
+  }
+
+  if (templateId === "color-pop-ladder-number-card") {
+    headline = ensureHeroNumberArtworkTitle(headline);
+    headline = ensureThreeOrFourWordColorPopTitle(headline);
   }
 
   if (templateId === "four-image-split-band-number") {
@@ -4051,6 +4062,41 @@ function ensureThreeToFiveWordSlantHeroFooterTitle(title: string) {
   }
 
   return toTitleCase([words[0] ?? "Standout", "Front", "Door", "Ideas"].join(" "));
+}
+
+function ensureThreeOrFourWordColorPopTitle(title: string) {
+  const safeTitle = normalizeRenderText(title);
+  if (!safeTitle) {
+    return "Color Pop Ideas";
+  }
+
+  const closers = new Set(["ideas", "decor", "looks", "colors", "style", "styles"]);
+  const words = safeTitle.split(/\s+/).filter(Boolean).slice(0, 5);
+
+  if (words.length >= 4) {
+    const exact = words.slice(0, 4);
+    const lastWord = exact[3]?.toLowerCase().replace(/[^a-z0-9]/g, "") ?? "";
+    if (closers.has(lastWord)) {
+      return toTitleCase(exact.join(" "));
+    }
+
+    return toTitleCase([exact[0], exact[1], exact[2], "Ideas"].join(" "));
+  }
+
+  if (words.length === 3) {
+    const lastWord = words[2]?.toLowerCase().replace(/[^a-z0-9]/g, "") ?? "";
+    if (closers.has(lastWord)) {
+      return toTitleCase(words.join(" "));
+    }
+
+    return toTitleCase([words[0], words[1], "Ideas"].join(" "));
+  }
+
+  if (words.length === 2) {
+    return toTitleCase([words[0], words[1], "Ideas"].join(" "));
+  }
+
+  return toTitleCase([words[0] ?? "Color", "Pop", "Ideas"].join(" "));
 }
 
 function ensureFourOrFiveWordPosterTitle(title: string) {

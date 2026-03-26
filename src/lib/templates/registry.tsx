@@ -20,6 +20,7 @@ import { TemplateSixImageTripleSplitSlantHeroFooter } from "@/templates/Template
 import { TemplateNineImageGridOverlayNumberFooter } from "@/templates/TemplateNineImageGridOverlayNumberFooter";
 import { TemplateMasonryGridNumberTitleFooter } from "@/templates/TemplateMasonryGridNumberTitleFooter";
 import { TemplateHeroTwoSplitText } from "@/templates/TemplateHeroTwoSplitText";
+import { TemplateColorPopLadderNumberCard } from "@/templates/TemplateColorPopLadderNumberCard";
 import type { JSX } from "react";
 import {
   sampleTemplateDataFourImageMasonryHeroNumberDomainPill,
@@ -33,6 +34,7 @@ import {
   sampleTemplateDataFourImageSplitBandNumber,
   sampleTemplateDataTwoImageSlantBandNumberDomain,
   sampleTemplateDataHeroTwoSplitText,
+  sampleTemplateDataColorPopLadderNumberCard,
   sampleTemplateDataHeroTextTripleSplitFooter,
   sampleTemplateDataMasonryGridNumberTitleFooter,
   sampleTemplateDataNineImageGridOverlayNumberFooter,
@@ -378,6 +380,21 @@ export const TEMPLATE_CONFIGS: Record<string, TemplateConfig> = {
       footer: true,
     },
   },
+  "color-pop-ladder-number-card": {
+    id: "color-pop-ladder-number-card",
+    name: "Color Pop Ladder Number Card",
+    componentKey: "TemplateColorPopLadderNumberCard",
+    previewPath: "/preview/color-pop-ladder-number-card",
+    locked: true,
+    canvas: { width: 1080, height: 1920 },
+    imageSlotCount: 3,
+    textFields: ["title", "itemNumber", "domain", "visualPreset"],
+    features: {
+      overlay: true,
+      numberTreatment: "hero",
+      footer: true,
+    },
+  },
 };
 
 const TEMPLATE_COMPONENTS: Record<
@@ -406,6 +423,7 @@ const TEMPLATE_COMPONENTS: Record<
   "nine-image-grid-overlay-number-footer": TemplateNineImageGridOverlayNumberFooter,
   "masonry-grid-number-title-footer": TemplateMasonryGridNumberTitleFooter,
   "hero-two-split-text": TemplateHeroTwoSplitText,
+  "color-pop-ladder-number-card": TemplateColorPopLadderNumberCard,
 };
 
 export function getTemplateConfig(templateId: string) {
@@ -509,6 +527,10 @@ export function getSampleTemplateProps(templateId: string) {
 
   if (templateId === "hero-two-split-text") {
     return sampleTemplateDataHeroTwoSplitText;
+  }
+
+  if (templateId === "color-pop-ladder-number-card") {
+    return sampleTemplateDataColorPopLadderNumberCard;
   }
 
   return sampleTemplateDataWithSubtitle;
