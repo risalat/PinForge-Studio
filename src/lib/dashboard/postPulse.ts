@@ -1,4 +1,8 @@
-import { ScheduleRunItemStatus } from "@prisma/client";
+import {
+  PostPulseFreshnessStatus,
+  ScheduleRunItemStatus,
+  type Prisma,
+} from "@prisma/client";
 import { runWithOperationContext, timeAsyncOperation } from "@/lib/observability/operationContext";
 import { prisma } from "@/lib/prisma";
 import { normalizeDomain } from "@/lib/types";
@@ -44,6 +48,12 @@ export type PostPulseRecord = {
   recentActivityDots: PostPulseActivityDotState[];
 };
 
+type SourcePostPulseQueryOptions = {
+  workspaceId?: string;
+  allowedDomains?: string[];
+  postIds?: string[];
+};
+
 export async function listPostPulseRecordsForUser(
   userId: string,
   options?: { workspaceId?: string; allowedDomains?: string[] },
@@ -65,161 +75,112 @@ export async function listPostPulseRecordsForUser(
         async () => {
           const workspaceId = options?.workspaceId?.trim() ?? "";
           const allowedDomains = normalizeAllowedDomains(options?.allowedDomains ?? []);
-          const posts = await prisma.post.findMany({
+          const trackedPostIds = await listTrackedPostIdsForUser(userId, workspaceId);
+
+          if (trackedPostIds.length === 0) {
+            return [];
+          }
+
+          const snapshotRows = await prisma.postPulseSnapshot.findMany({
             where: {
-              OR: [
-                {
-                  jobs: {
-                    some: { userId },
-                  },
-                },
-                {
-                  publicationRecords: {
-                    some: {
-                      userId,
-                      ...(workspaceId ? { providerWorkspaceId: workspaceId } : {}),
-                    },
-                  },
-                },
-              ],
-            },
-            orderBy: {
-              updatedAt: "desc",
+              userId,
+              workspaceId,
+              postId: { in: trackedPostIds },
             },
             include: {
-              jobs: {
-                where: { userId },
-                orderBy: { createdAt: "desc" },
-                include: {
-                  generatedPins: {
-                    orderBy: { createdAt: "desc" },
-                    include: {
-                      scheduleRunItems: {
-                        where: {
-                          status: ScheduleRunItemStatus.SCHEDULED,
-                        },
-                        orderBy: { scheduledFor: "desc" },
-                        select: {
-                          id: true,
-                          scheduledFor: true,
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-              publicationRecords: {
-                where: {
-                  userId,
-                  ...(workspaceId ? { providerWorkspaceId: workspaceId } : {}),
-                },
-                orderBy: [
-                  { publishedAt: "desc" },
-                  { scheduledAt: "desc" },
-                  { createdAt: "desc" },
-                ],
+              post: {
                 select: {
                   id: true,
-                  state: true,
-                  scheduledAt: true,
-                  publishedAt: true,
-                  syncedAt: true,
+                  title: true,
+                  url: true,
+                  domain: true,
                 },
               },
             },
           });
 
-          const records = posts.map((post) => {
-      const jobs = post.jobs;
-      const generatedPins = jobs.flatMap((job) => job.generatedPins);
-      const localScheduledItems = generatedPins.flatMap((pin) => pin.scheduleRunItems);
-      const publicationRecords = post.publicationRecords;
-      const publishedRecords = publicationRecords.filter((record) => isPublishedState(record.state));
-      const scheduledRecords = publicationRecords.filter(
-        (record) => record.state === PUBLICATION_RECORD_STATE.SCHEDULED,
-      );
-      const effectivePublerRecordCount =
-        publicationRecords.length > 0 ? publicationRecords.length : localScheduledItems.length;
-      const publishedCount = publishedRecords.length;
-      const scheduledCount =
-        publicationRecords.length > 0 ? scheduledRecords.length : localScheduledItems.length;
-      const lastGeneratedAt =
-        generatedPins.reduce<Date | null>(
-          (latest, pin) => (!latest || pin.createdAt > latest ? pin.createdAt : latest),
-          null,
-        ) ?? null;
-      const lastPublishedAt =
-        publishedRecords.reduce<Date | null>((latest, record) => {
-          const candidate = record.publishedAt ?? record.scheduledAt;
-          if (!candidate) {
-            return latest;
-          }
-          return !latest || candidate > latest ? candidate : latest;
-        }, null) ?? null;
-      const lastScheduledAt =
-        scheduledRecords.reduce<Date | null>((latest, record) => {
-          const candidate = record.scheduledAt;
-          if (!candidate) {
-            return latest;
-          }
-          return !latest || candidate > latest ? candidate : latest;
-        }, null) ??
-        localScheduledItems.reduce<Date | null>((latest, item) => {
-          if (!item.scheduledFor) {
-            return latest;
-          }
-          return !latest || item.scheduledFor > latest ? item.scheduledFor : latest;
-        }, null) ??
-        null;
-      const freshnessAnchor = lastPublishedAt ?? null;
-      const freshnessAgeDays = freshnessAnchor
-        ? Math.floor((Date.now() - freshnessAnchor.getTime()) / (1000 * 60 * 60 * 24))
-        : null;
-      const lastSyncedAt =
-        publicationRecords.reduce<Date | null>(
-          (latest, record) => (!latest || record.syncedAt > latest ? record.syncedAt : latest),
-          null,
-        ) ?? null;
-      const recentActivityDots =
-        publicationRecords.length > 0
-          ? publicationRecords.slice(0, 8).map((record) => toActivityDotState(record.state))
-          : localScheduledItems.slice(0, 8).map(() => "scheduled" as const);
+          let records: PostPulseRecord[];
 
-      return {
-        postId: post.id,
-        title: post.title,
-        url: post.url,
-        domain: post.domain,
-        totalJobs: jobs.length,
-        totalGeneratedPins: generatedPins.length,
-        totalPublerRecords: effectivePublerRecordCount,
-        publishedCount,
-        scheduledCount,
-        lastGeneratedAt,
-        lastPublishedAt,
-        lastScheduledAt,
-        lastSyncedAt,
-        freshnessStatus: resolveFreshnessStatus({
-          totalGeneratedPins: generatedPins.length,
-          publishedCount,
-          scheduledCount,
-          lastPublishedAt,
-        }),
-        freshnessAgeDays,
-        latestJobId: jobs[0]?.id ?? null,
-        recentActivityDots,
-      };
-          });
+          if (snapshotRows.length === trackedPostIds.length) {
+            records = snapshotRows.map(mapSnapshotRowToRecord);
+          } else {
+            records = await listPostPulseRecordsForUserFromSourceRaw(userId, {
+              workspaceId,
+              allowedDomains: [],
+            });
+            await persistPostPulseSnapshotsForWorkspace(userId, workspaceId, records);
+          }
 
           const filteredRecords =
             allowedDomains.length > 0
-              ? records.filter((record) => allowedDomains.includes(normalizeDomain(record.domain)))
+              ? records.filter((record) =>
+                  allowedDomains.includes(normalizeDomain(record.domain)),
+                )
               : records;
 
           return sortPostPulseRecords(filteredRecords, "priority");
         },
       ),
   );
+}
+
+export async function rebuildPostPulseSnapshotsForWorkspace(
+  userId: string,
+  workspaceId = "",
+) {
+  const normalizedWorkspaceId = workspaceId.trim();
+  const records = await listPostPulseRecordsForUserFromSourceRaw(userId, {
+    workspaceId: normalizedWorkspaceId,
+    allowedDomains: [],
+  });
+  await persistPostPulseSnapshotsForWorkspace(userId, normalizedWorkspaceId, records);
+  return records;
+}
+
+export async function refreshPostPulseSnapshotsForJob(jobId: string) {
+  const job = await prisma.generationJob.findUnique({
+    where: { id: jobId },
+    select: {
+      userId: true,
+      postId: true,
+    },
+  });
+
+  if (!job) {
+    return;
+  }
+
+  await refreshPostPulseSnapshotsForPost(job.userId, job.postId);
+}
+
+export async function refreshPostPulseSnapshotsForPost(
+  userId: string,
+  postId: string,
+  explicitWorkspaceIds: string[] = [],
+) {
+  const workspaceIds = await listWorkspaceScopesForPost(userId, postId, explicitWorkspaceIds);
+
+  for (const workspaceId of workspaceIds) {
+    const records = await listPostPulseRecordsForUserFromSourceRaw(userId, {
+      workspaceId,
+      postIds: [postId],
+      allowedDomains: [],
+    });
+    const record = records[0] ?? null;
+
+    if (!record) {
+      await prisma.postPulseSnapshot.deleteMany({
+        where: {
+          userId,
+          postId,
+          workspaceId,
+        },
+      });
+      continue;
+    }
+
+    await upsertPostPulseSnapshot(userId, workspaceId, record);
+  }
 }
 
 export function buildPostPulseSummary(records: PostPulseRecord[]) {
@@ -324,6 +285,383 @@ function resolveFreshnessStatus(input: {
   return "never_published";
 }
 
+async function listTrackedPostIdsForUser(userId: string, workspaceId: string) {
+  const posts = await prisma.post.findMany({
+    where: {
+      OR: [
+        {
+          jobs: {
+            some: { userId },
+          },
+        },
+        {
+          publicationRecords: {
+            some: {
+              userId,
+              ...(workspaceId ? { providerWorkspaceId: workspaceId } : {}),
+            },
+          },
+        },
+      ],
+    },
+    select: { id: true },
+  });
+
+  return posts.map((post) => post.id);
+}
+
+async function listPostPulseRecordsForUserFromSourceRaw(
+  userId: string,
+  options: SourcePostPulseQueryOptions,
+): Promise<PostPulseRecord[]> {
+  const workspaceId = options.workspaceId?.trim() ?? "";
+  const allowedDomains = normalizeAllowedDomains(options.allowedDomains ?? []);
+  const postIds = Array.from(new Set((options.postIds ?? []).filter(Boolean)));
+  const posts = await prisma.post.findMany({
+    where: {
+      ...(postIds.length > 0 ? { id: { in: postIds } } : {}),
+      OR: [
+        {
+          jobs: {
+            some: { userId },
+          },
+        },
+        {
+          publicationRecords: {
+            some: {
+              userId,
+              ...(workspaceId ? { providerWorkspaceId: workspaceId } : {}),
+            },
+          },
+        },
+      ],
+    },
+    orderBy: {
+      updatedAt: "desc",
+    },
+    include: {
+      jobs: {
+        where: { userId },
+        orderBy: { createdAt: "desc" },
+        include: {
+          generatedPins: {
+            orderBy: { createdAt: "desc" },
+            include: {
+              scheduleRunItems: {
+                where: {
+                  status: ScheduleRunItemStatus.SCHEDULED,
+                },
+                orderBy: { scheduledFor: "desc" },
+                select: {
+                  id: true,
+                  scheduledFor: true,
+                },
+              },
+            },
+          },
+        },
+      },
+      publicationRecords: {
+        where: {
+          userId,
+          ...(workspaceId ? { providerWorkspaceId: workspaceId } : {}),
+        },
+        orderBy: [
+          { publishedAt: "desc" },
+          { scheduledAt: "desc" },
+          { createdAt: "desc" },
+        ],
+        select: {
+          id: true,
+          state: true,
+          scheduledAt: true,
+          publishedAt: true,
+          syncedAt: true,
+        },
+      },
+    },
+  });
+
+  const records = posts.map((post) => {
+    const jobs = post.jobs;
+    const generatedPins = jobs.flatMap((job) => job.generatedPins);
+    const localScheduledItems = generatedPins.flatMap((pin) => pin.scheduleRunItems);
+    const publicationRecords = post.publicationRecords;
+    const publishedRecords = publicationRecords.filter((record) => isPublishedState(record.state));
+    const scheduledRecords = publicationRecords.filter(
+      (record) => record.state === PUBLICATION_RECORD_STATE.SCHEDULED,
+    );
+    const effectivePublerRecordCount =
+      publicationRecords.length > 0 ? publicationRecords.length : localScheduledItems.length;
+    const publishedCount = publishedRecords.length;
+    const scheduledCount =
+      publicationRecords.length > 0 ? scheduledRecords.length : localScheduledItems.length;
+    const lastGeneratedAt =
+      generatedPins.reduce<Date | null>(
+        (latest, pin) => (!latest || pin.createdAt > latest ? pin.createdAt : latest),
+        null,
+      ) ?? null;
+    const lastPublishedAt =
+      publishedRecords.reduce<Date | null>((latest, record) => {
+        const candidate = record.publishedAt ?? record.scheduledAt;
+        if (!candidate) {
+          return latest;
+        }
+        return !latest || candidate > latest ? candidate : latest;
+      }, null) ?? null;
+    const lastScheduledAt =
+      scheduledRecords.reduce<Date | null>((latest, record) => {
+        const candidate = record.scheduledAt;
+        if (!candidate) {
+          return latest;
+        }
+        return !latest || candidate > latest ? candidate : latest;
+      }, null) ??
+      localScheduledItems.reduce<Date | null>((latest, item) => {
+        if (!item.scheduledFor) {
+          return latest;
+        }
+        return !latest || item.scheduledFor > latest ? item.scheduledFor : latest;
+      }, null) ??
+      null;
+    const freshnessAnchor = lastPublishedAt ?? null;
+    const freshnessAgeDays = freshnessAnchor
+      ? Math.floor((Date.now() - freshnessAnchor.getTime()) / (1000 * 60 * 60 * 24))
+      : null;
+    const lastSyncedAt =
+      publicationRecords.reduce<Date | null>(
+        (latest, record) => (!latest || record.syncedAt > latest ? record.syncedAt : latest),
+        null,
+      ) ?? null;
+    const recentActivityDots =
+      publicationRecords.length > 0
+        ? publicationRecords.slice(0, 8).map((record) => toActivityDotState(record.state))
+        : localScheduledItems.slice(0, 8).map(() => "scheduled" as const);
+
+    return {
+      postId: post.id,
+      title: post.title,
+      url: post.url,
+      domain: post.domain,
+      totalJobs: jobs.length,
+      totalGeneratedPins: generatedPins.length,
+      totalPublerRecords: effectivePublerRecordCount,
+      publishedCount,
+      scheduledCount,
+      lastGeneratedAt,
+      lastPublishedAt,
+      lastScheduledAt,
+      lastSyncedAt,
+      freshnessStatus: resolveFreshnessStatus({
+        totalGeneratedPins: generatedPins.length,
+        publishedCount,
+        scheduledCount,
+        lastPublishedAt,
+      }),
+      freshnessAgeDays,
+      latestJobId: jobs[0]?.id ?? null,
+      recentActivityDots,
+    };
+  });
+
+  const filteredRecords =
+    allowedDomains.length > 0
+      ? records.filter((record) => allowedDomains.includes(normalizeDomain(record.domain)))
+      : records;
+
+  return sortPostPulseRecords(filteredRecords, "priority");
+}
+
+async function persistPostPulseSnapshotsForWorkspace(
+  userId: string,
+  workspaceId: string,
+  records: PostPulseRecord[],
+) {
+  const snapshotOperations: Prisma.PrismaPromise<unknown>[] = records.map((record) =>
+    buildSnapshotUpsert(userId, workspaceId, record),
+  );
+  const livePostIds = records.map((record) => record.postId);
+
+  snapshotOperations.push(
+    prisma.postPulseSnapshot.deleteMany({
+      where: {
+        userId,
+        workspaceId,
+        ...(livePostIds.length > 0 ? { postId: { notIn: livePostIds } } : {}),
+      },
+    }),
+  );
+
+  await prisma.$transaction(snapshotOperations);
+}
+
+async function upsertPostPulseSnapshot(
+  userId: string,
+  workspaceId: string,
+  record: PostPulseRecord,
+) {
+  await buildSnapshotUpsert(userId, workspaceId, record);
+}
+
+function buildSnapshotUpsert(
+  userId: string,
+  workspaceId: string,
+  record: PostPulseRecord,
+) {
+  return prisma.postPulseSnapshot.upsert({
+    where: {
+      userId_postId_workspaceId: {
+        userId,
+        postId: record.postId,
+        workspaceId,
+      },
+    },
+    update: {
+      latestJobId: record.latestJobId,
+      totalJobs: record.totalJobs,
+      totalGeneratedPins: record.totalGeneratedPins,
+      totalPublerRecords: record.totalPublerRecords,
+      publishedCount: record.publishedCount,
+      scheduledCount: record.scheduledCount,
+      lastGeneratedAt: record.lastGeneratedAt,
+      lastPublishedAt: record.lastPublishedAt,
+      lastScheduledAt: record.lastScheduledAt,
+      lastSyncedAt: record.lastSyncedAt,
+      freshnessStatus: mapStatusToSnapshotStatus(record.freshnessStatus),
+      freshnessAgeDays: record.freshnessAgeDays,
+      recentActivityDotsJson: record.recentActivityDots,
+    },
+    create: {
+      userId,
+      postId: record.postId,
+      workspaceId,
+      latestJobId: record.latestJobId,
+      totalJobs: record.totalJobs,
+      totalGeneratedPins: record.totalGeneratedPins,
+      totalPublerRecords: record.totalPublerRecords,
+      publishedCount: record.publishedCount,
+      scheduledCount: record.scheduledCount,
+      lastGeneratedAt: record.lastGeneratedAt,
+      lastPublishedAt: record.lastPublishedAt,
+      lastScheduledAt: record.lastScheduledAt,
+      lastSyncedAt: record.lastSyncedAt,
+      freshnessStatus: mapStatusToSnapshotStatus(record.freshnessStatus),
+      freshnessAgeDays: record.freshnessAgeDays,
+      recentActivityDotsJson: record.recentActivityDots,
+    },
+  });
+}
+
+function mapSnapshotRowToRecord(
+  row: Prisma.PostPulseSnapshotGetPayload<{
+    include: {
+      post: {
+        select: {
+          id: true;
+          title: true;
+          url: true;
+          domain: true;
+        };
+      };
+    };
+  }>,
+): PostPulseRecord {
+  return {
+    postId: row.post.id,
+    title: row.post.title,
+    url: row.post.url,
+    domain: row.post.domain,
+    totalJobs: row.totalJobs,
+    totalGeneratedPins: row.totalGeneratedPins,
+    totalPublerRecords: row.totalPublerRecords,
+    publishedCount: row.publishedCount,
+    scheduledCount: row.scheduledCount,
+    lastGeneratedAt: row.lastGeneratedAt,
+    lastPublishedAt: row.lastPublishedAt,
+    lastScheduledAt: row.lastScheduledAt,
+    lastSyncedAt: row.lastSyncedAt,
+    freshnessStatus: mapSnapshotStatusToStatus(row.freshnessStatus),
+    freshnessAgeDays: row.freshnessAgeDays,
+    latestJobId: row.latestJobId,
+    recentActivityDots: Array.isArray(row.recentActivityDotsJson)
+      ? row.recentActivityDotsJson.filter(isActivityDotState)
+      : [],
+  };
+}
+
+async function listWorkspaceScopesForPost(
+  userId: string,
+  postId: string,
+  explicitWorkspaceIds: string[],
+) {
+  const [profiles, publicationScopes, existingSnapshots] = await Promise.all([
+    prisma.workspaceProfile.findMany({
+      where: { userId },
+      select: { workspaceId: true },
+    }),
+    prisma.publicationRecord.findMany({
+      where: {
+        userId,
+        postId,
+        providerWorkspaceId: {
+          not: null,
+        },
+      },
+      select: { providerWorkspaceId: true },
+      distinct: ["providerWorkspaceId"],
+    }),
+    prisma.postPulseSnapshot.findMany({
+      where: {
+        userId,
+        postId,
+      },
+      select: { workspaceId: true },
+    }),
+  ]);
+
+  return Array.from(
+    new Set([
+      "",
+      ...explicitWorkspaceIds.map((value) => value.trim()),
+      ...profiles.map((profile) => profile.workspaceId.trim()),
+      ...publicationScopes.map((record) => record.providerWorkspaceId?.trim() ?? ""),
+      ...existingSnapshots.map((snapshot) => snapshot.workspaceId.trim()),
+    ]),
+  );
+}
+
+function mapStatusToSnapshotStatus(status: PostPulseStatus): PostPulseFreshnessStatus {
+  switch (status) {
+    case "fresh":
+      return PostPulseFreshnessStatus.FRESH;
+    case "needs_fresh_pins":
+      return PostPulseFreshnessStatus.NEEDS_FRESH_PINS;
+    case "scheduled_in_flight":
+      return PostPulseFreshnessStatus.SCHEDULED_IN_FLIGHT;
+    case "never_published":
+      return PostPulseFreshnessStatus.NEVER_PUBLISHED;
+    case "no_pins_yet":
+    default:
+      return PostPulseFreshnessStatus.NO_PINS_YET;
+  }
+}
+
+function mapSnapshotStatusToStatus(status: PostPulseFreshnessStatus): PostPulseStatus {
+  switch (status) {
+    case PostPulseFreshnessStatus.FRESH:
+      return "fresh";
+    case PostPulseFreshnessStatus.NEEDS_FRESH_PINS:
+      return "needs_fresh_pins";
+    case PostPulseFreshnessStatus.SCHEDULED_IN_FLIGHT:
+      return "scheduled_in_flight";
+    case PostPulseFreshnessStatus.NEVER_PUBLISHED:
+      return "never_published";
+    case PostPulseFreshnessStatus.NO_PINS_YET:
+    default:
+      return "no_pins_yet";
+  }
+}
+
 function isPublishedState(state: PublicationRecordStateValue) {
   return (
     state === PUBLICATION_RECORD_STATE.PUBLISHED ||
@@ -339,6 +677,10 @@ function toActivityDotState(state: PublicationRecordStateValue): PostPulseActivi
     return "scheduled";
   }
   return "other";
+}
+
+function isActivityDotState(value: unknown): value is PostPulseActivityDotState {
+  return value === "published" || value === "scheduled" || value === "other";
 }
 
 function statusWeight(status: PostPulseStatus) {

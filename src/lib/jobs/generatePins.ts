@@ -48,6 +48,7 @@ import { buildCapacityAwareSchedulePreview } from "@/lib/jobs/schedulePreview";
 import { buildTemplateDiverseOrder } from "@/lib/jobs/templateDiversity";
 import { getPublishQueueCapacitySummary } from "@/lib/jobs/publishQueueCapacity";
 import { renderPin } from "@/lib/renderer/renderPin";
+import { refreshPostPulseSnapshotsForJob } from "@/lib/dashboard/postPulse";
 import {
   getIntegrationSettingsForUserId,
   resolveAiCredentialCandidatesForUserId,
@@ -588,6 +589,7 @@ export async function createIntakeJob(input: {
       ? "Fresh-pin intake received from extension after a completed cycle."
       : "Intake received from extension.",
   );
+  await refreshPostPulseSnapshotsForJob(job.id);
 
   return {
     jobId: job.id,
@@ -662,6 +664,7 @@ export async function createFreshPinsJobFromPost(input: {
 
   await recordJobMilestone(job.id, GenerationJobStatus.RECEIVED, "Fresh-pin intake created from Post Pulse.");
   await recordJobMilestone(job.id, GenerationJobStatus.REVIEWING, "Ready for review from Post Pulse.");
+  await refreshPostPulseSnapshotsForJob(job.id);
 
   return {
     jobId: job.id,
@@ -4936,6 +4939,8 @@ async function syncJobProgressStatus(jobId: string) {
       },
     });
   }
+
+  await refreshPostPulseSnapshotsForJob(jobId);
 }
 
 async function resolveAccessiblePublerWorkspaceId(input: {

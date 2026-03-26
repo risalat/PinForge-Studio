@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { rebuildPostPulseSnapshotsForWorkspace } from "@/lib/dashboard/postPulse";
 import { resolveCanonicalPost } from "@/lib/posts/canonicalPost";
 import { prisma } from "@/lib/prisma";
 import { createPublerClient, type PublerClient, type PublerPost } from "@/lib/publer/publerClient";
@@ -165,6 +166,9 @@ export async function syncPublerPublicationRecordsForUser(
             break;
           }
         }
+
+        await rebuildPostPulseSnapshotsForWorkspace(userId, workspaceId);
+        await rebuildPostPulseSnapshotsForWorkspace(userId, "");
 
         return {
           workspaceId,
