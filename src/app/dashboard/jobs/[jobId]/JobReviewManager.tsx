@@ -1328,38 +1328,41 @@ export function JobReviewManager({
               </button>
             </div>
 
-            <div className="mt-4 grid gap-4 md:grid-cols-[160px_240px_minmax(0,1fr)]">
-              <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
-                Pins to create
-                <input
-                  type="number"
-                  min={1}
-                  value={pinCount}
-                  onChange={(event) => setPinCount(Number(event.target.value))}
-                  className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-3 py-2"
-                />
-              </label>
-              <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
-                Preset strategy
-                <select
-                  value={assistedPresetStrategy}
-                  onChange={(event) =>
-                    setAssistedPresetStrategy(
-                      event.target.value as
-                        | "recommended"
-                        | "random_all"
-                        | "random_bold"
-                        | "random_feminine",
-                    )
-                  }
-                  className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-3 py-2"
-                >
-                  <option value="recommended">Recommended per pin</option>
-                  <option value="random_all">Random from all presets</option>
-                  <option value="random_bold">Random bold presets only</option>
-                  <option value="random_feminine">Random feminine presets</option>
-                </select>
-              </label>
+            <div className="mt-4 space-y-4">
+              <div className="grid gap-4 md:grid-cols-[160px_minmax(260px,360px)]">
+                <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
+                  Pins to create
+                  <input
+                    type="number"
+                    min={1}
+                    value={pinCount}
+                    onChange={(event) => setPinCount(Number(event.target.value))}
+                    className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-3 py-2"
+                  />
+                </label>
+                <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
+                  Preset strategy
+                  <select
+                    value={assistedPresetStrategy}
+                    onChange={(event) =>
+                      setAssistedPresetStrategy(
+                        event.target.value as
+                          | "recommended"
+                          | "random_all"
+                          | "random_bold"
+                          | "random_feminine",
+                      )
+                    }
+                    className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-3 py-2"
+                  >
+                    <option value="recommended">Recommended per pin</option>
+                    <option value="random_all">Random from all presets</option>
+                    <option value="random_bold">Random bold presets only</option>
+                    <option value="random_feminine">Random feminine presets</option>
+                  </select>
+                </label>
+              </div>
+
               <details className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)]">
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3">
                   <div>
