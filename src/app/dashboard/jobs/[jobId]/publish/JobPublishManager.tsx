@@ -304,6 +304,7 @@ export function JobPublishManager({
           title: pin.title,
           description: pin.description,
           titleStatus: pin.titleStatus,
+          descriptionStatus: pin.descriptionStatus,
           titleOptions: pin.titleOptions,
         },
       ]),
@@ -324,19 +325,25 @@ export function JobPublishManager({
           generatedPinId: copy.generatedPinId,
         };
 
+        const nextTitle = copy.title ?? "";
+        const nextDescription = copy.description ?? "";
         const needsTitleFinalization =
           typeof copy.title === "string" &&
-          copy.title.trim().length > 0 &&
+          nextTitle.trim().length > 0 &&
           persisted.titleStatus !== "FINALIZED" &&
           Array.isArray(persisted.titleOptions) &&
           persisted.titleOptions.length > 0;
+        const needsDescriptionFinalization =
+          typeof copy.description === "string" &&
+          nextDescription.trim().length > 0 &&
+          persisted.descriptionStatus !== "FINALIZED";
 
         if (copy.title !== persisted.title || needsTitleFinalization) {
-          payload.title = copy.title;
+          payload.title = nextTitle;
         }
 
-        if (copy.description !== persisted.description) {
-          payload.description = copy.description;
+        if (copy.description !== persisted.description || needsDescriptionFinalization) {
+          payload.description = nextDescription;
         }
 
         return payload.title !== undefined || payload.description !== undefined ? payload : null;
