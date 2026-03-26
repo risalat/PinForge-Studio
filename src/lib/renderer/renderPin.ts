@@ -1,10 +1,5 @@
-import { existsSync } from "node:fs";
-import path from "node:path";
 import process from "node:process";
-import serverlessChromium from "@sparticuz/chromium";
-import { chromium as localChromium } from "playwright";
-import { chromium as serverlessPlaywright } from "playwright-core";
-import type { Browser, BrowserContext, Page } from "playwright-core";
+import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { env } from "@/lib/env";
 import { logStructuredEvent } from "@/lib/observability/operationContext";
 import { getStorageProvider } from "@/lib/storage";
@@ -16,7 +11,7 @@ type RenderPinInput = {
   templateId: string;
 };
 
-type BrowserLaunchMode = "native" | "serverless" | "custom_executable";
+type BrowserLaunchMode = "native" | "custom_executable";
 
 type SharedBrowserState = {
   browser: Browser | null;
@@ -92,7 +87,7 @@ async function renderPinScreenshot(browser: Browser, { jobId, planId, templateId
     const url = `${env.appUrl}/render/${templateId}?jobId=${jobId}&planId=${planId}`;
     await page.goto(url, {
       waitUntil: "domcontentloaded",
-      timeout: isServerlessRuntime() ? 20_000 : 60_000,
+      timeout: 60_000,
     });
     await page.locator("[data-pin-canvas='true']").waitFor({ state: "visible", timeout: 15_000 });
     await waitForStableCanvas(page);
@@ -106,14 +101,14 @@ async function renderPinScreenshot(browser: Browser, { jobId, planId, templateId
 async function waitForStableCanvas(page: Page) {
   await page
     .waitForLoadState("networkidle", {
-      timeout: isServerlessRuntime() ? 8_000 : 20_000,
+      timeout: 20_000,
     })
     .catch(() => null);
 
   await waitForCondition(
     page,
     () => document.fonts?.status === "loaded",
-    isServerlessRuntime() ? 8_000 : 15_000,
+    15_000,
   );
   await waitForCondition(
     page,
@@ -121,7 +116,7 @@ async function waitForStableCanvas(page: Page) {
       Array.from(
         document.querySelectorAll<HTMLImageElement>("[data-pin-canvas='true'] img"),
       ).every((img) => img.complete && img.naturalWidth > 0),
-    isServerlessRuntime() ? 8_000 : 15_000,
+    15_000,
   );
   await waitForCondition(
     page,
@@ -129,10 +124,10 @@ async function waitForStableCanvas(page: Page) {
       Array.from(document.querySelectorAll("[data-autofit='true']")).every(
         (node) => node.getAttribute("data-autofit-ready") === "true",
       ),
-    isServerlessRuntime() ? 8_000 : 15_000,
+    15_000,
   );
 
-  await page.waitForTimeout(isServerlessRuntime() ? 250 : 150);
+  await page.waitForTimeout(150);
 }
 
 async function waitForCondition(page: Page, predicate: () => boolean, timeout: number) {
@@ -304,7 +299,7 @@ async function launchBrowser(): Promise<{
 
   if (executablePath) {
     return {
-      browser: await serverlessPlaywright.launch({
+      browser: await chromium.launch({
         executablePath,
         headless: true,
       }),
@@ -312,20 +307,8 @@ async function launchBrowser(): Promise<{
     };
   }
 
-  if (isServerlessRuntime()) {
-    const chromiumInputDir = resolveChromiumInputDir();
-    return {
-      browser: await serverlessPlaywright.launch({
-        args: serverlessChromium.args,
-        executablePath: await serverlessChromium.executablePath(chromiumInputDir),
-        headless: true,
-      }),
-      launchMode: "serverless",
-    };
-  }
-
   return {
-    browser: await localChromium.launch({ headless: true }),
+    browser: await chromium.launch({ headless: true }),
     launchMode: "native",
   };
 }
@@ -350,22 +333,6 @@ function waitBeforeRetry(attempt: number) {
 
 function createRenderedPinStorageKey(jobId: string, planId: string, templateId: string) {
   return `temp/jobs/${jobId}/${planId}-${templateId}-${Date.now()}.png`;
-}
-
-function isServerlessRuntime() {
-  return process.env.VERCEL === "1" || process.env.VERCEL === "true";
-}
-
-function resolveChromiumInputDir() {
-  const candidateDirs = [path.join(process.cwd(), "node_modules", "@sparticuz", "chromium", "bin")];
-
-  for (const candidateDir of candidateDirs) {
-    if (existsSync(candidateDir)) {
-      return candidateDir;
-    }
-  }
-
-  return undefined;
 }
 
 function getProcessHeapUsageMb() {

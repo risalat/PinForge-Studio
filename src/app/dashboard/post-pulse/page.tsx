@@ -124,17 +124,24 @@ export default async function DashboardPostPulsePage({
                   {records.map((record) => (
                     <tr key={record.postId}>
                       <td className="px-5 py-4 align-top">
-                        <p
-                          className="font-semibold text-[var(--dashboard-text)]"
-                          style={{
-                            display: "-webkit-box",
-                            WebkitBoxOrient: "vertical",
-                            WebkitLineClamp: 2,
-                            overflow: "hidden",
-                          }}
+                        <a
+                          href={toExternalHref(record.url)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="block transition hover:text-[var(--dashboard-accent-strong)]"
                         >
-                          {record.title}
-                        </p>
+                          <p
+                            className="font-semibold text-[var(--dashboard-text)] underline decoration-transparent underline-offset-4 transition hover:decoration-current"
+                            style={{
+                              display: "-webkit-box",
+                              WebkitBoxOrient: "vertical",
+                              WebkitLineClamp: 2,
+                              overflow: "hidden",
+                            }}
+                          >
+                            {record.title}
+                          </p>
+                        </a>
                         <p className="mt-1 break-all text-[var(--dashboard-subtle)]">{record.url}</p>
                         <p className="mt-2 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--dashboard-muted)]">
                           {record.domain} · {record.totalJobs} job{record.totalJobs === 1 ? "" : "s"}
@@ -312,5 +319,13 @@ function formatRelativeTime(value: Date) {
     return "1 day ago";
   }
   return `${days} days ago`;
+}
+
+function toExternalHref(url: string) {
+  if (/^https?:\/\//i.test(url)) {
+    return url;
+  }
+
+  return `https://${url}`;
 }
 

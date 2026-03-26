@@ -80,8 +80,10 @@ Revoking a key:
 ## Local dev vs production
 
 - Use the same `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` values in
-  local `.env` and Vercel project settings.
-- In Vercel production, configure R2 with `R2_BUCKET_NAME`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_PUBLIC_BASE_URL`, and either `R2_ENDPOINT` or `R2_ACCOUNT_ID`.
+  local `.env` and all production services that share the same database.
+- In Coolify/VPS production, configure R2 with `R2_BUCKET_NAME`, `R2_ACCESS_KEY_ID`,
+  `R2_SECRET_ACCESS_KEY`, `R2_PUBLIC_BASE_URL`, and either `R2_ENDPOINT` or `R2_ACCOUNT_ID`.
+- Set the same `APP_ENCRYPTION_KEY` on web, worker, and scheduler so stored credentials remain readable.
 - Extension-facing routes are protected by bearer API key validation.
 - Dashboard routes are protected separately by Supabase Auth.
 
