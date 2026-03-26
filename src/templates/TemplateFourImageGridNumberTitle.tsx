@@ -86,7 +86,7 @@ export function TemplateFourImageGridNumberTitle({
       />
 
       <div
-        className="absolute left-1/2 top-[544px] z-20 flex h-[312px] w-[312px] -translate-x-1/2 items-center justify-center rounded-full shadow-[0_18px_40px_rgba(15,23,42,0.18)]"
+        className="absolute left-1/2 top-[504px] z-40 flex h-[312px] w-[312px] -translate-x-1/2 items-center justify-center rounded-full shadow-[0_18px_40px_rgba(15,23,42,0.18)]"
         style={{ backgroundColor: badgeBackground }}
       >
         <span
@@ -107,7 +107,7 @@ export function TemplateFourImageGridNumberTitle({
       </div>
 
       <div
-        className="absolute left-1/2 top-[748px] z-30 flex -translate-x-1/2 flex-col items-center justify-center rounded-[30px] px-[34px] py-[54px] shadow-[0_26px_56px_rgba(7,20,38,0.32)]"
+        className="absolute left-1/2 top-[742px] z-30 flex -translate-x-1/2 flex-col items-center justify-center rounded-[30px] px-[34px] py-[54px] shadow-[0_26px_56px_rgba(7,20,38,0.32)]"
         style={{
           width: `${titleCardWidth}px`,
           minHeight: "630px",
