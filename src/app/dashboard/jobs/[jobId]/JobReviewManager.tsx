@@ -1297,7 +1297,7 @@ export function JobReviewManager({
 
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
           <div className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-4">
-            <div className="flex items-center justify-between gap-4">
+            <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <p className="text-base font-bold text-[var(--dashboard-text)]">Assisted auto</p>
                 <p className="mt-1 text-sm text-[var(--dashboard-subtle)]">
@@ -1317,7 +1317,7 @@ export function JobReviewManager({
                 className={getButtonClass({
                   tone: "accent",
                   busy: activeAction?.kind === "assisted",
-                })}
+                }) + " relative z-10 shrink-0"}
               >
                 <BusyActionLabel
                   busy={activeAction?.kind === "assisted"}
