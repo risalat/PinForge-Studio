@@ -24,6 +24,16 @@ export function DashboardShell({
 }) {
   const pathname = usePathname();
   const header = getDashboardPageTitle(pathname);
+  const isAdminRoute = pathname.startsWith("/dashboard/admin");
+
+  if (isAdminRoute) {
+    return (
+      <div className="dashboard-shell min-h-screen bg-[var(--dashboard-canvas)] text-[var(--dashboard-text)]">
+        <DashboardNavigationProgress />
+        <main className="px-5 py-6 lg:px-8 lg:py-8">{children}</main>
+      </div>
+    );
+  }
 
   return (
     <div className="dashboard-shell min-h-screen bg-[var(--dashboard-canvas)] text-[var(--dashboard-text)]">

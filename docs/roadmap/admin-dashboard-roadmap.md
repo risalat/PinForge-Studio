@@ -2,7 +2,8 @@
 
 ## Status
 
-- Status: Phase A implemented
+- Status: Phase A and Phase B implemented
+- Status: single-user-safe subset of Phase C implemented
 - Audience: internal operators / admins
 - Not part of the current end-user workflow
 
@@ -181,21 +182,30 @@ Build first:
 
 ### Phase B: Workspace diagnostics
 
-Add:
+Delivered:
 
-- workspace-level Publer sync/upload health
+- workspace-level Publer sync health
 - per-workspace queue/load summaries
-- storage cleanup visibility
+- copy backlog visibility
+- publish/schedule activity summaries
+- metadata cache freshness per workspace
+- active workspace-lock visibility
 
 ### Phase C: Controlled admin actions
 
-Only after read-only visibility is stable, consider:
+Delivered so far:
 
 - retry safe failed tasks
-- trigger manual snapshot rebuild
-- trigger manual cleanup/sync actions
+- trigger manual cleanup
+- trigger manual publication sync by workspace
 
-These should be explicit and heavily permissioned.
+Still deferred:
+
+- manual snapshot rebuild
+- manual lock release
+- higher-risk repair actions
+
+These remain explicit and heavily permissioned.
 
 ## Data source options
 
@@ -237,8 +247,17 @@ As Studio grows, this dashboard will help with:
 
 Current delivered surface:
 
-- `/dashboard/admin`
+- `/dashboard/admin` overview
+- separate admin detail pages for:
+  - runtime
+  - workspaces
+  - tasks
+  - performance
+  - Publer
+  - storage
+  - actions
 - single-user internal admin access, with optional email allowlist support through `DASHBOARD_ADMIN_EMAILS`
+- dedicated admin shell and navigation, separate from the normal Studio sidebar
 - system overview cards
 - persisted runtime heartbeats for:
   - web
@@ -251,9 +270,11 @@ Current delivered surface:
 
 ## Remaining roadmap
 
-Next recommended work stays the same:
+Next recommended work:
 
-- Phase B: workspace diagnostics
-- Phase C: controlled admin actions
+- richer failure drilldowns and task timelines
+- storage audit history and trends
+- snapshot rebuild and repair actions
+- stronger admin-role enforcement once multi-user support starts
 
-Keep the dashboard read-only until the current operational views are stable in production.
+Keep write actions narrow until the current operational views prove stable in production.

@@ -1,12 +1,16 @@
-# Admin Dashboard Phase A Tracker
+# Admin Dashboard Tracker
 
 ## Scope
 
-Phase A is the first internal operations dashboard for Pin Forge Studio.
+This tracker now covers:
 
-It is intentionally:
+- Phase A read-only ops visibility
+- Phase B workspace diagnostics
+- single-user-safe Phase C admin actions
 
-- read-only
+It remains:
+
+- internal
 - single-user friendly for the current deployment
 - future-ready for later admin-role / multi-user hardening
 
@@ -30,28 +34,42 @@ It is intentionally:
 
 ### Admin surface
 
-- System overview cards
-- Runtime health section
-- Background task queue section
-- Performance timing section
-- Publer operations section
-- Storage / cleanup section
-- Left-side internal control rail with section jumps
+- Separate admin sub-app shell
+- Back-to-Studio button instead of the normal Studio sidebar
+- Dedicated admin navigation panel
+- Overview page
+- Runtime page
+- Workspaces page
+- Tasks page
+- Performance page
+- Publer page
+- Storage page
+- Actions page
+
+### Workspace diagnostics
+
+- per-workspace operational cards
+- workspace sync-state visibility
+- workspace queue/load counters
+- copy backlog visibility
+- publish/schedule activity summaries
+- metadata cache freshness by workspace
+- active workspace-lock visibility
+
+### Safe admin actions
+
+- retry safe failed tasks
+- queue temp cleanup from admin
+- trigger publication sync by workspace
 
 ## Deferred for later phases
 
-### Phase B
-
-- workspace-level drilldowns
-- richer Publer diagnostics by workspace
-- storage audit history
-- queue fairness / heavier tenant-level visibility
-
-### Phase C
-
-- retry safe failed tasks
-- trigger manual rebuild/cleanup/sync actions
-- explicit confirmation and stronger permission boundaries
+- richer Publer diagnostics by workspace/account/board
+- storage audit history and trend views
+- task timelines and deeper failure drilldowns
+- manual snapshot rebuilds
+- manual lock release / stronger repair tools
+- stronger permission boundaries once multi-user support begins
 
 ## Multi-user follow-up notes
 
@@ -64,4 +82,4 @@ When Studio becomes multi-user:
 
 ## Current recommendation
 
-Use this dashboard as an internal read-only control room first. Validate it in production, then extend it only after the read path and persisted metrics prove stable.
+Use this dashboard as the internal control room for day-to-day operations. Keep the write actions narrow until the read path and the current retry/sync/cleanup actions prove stable in production.

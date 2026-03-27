@@ -221,6 +221,27 @@ export async function failBackgroundTask(input: {
   });
 }
 
+export async function requeueFailedBackgroundTask(input: {
+  taskId: string;
+  lastError?: string | null;
+  progressJson?: Prisma.InputJsonValue;
+  runAfter?: Date;
+}) {
+  return prisma.backgroundTask.update({
+    where: { id: input.taskId },
+    data: {
+      status: BackgroundTaskStatus.QUEUED,
+      runAfter: input.runAfter ?? new Date(),
+      lockedAt: null,
+      lockedBy: null,
+      finishedAt: null,
+      startedAt: null,
+      lastError: input.lastError ?? null,
+      progressJson: input.progressJson,
+    },
+  });
+}
+
 export function buildRenderPlansTaskDedupeKey(jobId: string, planIds: string[]) {
   return `render-plans:${jobId}:${hashIds(planIds)}`;
 }

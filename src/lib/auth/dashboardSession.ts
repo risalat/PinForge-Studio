@@ -65,3 +65,33 @@ export async function requireAuthenticatedDashboardApiUser() {
     user,
   };
 }
+
+export async function requireDashboardAdminApiUser() {
+  const auth = await requireAuthenticatedDashboardApiUser();
+
+  if (!auth.ok) {
+    return auth;
+  }
+
+  const allowlist = new Set(env.dashboardAdminEmails.map((email) => email.toLowerCase()));
+
+  if (allowlist.size === 0) {
+    return auth;
+  }
+
+  const email = auth.user.email?.trim().toLowerCase() ?? "";
+  if (email && allowlist.has(email)) {
+    return auth;
+  }
+
+  return {
+    ok: false as const,
+    response: NextResponse.json(
+      {
+        ok: false,
+        error: "Forbidden.",
+      },
+      { status: 403 },
+    ),
+  };
+}

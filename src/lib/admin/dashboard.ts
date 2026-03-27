@@ -2,6 +2,7 @@ import {
   BackgroundTaskKind,
   BackgroundTaskStatus,
   OperationMetricStatus,
+  PostPulseFreshnessStatus,
   PublerMetadataCacheKind,
   RuntimeHeartbeatKind,
 } from "@prisma/client";
@@ -24,12 +25,22 @@ const PUBLER_TASK_KINDS = [
   BackgroundTaskKind.SYNC_PUBLICATIONS,
 ] as const;
 
+const SAFE_RETRY_TASK_KINDS = new Set<BackgroundTaskKind>([
+  BackgroundTaskKind.RENDER_PLANS,
+  BackgroundTaskKind.RERENDER_PLAN,
+  BackgroundTaskKind.GENERATE_TITLE_BATCH,
+  BackgroundTaskKind.GENERATE_DESCRIPTION_BATCH,
+  BackgroundTaskKind.SYNC_PUBLICATIONS,
+  BackgroundTaskKind.CLEAN_TEMP_ASSETS,
+]);
+
 export type AdminDashboardData = Awaited<ReturnType<typeof getAdminDashboardData>>;
 
 export async function getAdminDashboardData() {
   const now = new Date();
   const dayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
   const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
   const [
     taskCountsByStatus,
@@ -43,12 +54,17 @@ export async function getAdminDashboardData() {
     latestTempCleanupTask,
     latestSyncTask,
     recentMetadataCacheEntries,
+    workspaceProfiles,
+    integrationSettings,
+    publicationSyncStates,
+    publicationRecordsByWorkspace,
+    scheduleFailuresByWorkspace,
+    postPulseSnapshots,
+    workspaceTaskCounts,
   ] = await Promise.all([
     prisma.backgroundTask.groupBy({
       by: ["status"],
-      _count: {
-        _all: true,
-      },
+      _count: { _all: true },
     }),
     prisma.backgroundTask.groupBy({
       by: ["kind", "status"],
@@ -57,9 +73,7 @@ export async function getAdminDashboardData() {
           in: [BackgroundTaskStatus.QUEUED, BackgroundTaskStatus.RUNNING, BackgroundTaskStatus.FAILED],
         },
       },
-      _count: {
-        _all: true,
-      },
+      _count: { _all: true },
     }),
     prisma.backgroundTask.findMany({
       where: {
@@ -83,9 +97,7 @@ export async function getAdminDashboardData() {
     }),
     prisma.backgroundTask.findMany({
       where: {
-        kind: {
-          in: [...PUBLER_TASK_KINDS],
-        },
+        kind: { in: [...PUBLER_TASK_KINDS] },
       },
       orderBy: [{ updatedAt: "desc" }],
       take: 10,
@@ -109,34 +121,24 @@ export async function getAdminDashboardData() {
     }),
     prisma.operationMetric.findMany({
       where: {
-        operationName: {
-          in: [...PERFORMANCE_OPERATION_NAMES],
-        },
-        occurredAt: {
-          gte: weekAgo,
-        },
+        operationName: { in: [...PERFORMANCE_OPERATION_NAMES] },
+        occurredAt: { gte: weekAgo },
       },
       orderBy: [{ occurredAt: "desc" }],
       take: 500,
     }),
     prisma.workspaceOperationLock.findMany({
       where: {
-        leaseExpiresAt: {
-          gt: now,
-        },
+        leaseExpiresAt: { gt: now },
       },
       orderBy: [{ leaseExpiresAt: "asc" }],
       take: 20,
     }),
     prisma.backgroundTask.findMany({
       where: {
-        kind: {
-          in: [...PUBLER_TASK_KINDS],
-        },
+        kind: { in: [...PUBLER_TASK_KINDS] },
         status: BackgroundTaskStatus.FAILED,
-        updatedAt: {
-          gte: dayAgo,
-        },
+        updatedAt: { gte: dayAgo },
       },
       orderBy: [{ updatedAt: "desc" }],
       take: 8,
@@ -179,16 +181,92 @@ export async function getAdminDashboardData() {
     }),
     prisma.publerMetadataCache.findMany({
       where: {
-        expiresAt: {
-          gt: now,
-        },
+        expiresAt: { gt: now },
       },
       orderBy: [{ fetchedAt: "desc" }],
       take: 200,
       select: {
+        workspaceId: true,
         cacheKind: true,
         fetchedAt: true,
       },
+    }),
+    prisma.workspaceProfile.findMany({
+      orderBy: [{ workspaceName: "asc" }],
+      select: {
+        userId: true,
+        workspaceId: true,
+        workspaceName: true,
+        isDefault: true,
+        defaultAccountId: true,
+        defaultBoardId: true,
+        dailyPublishTarget: true,
+        allowedDomains: true,
+      },
+    }),
+    prisma.userIntegrationSettings.findMany({
+      select: {
+        userId: true,
+        publerWorkspaceId: true,
+        publerAccountId: true,
+        publerBoardId: true,
+      },
+    }),
+    prisma.publicationSyncState.findMany({
+      select: {
+        userId: true,
+        workspaceId: true,
+        mode: true,
+        nextPage: true,
+        lastCompletedAt: true,
+        lastRunAt: true,
+        lastError: true,
+        updatedAt: true,
+      },
+    }),
+    prisma.publicationRecord.groupBy({
+      by: ["providerWorkspaceId", "state"],
+      where: {
+        syncedAt: { gte: monthAgo },
+      },
+      _count: { _all: true },
+    }),
+    prisma.scheduleRunItem.findMany({
+      where: {
+        status: "FAILED",
+        updatedAt: { gte: monthAgo },
+      },
+      select: {
+        scheduleRun: {
+          select: {
+            workspaceId: true,
+          },
+        },
+      },
+    }),
+    prisma.postPulseSnapshot.findMany({
+      select: {
+        workspaceId: true,
+        freshnessStatus: true,
+        totalJobs: true,
+        totalGeneratedPins: true,
+        publishedCount: true,
+        scheduledCount: true,
+        lastPublishedAt: true,
+        lastScheduledAt: true,
+      },
+    }),
+    prisma.backgroundTask.groupBy({
+      by: ["workspaceId", "status"],
+      where: {
+        workspaceId: {
+          not: null,
+        },
+        status: {
+          in: [BackgroundTaskStatus.QUEUED, BackgroundTaskStatus.RUNNING, BackgroundTaskStatus.FAILED],
+        },
+      },
+      _count: { _all: true },
     }),
   ]);
 
@@ -229,6 +307,19 @@ export async function getAdminDashboardData() {
     latestFetchedAt: recentMetadataCacheEntries[0]?.fetchedAt ?? null,
   };
 
+  const workspaceDiagnostics = buildWorkspaceDiagnostics({
+    workspaceProfiles,
+    integrationSettings,
+    publicationSyncStates,
+    publicationRecordsByWorkspace,
+    scheduleFailuresByWorkspace,
+    postPulseSnapshots,
+    workspaceTaskCounts,
+    recentMetadataCacheEntries,
+    activeWorkspaceLocks,
+    now,
+  });
+
   return {
     generatedAt: now,
     overview: {
@@ -242,7 +333,10 @@ export async function getAdminDashboardData() {
     },
     runtimeByKind,
     taskQueueByKind: buildTaskQueueCards(taskCountsByKindAndStatus),
-    recentFailedTasks,
+    recentFailedTasks: recentFailedTasks.map((task) => ({
+      ...task,
+      safeToRetry: SAFE_RETRY_TASK_KINDS.has(task.kind),
+    })),
     recentPublerTasks: recentPublerTasks.map((task) => ({
       ...task,
       durationMs: task.startedAt
@@ -267,8 +361,328 @@ export async function getAdminDashboardData() {
           summary: readProgressLabel(latestSyncTask.progressJson),
         }
       : null,
+    workspaceDiagnostics,
     performance,
   };
+}
+
+function buildWorkspaceDiagnostics(input: {
+  workspaceProfiles: Array<{
+    userId: string;
+    workspaceId: string;
+    workspaceName: string;
+    isDefault: boolean;
+    defaultAccountId: string | null;
+    defaultBoardId: string | null;
+    dailyPublishTarget: number | null;
+    allowedDomains: string[];
+  }>;
+  integrationSettings: Array<{
+    userId: string;
+    publerWorkspaceId: string | null;
+    publerAccountId: string | null;
+    publerBoardId: string | null;
+  }>;
+  publicationSyncStates: Array<{
+    userId: string;
+    workspaceId: string;
+    mode: string;
+    nextPage: number;
+    lastCompletedAt: Date | null;
+    lastRunAt: Date | null;
+    lastError: string | null;
+    updatedAt: Date;
+  }>;
+  publicationRecordsByWorkspace: Array<{
+    providerWorkspaceId: string | null;
+    state: string;
+    _count: { _all: number };
+  }>;
+  scheduleFailuresByWorkspace: Array<{
+    scheduleRun: {
+      workspaceId: string | null;
+    };
+  }>;
+  postPulseSnapshots: Array<{
+    workspaceId: string | null;
+    freshnessStatus: PostPulseFreshnessStatus;
+    totalJobs: number;
+    totalGeneratedPins: number;
+    publishedCount: number;
+    scheduledCount: number;
+    lastPublishedAt: Date | null;
+    lastScheduledAt: Date | null;
+  }>;
+  workspaceTaskCounts: Array<{
+    workspaceId: string | null;
+    status: BackgroundTaskStatus;
+    _count: { _all: number };
+  }>;
+  recentMetadataCacheEntries: Array<{
+    workspaceId: string;
+    cacheKind: PublerMetadataCacheKind;
+    fetchedAt: Date;
+  }>;
+  activeWorkspaceLocks: Array<{
+    workspaceId: string;
+    scope: string;
+    leaseExpiresAt: Date | null;
+    holderId: string | null;
+  }>;
+  now: Date;
+}) {
+  const workspaceMap = new Map<
+    string,
+    {
+      workspaceId: string;
+      workspaceName: string;
+      userId: string | null;
+      isDefault: boolean;
+      defaultAccountId: string | null;
+      defaultBoardId: string | null;
+      dailyPublishTarget: number | null;
+      allowedDomains: string[];
+    }
+  >();
+
+  for (const profile of input.workspaceProfiles) {
+    workspaceMap.set(profile.workspaceId, {
+      workspaceId: profile.workspaceId,
+      workspaceName: profile.workspaceName,
+      userId: profile.userId,
+      isDefault: profile.isDefault,
+      defaultAccountId: profile.defaultAccountId,
+      defaultBoardId: profile.defaultBoardId,
+      dailyPublishTarget: profile.dailyPublishTarget,
+      allowedDomains: profile.allowedDomains,
+    });
+  }
+
+  for (const settings of input.integrationSettings) {
+    const workspaceId = settings.publerWorkspaceId?.trim() ?? "";
+    if (!workspaceId || workspaceMap.has(workspaceId)) {
+      continue;
+    }
+
+    workspaceMap.set(workspaceId, {
+      workspaceId,
+      workspaceName: workspaceId,
+      userId: settings.userId,
+      isDefault: true,
+      defaultAccountId: settings.publerAccountId,
+      defaultBoardId: settings.publerBoardId,
+      dailyPublishTarget: null,
+      allowedDomains: [],
+    });
+  }
+
+  for (const syncState of input.publicationSyncStates) {
+    if (!workspaceMap.has(syncState.workspaceId)) {
+      workspaceMap.set(syncState.workspaceId, {
+        workspaceId: syncState.workspaceId,
+        workspaceName: syncState.workspaceId,
+        userId: syncState.userId,
+        isDefault: false,
+        defaultAccountId: null,
+        defaultBoardId: null,
+        dailyPublishTarget: null,
+        allowedDomains: [],
+      });
+    }
+  }
+
+  const publicationCountByWorkspace = new Map<string, { scheduled: number; published: number }>();
+  for (const row of input.publicationRecordsByWorkspace) {
+    const workspaceId = row.providerWorkspaceId?.trim() ?? "";
+    if (!workspaceId) {
+      continue;
+    }
+
+    const current = publicationCountByWorkspace.get(workspaceId) ?? { scheduled: 0, published: 0 };
+    if (row.state === "SCHEDULED") {
+      current.scheduled += row._count._all;
+    } else {
+      current.published += row._count._all;
+    }
+    publicationCountByWorkspace.set(workspaceId, current);
+  }
+
+  const scheduleFailuresByWorkspace = new Map<string, number>();
+  for (const row of input.scheduleFailuresByWorkspace) {
+    const workspaceId = row.scheduleRun.workspaceId?.trim() ?? "";
+    if (!workspaceId) {
+      continue;
+    }
+    scheduleFailuresByWorkspace.set(
+      workspaceId,
+      (scheduleFailuresByWorkspace.get(workspaceId) ?? 0) + 1,
+    );
+  }
+
+  const pulseByWorkspace = new Map<
+    string,
+    {
+      postsTracked: number;
+      needsFreshPins: number;
+      noPinsYet: number;
+      lastPublishedAt: Date | null;
+      lastScheduledAt: Date | null;
+      totalJobs: number;
+      totalPins: number;
+    }
+  >();
+  for (const snapshot of input.postPulseSnapshots) {
+    const workspaceId = snapshot.workspaceId?.trim() ?? "";
+    if (!workspaceId) {
+      continue;
+    }
+
+    const current =
+      pulseByWorkspace.get(workspaceId) ??
+      {
+        postsTracked: 0,
+        needsFreshPins: 0,
+        noPinsYet: 0,
+        lastPublishedAt: null,
+        lastScheduledAt: null,
+        totalJobs: 0,
+        totalPins: 0,
+      };
+
+    current.postsTracked += 1;
+    current.totalJobs += snapshot.totalJobs;
+    current.totalPins += snapshot.totalGeneratedPins;
+    if (snapshot.freshnessStatus === PostPulseFreshnessStatus.NEEDS_FRESH_PINS) {
+      current.needsFreshPins += 1;
+    }
+    if (snapshot.freshnessStatus === PostPulseFreshnessStatus.NO_PINS_YET) {
+      current.noPinsYet += 1;
+    }
+    if (!current.lastPublishedAt || (snapshot.lastPublishedAt && snapshot.lastPublishedAt > current.lastPublishedAt)) {
+      current.lastPublishedAt = snapshot.lastPublishedAt;
+    }
+    if (!current.lastScheduledAt || (snapshot.lastScheduledAt && snapshot.lastScheduledAt > current.lastScheduledAt)) {
+      current.lastScheduledAt = snapshot.lastScheduledAt;
+    }
+
+    pulseByWorkspace.set(workspaceId, current);
+  }
+
+  const taskCountsByWorkspace = new Map<string, { queued: number; running: number; failed: number }>();
+  for (const row of input.workspaceTaskCounts) {
+    const workspaceId = row.workspaceId?.trim() ?? "";
+    if (!workspaceId) {
+      continue;
+    }
+
+    const current = taskCountsByWorkspace.get(workspaceId) ?? { queued: 0, running: 0, failed: 0 };
+    if (row.status === BackgroundTaskStatus.QUEUED) {
+      current.queued += row._count._all;
+    } else if (row.status === BackgroundTaskStatus.RUNNING) {
+      current.running += row._count._all;
+    } else if (row.status === BackgroundTaskStatus.FAILED) {
+      current.failed += row._count._all;
+    }
+    taskCountsByWorkspace.set(workspaceId, current);
+  }
+
+  const latestCacheByWorkspace = new Map<string, Date>();
+  for (const row of input.recentMetadataCacheEntries) {
+    const workspaceId = row.workspaceId.trim();
+    if (!workspaceId || latestCacheByWorkspace.has(workspaceId)) {
+      continue;
+    }
+    latestCacheByWorkspace.set(workspaceId, row.fetchedAt);
+  }
+
+  const lockByWorkspace = new Map<string, { scope: string; leaseExpiresAt: Date | null; holderId: string | null }>();
+  for (const lock of input.activeWorkspaceLocks) {
+    if (!lockByWorkspace.has(lock.workspaceId)) {
+      lockByWorkspace.set(lock.workspaceId, {
+        scope: lock.scope,
+        leaseExpiresAt: lock.leaseExpiresAt,
+        holderId: lock.holderId,
+      });
+    }
+  }
+
+  return Array.from(workspaceMap.values())
+    .map((workspace) => {
+      const pulse = pulseByWorkspace.get(workspace.workspaceId) ?? {
+        postsTracked: 0,
+        needsFreshPins: 0,
+        noPinsYet: 0,
+        lastPublishedAt: null,
+        lastScheduledAt: null,
+        totalJobs: 0,
+        totalPins: 0,
+      };
+      const publicationCounts = publicationCountByWorkspace.get(workspace.workspaceId) ?? {
+        scheduled: 0,
+        published: 0,
+      };
+      const taskCounts = taskCountsByWorkspace.get(workspace.workspaceId) ?? {
+        queued: 0,
+        running: 0,
+        failed: 0,
+      };
+      const syncState =
+        input.publicationSyncStates.find((item) => item.workspaceId === workspace.workspaceId) ?? null;
+      const activeLock = lockByWorkspace.get(workspace.workspaceId) ?? null;
+
+      return {
+        workspaceId: workspace.workspaceId,
+        workspaceName: workspace.workspaceName,
+        isDefault: workspace.isDefault,
+        allowedDomainCount: workspace.allowedDomains.length,
+        dailyPublishTarget: workspace.dailyPublishTarget,
+        defaultAccountId: workspace.defaultAccountId,
+        defaultBoardId: workspace.defaultBoardId,
+        jobsTracked: pulse.totalJobs,
+        generatedPinsTracked: pulse.totalPins,
+        postsTracked: pulse.postsTracked,
+        needsFreshPins: pulse.needsFreshPins,
+        noPinsYet: pulse.noPinsYet,
+        scheduledPosts30d: publicationCounts.scheduled,
+        publishedPosts30d: publicationCounts.published,
+        scheduleFailures30d: scheduleFailuresByWorkspace.get(workspace.workspaceId) ?? 0,
+        queuedTasks: taskCounts.queued,
+        runningTasks: taskCounts.running,
+        failedTasks: taskCounts.failed,
+        latestMetadataRefreshAt: latestCacheByWorkspace.get(workspace.workspaceId) ?? null,
+        lastPublishedAt: pulse.lastPublishedAt,
+        lastScheduledAt: pulse.lastScheduledAt,
+        syncState: syncState
+          ? {
+              mode: syncState.mode.toLowerCase(),
+              nextPage: syncState.nextPage,
+              lastCompletedAt: syncState.lastCompletedAt,
+              lastRunAt: syncState.lastRunAt,
+              lastError: syncState.lastError,
+              updatedAt: syncState.updatedAt,
+            }
+          : null,
+        activeLock: activeLock
+          ? {
+              scope: activeLock.scope,
+              holderId: activeLock.holderId,
+              expiresInMinutes:
+                activeLock.leaseExpiresAt
+                  ? Math.max(0, Math.round((activeLock.leaseExpiresAt.getTime() - input.now.getTime()) / 60000))
+                  : null,
+            }
+          : null,
+      };
+    })
+    .sort((left, right) => {
+      if (left.isDefault && !right.isDefault) {
+        return -1;
+      }
+      if (!left.isDefault && right.isDefault) {
+        return 1;
+      }
+      return left.workspaceName.localeCompare(right.workspaceName);
+    });
 }
 
 function getGroupedCount<T extends { status: BackgroundTaskStatus; _count: { _all: number } }>(
@@ -377,10 +791,7 @@ function percentileDuration(rows: Array<{ durationMs: number | null }>, percenti
     return null;
   }
 
-  const index = Math.min(
-    durations.length - 1,
-    Math.max(0, Math.ceil(durations.length * percentile) - 1),
-  );
+  const index = Math.min(durations.length - 1, Math.max(0, Math.ceil(durations.length * percentile) - 1));
   return durations[index] ?? null;
 }
 
