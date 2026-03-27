@@ -450,7 +450,8 @@ export function JobReviewManager({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
-    const data = (await response.json()) as {
+    const rawBody = await response.text();
+    const data = (rawBody ? tryParseJson(rawBody) : null) as {
       ok?: boolean;
       error?: string;
       generatedPinCount?: number;
@@ -460,9 +461,12 @@ export function JobReviewManager({
       task?: RenderTaskState | null;
       discardedPinCount?: number;
       discardedPlanCount?: number;
-    };
-    if (!response.ok || !data.ok) {
-      throw new Error(data.error ?? "Request failed.");
+    } | null;
+    if (!response.ok || !data?.ok) {
+      throw new Error(
+        data?.error ??
+          (rawBody.trim() ? rawBody.trim() : "Request failed."),
+      );
     }
 
     return data;
@@ -664,56 +668,58 @@ export function JobReviewManager({
     });
   }
 
-  function handleAssistedPlans() {
-    startTransition(async () => {
-      setActiveAction({ kind: "assisted" });
-      try {
-        setPlansFeedback(null);
-        await runAction(`/api/dashboard/jobs/${jobId}/plans`, {
-          mode: "assisted_auto",
-          pinCount,
-          templateIds: selectedTemplateIds,
-          presetStrategy: assistedPresetStrategy,
-          presetCategoryIds: selectedPresetCategoryIds,
-          allowAnyPresetOverride,
-        });
-        const message =
-          assistedPresetStrategy === "recommended"
-            ? allowAnyPresetOverride
-              ? "Assisted plans created with image-aware recommendation and full preset override enabled."
-              : "Assisted plans created with image-aware preset recommendation."
-            : assistedPresetStrategy === "random_bold"
-              ? "Assisted plans created with random bold presets."
-              : assistedPresetStrategy === "random_feminine"
-                ? "Assisted plans created with feminine-forward presets."
+  async function handleAssistedPlans() {
+    if (activeAction || isRenderingPlans) {
+      return;
+    }
+
+    setActiveAction({ kind: "assisted" });
+    try {
+      setPlansFeedback(null);
+      await runAction(`/api/dashboard/jobs/${jobId}/plans`, {
+        mode: "assisted_auto",
+        pinCount: Math.max(1, Number.isFinite(pinCount) ? pinCount : 1),
+        templateIds: selectedTemplateIds,
+        presetStrategy: assistedPresetStrategy,
+        presetCategoryIds: selectedPresetCategoryIds,
+        allowAnyPresetOverride,
+      });
+      const message =
+        assistedPresetStrategy === "recommended"
+          ? allowAnyPresetOverride
+            ? "Assisted plans created with image-aware recommendation and full preset override enabled."
+            : "Assisted plans created with image-aware preset recommendation."
+          : assistedPresetStrategy === "random_bold"
+            ? "Assisted plans created with random bold presets."
+            : assistedPresetStrategy === "random_feminine"
+              ? "Assisted plans created with feminine-forward presets."
               : "Assisted plans created with random presets.";
-        setPlansFeedback({
-          tone: "success",
-          message,
-        });
-        notify({
-          tone: "success",
-          title: "Plans created",
-          message,
-        });
-        router.refresh();
-      } catch (actionError) {
-        const message =
-          actionError instanceof Error ? actionError.message : "Unable to create assisted plans.";
-        setPlansFeedback({
-          tone: "error",
-          message,
-        });
-        notify({
-          tone: "error",
-          title: "Plan creation failed",
-          message,
-          sticky: true,
-        });
-      } finally {
-        setActiveAction(null);
-      }
-    });
+      setPlansFeedback({
+        tone: "success",
+        message,
+      });
+      notify({
+        tone: "success",
+        title: "Plans created",
+        message,
+      });
+      router.refresh();
+    } catch (actionError) {
+      const message =
+        actionError instanceof Error ? actionError.message : "Unable to create assisted plans.";
+      setPlansFeedback({
+        tone: "error",
+        message,
+      });
+      notify({
+        tone: "error",
+        title: "Plan creation failed",
+        message,
+        sticky: true,
+      });
+    } finally {
+      setActiveAction(null);
+    }
   }
 
   function handleManualPlan() {
@@ -3195,6 +3201,14 @@ function persistRecentlyFixedPlanIds(jobId: string, planIds: string[]) {
     );
   } catch {
     // Ignore session storage failures and keep the current review flow usable.
+  }
+}
+
+function tryParseJson(value: string) {
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return null;
   }
 }
 

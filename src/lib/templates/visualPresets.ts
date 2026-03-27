@@ -2182,11 +2182,29 @@ export async function recommendSplitVerticalVisualPresetWithImageAwareness(input
   }>;
   allowedPresetIds?: TemplateVisualPresetId[];
 }) {
-  const pixelSignals = await analyzeImageToneSignals(
-    input.imageSignals.map((signal) => signal.url ?? "").filter((value) => value.trim() !== ""),
-  );
+  const imageUrls = input.imageSignals
+    .map((signal) => signal.url ?? "")
+    .filter((value) => value.trim() !== "");
+  const pixelSignals = await getImageToneSignalsWithFallback(imageUrls);
 
   return recommendPresetFromContext(input, pixelSignals);
+}
+
+async function getImageToneSignalsWithFallback(imageUrls: string[]) {
+  if (imageUrls.length === 0) {
+    return null;
+  }
+
+  try {
+    return await Promise.race([
+      analyzeImageToneSignals(imageUrls),
+      new Promise<null>((resolve) => {
+        setTimeout(() => resolve(null), 1500);
+      }),
+    ]);
+  } catch {
+    return null;
+  }
 }
 
 function recommendPresetFromContext(
