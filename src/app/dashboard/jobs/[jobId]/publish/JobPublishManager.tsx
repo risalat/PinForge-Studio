@@ -330,9 +330,7 @@ export function JobPublishManager({
         const needsTitleFinalization =
           typeof copy.title === "string" &&
           nextTitle.trim().length > 0 &&
-          persisted.titleStatus !== "FINALIZED" &&
-          Array.isArray(persisted.titleOptions) &&
-          persisted.titleOptions.length > 0;
+          persisted.titleStatus !== "FINALIZED";
         const needsDescriptionFinalization =
           typeof copy.description === "string" &&
           nextDescription.trim().length > 0 &&
@@ -2780,8 +2778,23 @@ function formatDateLabel(value: string) {
                                 <StatusChip label={pin.templateId} tone="neutral" />
                               </div>
                               <p className="text-sm text-[var(--dashboard-subtle)]">
-                                No saved title options yet. Queue this pin for background title generation.
+                                No saved title options yet. Enter a manual publish title now or queue this pin for background title generation.
                               </p>
+                              <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
+                                <span className="flex items-center justify-between gap-3">
+                                  <span>Manual title</span>
+                                  <span className="text-xs font-medium text-[var(--dashboard-muted)]">
+                                    {(copy?.title ?? "").length}/{TITLE_MAX_LENGTH}
+                                  </span>
+                                </span>
+                                <input
+                                  value={copy?.title ?? ""}
+                                  onChange={(event) => updateCopy(pin.id, "title", event.target.value)}
+                                  maxLength={TITLE_MAX_LENGTH}
+                                  placeholder="Write your own title"
+                                  className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-white px-3 py-2"
+                                />
+                              </label>
                               <div className="flex flex-wrap gap-2">
                                 <button
                                   type="button"
