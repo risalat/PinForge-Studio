@@ -38,6 +38,11 @@ export type AdminDashboardData = Awaited<ReturnType<typeof getAdminDashboardData
 
 export async function getAdminDashboardData() {
   const now = new Date();
+  const todayStart = new Date(now);
+  todayStart.setHours(0, 0, 0, 0);
+  const weekStart = new Date(todayStart);
+  weekStart.setDate(todayStart.getDate() - ((todayStart.getDay() + 6) % 7));
+  const monthStart = new Date(todayStart.getFullYear(), todayStart.getMonth(), 1);
   const dayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
   const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
@@ -61,6 +66,12 @@ export async function getAdminDashboardData() {
     scheduleFailuresByWorkspace,
     postPulseSnapshots,
     workspaceTaskCounts,
+    pinsGeneratedToday,
+    pinsGeneratedLifetime,
+    articlesCoveredToday,
+    articlesCoveredThisWeek,
+    articlesCoveredThisMonth,
+    articlesCoveredLifetime,
   ] = await Promise.all([
     prisma.backgroundTask.groupBy({
       by: ["status"],
@@ -268,6 +279,45 @@ export async function getAdminDashboardData() {
       },
       _count: { _all: true },
     }),
+    prisma.generatedPin.count({
+      where: {
+        createdAt: { gte: todayStart },
+      },
+    }),
+    prisma.generatedPin.count(),
+    prisma.generationJob.findMany({
+      where: {
+        createdAt: { gte: todayStart },
+      },
+      distinct: ["postId"],
+      select: {
+        postId: true,
+      },
+    }),
+    prisma.generationJob.findMany({
+      where: {
+        createdAt: { gte: weekStart },
+      },
+      distinct: ["postId"],
+      select: {
+        postId: true,
+      },
+    }),
+    prisma.generationJob.findMany({
+      where: {
+        createdAt: { gte: monthStart },
+      },
+      distinct: ["postId"],
+      select: {
+        postId: true,
+      },
+    }),
+    prisma.generationJob.findMany({
+      distinct: ["postId"],
+      select: {
+        postId: true,
+      },
+    }),
   ]);
 
   const taskStatusCounts = {
@@ -330,6 +380,14 @@ export async function getAdminDashboardData() {
       healthySchedulers: runtimeByKind.scheduler.filter((item) => item.health === "healthy").length,
       healthyWebNodes: runtimeByKind.web.filter((item) => item.health === "healthy").length,
       metadataCacheSummary,
+      studioStats: {
+        pinsGeneratedToday,
+        pinsGeneratedLifetime,
+        articlesCoveredToday: articlesCoveredToday.length,
+        articlesCoveredThisWeek: articlesCoveredThisWeek.length,
+        articlesCoveredThisMonth: articlesCoveredThisMonth.length,
+        articlesCoveredLifetime: articlesCoveredLifetime.length,
+      },
     },
     runtimeByKind,
     taskQueueByKind: buildTaskQueueCards(taskCountsByKindAndStatus),

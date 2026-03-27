@@ -41,6 +41,20 @@ export default async function DashboardAdminOverviewPage() {
           <MiniStatCard label="Failed 24h" value={String(data.overview.recentFailedTaskCount)} />
           <MiniStatCard label="Workspaces" value={String(data.workspaceDiagnostics.length)} />
         </div>
+
+        <div className="mt-6">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--dashboard-muted)]">
+            Studio totals
+          </p>
+          <div className="mt-3 grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
+            <MiniStatCard label="Pins today" value={String(data.overview.studioStats.pinsGeneratedToday)} />
+            <MiniStatCard label="Pins lifetime" value={String(data.overview.studioStats.pinsGeneratedLifetime)} />
+            <MiniStatCard label="Articles today" value={String(data.overview.studioStats.articlesCoveredToday)} />
+            <MiniStatCard label="Articles this week" value={String(data.overview.studioStats.articlesCoveredThisWeek)} />
+            <MiniStatCard label="Articles this month" value={String(data.overview.studioStats.articlesCoveredThisMonth)} />
+            <MiniStatCard label="Articles lifetime" value={String(data.overview.studioStats.articlesCoveredLifetime)} />
+          </div>
+        </div>
       </AdminSection>
 
       <AdminSection
