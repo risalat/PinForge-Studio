@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { ArtworkReviewState } from "@prisma/client";
+import { ArtworkReviewState, BackgroundTaskKind, BackgroundTaskStatus } from "@prisma/client";
 import { z } from "zod";
 import { requireAuthenticatedDashboardApiUser } from "@/lib/auth/dashboardSession";
 import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
@@ -9,9 +9,16 @@ import {
   createAssistedGenerationPlans,
   createManualGenerationPlan,
   discardGenerationPlansForJob,
+  queuePlanPresetRecommendation,
   setGenerationPlanArtworkReviewState,
   updateGenerationPlanRenderContext,
 } from "@/lib/jobs/generatePins";
+import {
+  getActiveBackgroundTaskStatuses,
+  getBackgroundTaskForJob,
+  listBackgroundTasksForJob,
+  serializeBackgroundTaskSummary,
+} from "@/lib/tasks/backgroundTasks";
 import { templateVisualPresetCategories } from "@/lib/templates/types";
 
 export const runtime = "nodejs";
@@ -49,6 +56,11 @@ const plansSchema = z.discriminatedUnion("mode", [
     artworkReviewState: z.enum([ArtworkReviewState.FLAGGED, ArtworkReviewState.NORMAL]),
     artworkFlagReason: z.string().optional(),
   }),
+  z.object({
+    mode: z.literal("retune_preset"),
+    planIds: z.array(z.string().min(1)).min(1).optional(),
+    force: z.boolean().optional(),
+  }),
 ]);
 
 type RouteProps = {
@@ -56,6 +68,59 @@ type RouteProps = {
     jobId: string;
   }>;
 };
+
+export async function GET(request: Request, { params }: RouteProps) {
+  const auth = await requireAuthenticatedDashboardApiUser();
+  if (!auth.ok) {
+    return auth.response;
+  }
+
+  if (!isDatabaseConfigured()) {
+    return NextResponse.json({ ok: false, error: "DATABASE_URL is not configured." }, { status: 500 });
+  }
+
+  try {
+    const { jobId } = await params;
+    const user = await getOrCreateDashboardUser();
+    const url = new URL(request.url);
+    const taskId = url.searchParams.get("taskId")?.trim() || null;
+
+    const task = taskId
+      ? await getBackgroundTaskForJob(taskId, jobId)
+      : (
+          await listBackgroundTasksForJob({
+            jobId,
+            kinds: [BackgroundTaskKind.RECOMMEND_PLAN_PRESETS],
+            statuses: [
+              ...getActiveBackgroundTaskStatuses(),
+              BackgroundTaskStatus.SUCCEEDED,
+              BackgroundTaskStatus.FAILED,
+            ],
+            limit: 1,
+          })
+        )[0] ?? null;
+
+    if (!task || task.kind !== BackgroundTaskKind.RECOMMEND_PLAN_PRESETS) {
+      return NextResponse.json({ ok: true, task: null });
+    }
+
+    if (task.userId && task.userId !== user.id) {
+      return NextResponse.json({ ok: false, error: "Task not found." }, { status: 404 });
+    }
+
+    return NextResponse.json({
+      ok: true,
+      task: {
+        ...serializeBackgroundTaskSummary(task),
+        payloadJson: task.payloadJson,
+        progressJson: task.progressJson,
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to fetch preset tuning status.";
+    return NextResponse.json({ ok: false, error: message }, { status: 400 });
+  }
+}
 
 export async function POST(request: Request, { params }: RouteProps) {
   const auth = await requireAuthenticatedDashboardApiUser();
@@ -73,7 +138,7 @@ export async function POST(request: Request, { params }: RouteProps) {
     const user = await getOrCreateDashboardUser();
 
     if (payload.mode === "assisted_auto") {
-      await createAssistedGenerationPlans({
+      const result = await createAssistedGenerationPlans({
         userId: user.id,
         jobId,
         pinCount: payload.pinCount,
@@ -81,6 +146,11 @@ export async function POST(request: Request, { params }: RouteProps) {
         presetStrategy: payload.presetStrategy,
         presetCategoryIds: payload.presetCategoryIds,
         allowAnyPresetOverride: payload.allowAnyPresetOverride,
+      });
+      return NextResponse.json({
+        ok: true,
+        createdPlanCount: result.createdPlanCount,
+        presetRecommendationTask: result.presetRecommendationTask,
       });
     } else if (payload.mode === "manual") {
       await createManualGenerationPlan({
@@ -106,6 +176,20 @@ export async function POST(request: Request, { params }: RouteProps) {
         planId: payload.planId,
         artworkReviewState: payload.artworkReviewState,
         artworkFlagReason: payload.artworkFlagReason,
+      });
+    } else if (payload.mode === "retune_preset") {
+      const result = await queuePlanPresetRecommendation({
+        userId: user.id,
+        jobId,
+        planIds: payload.planIds,
+        force: payload.force,
+      });
+
+      return NextResponse.json({
+        ok: true,
+        queuedPlanCount: result.queuedPlanCount,
+        task: result.task,
+        message: result.message,
       });
     } else {
       const result = await discardGenerationPlansForJob({

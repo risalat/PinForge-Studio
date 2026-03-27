@@ -266,6 +266,10 @@ export function buildGenerateTitleBatchTaskDedupeKey(
   return `generate-title-batch:${jobId}:${hashIds(pinIds)}:${aiCredentialId?.trim() || "default"}`;
 }
 
+export function buildRecommendPlanPresetsTaskDedupeKey(jobId: string, planIds: string[]) {
+  return `recommend-plan-presets:${jobId}:${hashIds(planIds)}`;
+}
+
 export function buildGenerateDescriptionBatchTaskDedupeKey(
   jobId: string,
   pinIds: string[],

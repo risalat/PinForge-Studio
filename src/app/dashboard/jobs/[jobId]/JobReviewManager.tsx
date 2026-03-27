@@ -55,6 +55,11 @@ type PlanItem = {
   subtitle?: string;
   itemNumber?: number;
   visualPreset?: string;
+  presetRecommendationStatus?: "pending" | "recommended" | "failed" | "manual";
+  presetRecommendationSource?: "text_context" | "image_aware" | "manual";
+  presetRecommendedAt?: string;
+  presetRecommendationError?: string;
+  presetAutoRecommended?: boolean;
   assignments: Array<{
     slotIndex: number;
     imageUrl: string;
@@ -92,6 +97,7 @@ type ReviewActionState =
   | { kind: "save_review"; source: "review" | "images" }
   | { kind: "assisted" }
   | { kind: "manual" }
+  | { kind: "retune_preset"; planId: string }
   | { kind: "discard_plans"; scope: "selected" | "single" }
   | { kind: "discard_pins"; scope: "all" | "single" }
   | { kind: "save_overrides"; planId: string }
@@ -123,6 +129,30 @@ type RenderTaskState = {
     }>;
   } | null;
   lastError?: string | null;
+};
+
+type PresetRecommendationTaskState = {
+  id: string;
+  kind: string;
+  status: string;
+  payloadJson?: Record<string, unknown> | null;
+  progressJson?: {
+    stage?: string;
+    total?: number;
+    completed?: number;
+    updatedPlanCount?: number;
+    skippedPlanCount?: number;
+    failedPlanCount?: number;
+  } | null;
+  lastError?: string | null;
+};
+
+type PresetRecommendationProgressState = {
+  active: boolean;
+  completed: number;
+  total: number;
+  updatedPlanCount: number;
+  failedPlanCount: number;
 };
 
 type PlanDraft = {
@@ -235,6 +265,10 @@ export function JobReviewManager({
   const [renderProgress, setRenderProgress] = useState<RenderProgressState | null>(null);
   const [isRenderingPlans, setIsRenderingPlans] = useState(false);
   const [currentRenderTaskId, setCurrentRenderTaskId] = useState<string | null>(null);
+  const [presetRecommendationProgress, setPresetRecommendationProgress] =
+    useState<PresetRecommendationProgressState | null>(null);
+  const [isTuningPresets, setIsTuningPresets] = useState(false);
+  const [currentPresetTaskId, setCurrentPresetTaskId] = useState<string | null>(null);
   const [reviewGridFilter, setReviewGridFilter] = useState<ReviewGridFilter>(() =>
     readReviewGridFilter(jobId),
   );
@@ -454,11 +488,14 @@ export function JobReviewManager({
     const data = (rawBody ? tryParseJson(rawBody) : null) as {
       ok?: boolean;
       error?: string;
+      createdPlanCount?: number;
+      message?: string;
       generatedPinCount?: number;
       queued?: boolean;
       queuedPlanCount?: number;
       reused?: boolean;
       task?: RenderTaskState | null;
+      presetRecommendationTask?: { id?: string } | null;
       discardedPinCount?: number;
       discardedPlanCount?: number;
     } | null;
@@ -587,6 +624,108 @@ export function JobReviewManager({
 
   useEffect(() => {
     let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    async function poll(taskId?: string | null) {
+      try {
+        const task = await fetchPresetRecommendationTaskStatus(jobId, taskId);
+        if (cancelled || !task) {
+          if (!task) {
+            setIsTuningPresets(false);
+            setPresetRecommendationProgress(null);
+            setCurrentPresetTaskId(null);
+          }
+          return;
+        }
+
+        const progress = task.progressJson ?? {};
+        const total = typeof progress.total === "number" ? progress.total : 0;
+        const completed = typeof progress.completed === "number" ? progress.completed : 0;
+        const updatedPlanCount =
+          typeof progress.updatedPlanCount === "number" ? progress.updatedPlanCount : completed;
+        const failedPlanCount =
+          typeof progress.failedPlanCount === "number" ? progress.failedPlanCount : 0;
+
+        setCurrentPresetTaskId(task.id);
+        setIsTuningPresets(task.status === "QUEUED" || task.status === "RUNNING");
+        setPresetRecommendationProgress({
+          active: task.status === "QUEUED" || task.status === "RUNNING",
+          completed,
+          total: Math.max(total, completed, 1),
+          updatedPlanCount,
+          failedPlanCount,
+        });
+
+        if (task.status === "QUEUED" || task.status === "RUNNING") {
+          timer = setTimeout(() => {
+            void poll(task.id);
+          }, 3000);
+          return;
+        }
+
+        if (task.status === "SUCCEEDED") {
+          const message =
+            failedPlanCount > 0
+              ? `Preset tuning finished for ${updatedPlanCount} plan${updatedPlanCount === 1 ? "" : "s"}. ${failedPlanCount} still need attention.`
+              : `Preset tuning finished for ${updatedPlanCount} plan${updatedPlanCount === 1 ? "" : "s"}.`;
+          setPlansFeedback({
+            tone: failedPlanCount > 0 ? "error" : "success",
+            message,
+          });
+          notify({
+            tone: failedPlanCount > 0 ? "error" : "success",
+            title: failedPlanCount > 0 ? "Preset tuning finished with issues" : "Preset tuning complete",
+            message,
+            sticky: failedPlanCount > 0,
+          });
+        } else if (task.status === "FAILED" || task.status === "CANCELLED") {
+          const message = task.lastError || "Preset tuning failed.";
+          setPlansFeedback({
+            tone: "error",
+            message,
+          });
+          notify({
+            tone: "error",
+            title: "Preset tuning failed",
+            message,
+            sticky: true,
+          });
+        }
+
+        setIsTuningPresets(false);
+        setCurrentPresetTaskId(null);
+        startTransition(() => {
+          router.refresh();
+        });
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        const message =
+          error instanceof Error ? error.message : "Unable to fetch preset tuning status.";
+        setPlansFeedback({
+          tone: "error",
+          message,
+        });
+        setIsTuningPresets(false);
+      }
+    }
+
+    if (currentPresetTaskId) {
+      void poll(currentPresetTaskId);
+    }
+
+    return () => {
+      cancelled = true;
+      if (timer) {
+        clearTimeout(timer);
+      }
+    };
+  }, [currentPresetTaskId, jobId, notify, router, startTransition]);
+
+  useEffect(() => {
+    let cancelled = false;
 
     async function loadActiveTask() {
       try {
@@ -607,6 +746,29 @@ export function JobReviewManager({
       cancelled = true;
     };
   }, [currentRenderTaskId, jobId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadActiveTask() {
+      try {
+        const task = await fetchPresetRecommendationTaskStatus(jobId, null);
+        if (!cancelled && task && (task.status === "QUEUED" || task.status === "RUNNING")) {
+          setCurrentPresetTaskId(task.id);
+        }
+      } catch {
+        // Ignore preset task status probe failures and keep the page usable.
+      }
+    }
+
+    if (!currentPresetTaskId) {
+      void loadActiveTask();
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentPresetTaskId, jobId]);
 
   useEffect(() => {
     persistRecentlyFixedPlanIds(jobId, recentlyFixedPlanIds);
@@ -676,7 +838,7 @@ export function JobReviewManager({
     setActiveAction({ kind: "assisted" });
     try {
       setPlansFeedback(null);
-      await runAction(`/api/dashboard/jobs/${jobId}/plans`, {
+      const result = await runAction(`/api/dashboard/jobs/${jobId}/plans`, {
         mode: "assisted_auto",
         pinCount: Math.max(1, Number.isFinite(pinCount) ? pinCount : 1),
         templateIds: selectedTemplateIds,
@@ -687,8 +849,8 @@ export function JobReviewManager({
       const message =
         assistedPresetStrategy === "recommended"
           ? allowAnyPresetOverride
-            ? "Assisted plans created with image-aware recommendation and full preset override enabled."
-            : "Assisted plans created with image-aware preset recommendation."
+            ? "Assisted plans created. Image-aware preset tuning is queued with full preset override enabled."
+            : "Assisted plans created. Image-aware preset tuning is queued."
           : assistedPresetStrategy === "random_bold"
             ? "Assisted plans created with random bold presets."
             : assistedPresetStrategy === "random_feminine"
@@ -698,13 +860,16 @@ export function JobReviewManager({
         tone: "success",
         message,
       });
-      notify({
-        tone: "success",
-        title: "Plans created",
-        message,
-      });
-      router.refresh();
-    } catch (actionError) {
+        notify({
+          tone: "success",
+          title: "Plans created",
+          message,
+        });
+        if (result?.presetRecommendationTask?.id) {
+          setCurrentPresetTaskId(result.presetRecommendationTask.id);
+        }
+        router.refresh();
+      } catch (actionError) {
       const message =
         actionError instanceof Error ? actionError.message : "Unable to create assisted plans.";
       setPlansFeedback({
@@ -714,6 +879,53 @@ export function JobReviewManager({
       notify({
         tone: "error",
         title: "Plan creation failed",
+        message,
+        sticky: true,
+      });
+    } finally {
+      setActiveAction(null);
+    }
+  }
+
+  async function handleRetunePreset(planIds: string[]) {
+    if (activeAction || isRenderingPlans || planIds.length === 0) {
+      return;
+    }
+
+    const targetPlanId = planIds[0] ?? "";
+    setActiveAction({ kind: "retune_preset", planId: targetPlanId });
+    try {
+      setPlansFeedback(null);
+      const result = await runAction(`/api/dashboard/jobs/${jobId}/plans`, {
+        mode: "retune_preset",
+        planIds,
+      });
+      const message =
+        result?.message ??
+        `Queued image-aware preset tuning for ${planIds.length} plan${planIds.length === 1 ? "" : "s"}.`;
+      setPlansFeedback({
+        tone: "success",
+        message,
+      });
+      notify({
+        tone: "success",
+        title: "Preset tuning queued",
+        message,
+      });
+      if (result?.task?.id) {
+        setCurrentPresetTaskId(result.task.id);
+      }
+      router.refresh();
+    } catch (actionError) {
+      const message =
+        actionError instanceof Error ? actionError.message : "Unable to queue preset tuning.";
+      setPlansFeedback({
+        tone: "error",
+        message,
+      });
+      notify({
+        tone: "error",
+        title: "Preset tuning failed",
         message,
         sticky: true,
       });
@@ -1754,6 +1966,54 @@ export function JobReviewManager({
           </div>
         ) : null}
 
+        {presetRecommendationProgress ? (
+          <div className="overflow-hidden rounded-[28px] border border-[var(--dashboard-success-border)] bg-[linear-gradient(135deg,#ffffff_0%,#effcf5_100%)] p-5 shadow-[0_18px_40px_rgba(32,166,87,0.12)]">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-success-ink)]">
+                  Preset tuning
+                </p>
+                <h3 className="mt-2 text-xl font-black tracking-[-0.03em] text-[var(--dashboard-text)]">
+                  {presetRecommendationProgress.updatedPlanCount} of {presetRecommendationProgress.total} plans tuned
+                </h3>
+                <p className="mt-2 text-sm text-[var(--dashboard-subtle)]">
+                  {presetRecommendationProgress.active
+                    ? buildPresetRecommendationProgressMessage(presetRecommendationProgress)
+                    : "Image-aware preset tuning finished. Refreshing the workspace."}
+                </p>
+              </div>
+              <span className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-[var(--dashboard-success-ink)] shadow-[0_12px_24px_rgba(32,166,87,0.14)]">
+                {Math.max(
+                  0,
+                  Math.round(
+                    (presetRecommendationProgress.completed /
+                      Math.max(presetRecommendationProgress.total, 1)) *
+                      100,
+                  ),
+                )}
+                %
+              </span>
+            </div>
+            <div className="mt-4 h-3 overflow-hidden rounded-full bg-white/80">
+              <div
+                className={`h-full rounded-full bg-[linear-gradient(90deg,#1f9d55_0%,#5fe0a0_100%)] ${
+                  presetRecommendationProgress.active ? "app-toast-progress" : ""
+                }`}
+                style={{
+                  width: `${Math.max(
+                    8,
+                    Math.round(
+                      (presetRecommendationProgress.completed /
+                        Math.max(presetRecommendationProgress.total, 1)) *
+                        100,
+                    ),
+                  )}%`,
+                }}
+              />
+            </div>
+          </div>
+        ) : null}
+
         {plans.length > 0 ? (
           <>
             {(unresolvedPlans.length > 0 || usableRenderedPins.length > 0) ? (
@@ -2131,6 +2391,16 @@ export function JobReviewManager({
                               label={draft?.visualPreset ? `Preset ${formatLabel(draft.visualPreset)}` : "Preset auto"}
                               tone="neutral"
                             />
+                            {plan.presetRecommendationStatus === "pending" ? (
+                              <StatusPill label="Preset tuning queued" tone="warning" />
+                            ) : null}
+                            {plan.presetRecommendationStatus === "recommended" &&
+                            plan.presetRecommendationSource === "image_aware" ? (
+                              <StatusPill label="Image-aware tuned" tone="good" />
+                            ) : null}
+                            {plan.presetRecommendationStatus === "failed" ? (
+                              <StatusPill label="Preset tuning failed" tone="bad" />
+                            ) : null}
                           </div>
                           {plan.rerenderError ? (
                             <p className="mt-2 text-xs font-medium text-[var(--dashboard-danger-ink)]">
@@ -2245,6 +2515,32 @@ export function JobReviewManager({
                       >
                         Preview template
                       </Link>
+                      <button
+                        type="button"
+                        onClick={() => handleRetunePreset([selectedPlan.id])}
+                        disabled={
+                          Boolean(activeAction) ||
+                          isRenderingPlans ||
+                          isTuningPresets ||
+                          selectedPlan.generatedPinCount > 0 ||
+                          selectedPlan.presetRecommendationSource === "manual"
+                        }
+                        className={getButtonClass({
+                          tone: "neutral",
+                          busy:
+                            activeAction?.kind === "retune_preset" &&
+                            activeAction.planId === selectedPlan.id,
+                        })}
+                      >
+                        <BusyActionLabel
+                          busy={
+                            activeAction?.kind === "retune_preset" &&
+                            activeAction.planId === selectedPlan.id
+                          }
+                          label="Retune preset"
+                          busyLabel="Tuning..."
+                        />
+                      </button>
                       <button
                         type="button"
                         onClick={() => handleSavePlanSettings(selectedPlan.id)}
@@ -2575,6 +2871,32 @@ export function JobReviewManager({
                     busy={activeAction?.kind === "set_review_state" && activeAction.planId === selectedPlan.id}
                     label={selectedPlan.artworkReviewState === "FLAGGED" ? "Clear flag" : "Flag for fix"}
                     busyLabel={selectedPlan.artworkReviewState === "FLAGGED" ? "Clearing flag..." : "Flagging..."}
+                  />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleRetunePreset([selectedPlan.id])}
+                  disabled={
+                    Boolean(activeAction) ||
+                    isRenderingPlans ||
+                    isTuningPresets ||
+                    selectedPlan.generatedPinCount > 0 ||
+                    selectedPlan.presetRecommendationSource === "manual"
+                  }
+                  className={getButtonClass({
+                    tone: "neutral",
+                    busy:
+                      activeAction?.kind === "retune_preset" &&
+                      activeAction.planId === selectedPlan.id,
+                  })}
+                >
+                  <BusyActionLabel
+                    busy={
+                      activeAction?.kind === "retune_preset" &&
+                      activeAction.planId === selectedPlan.id
+                    }
+                    label="Retune preset"
+                    busyLabel="Tuning..."
                   />
                 </button>
                 <button
@@ -3148,6 +3470,25 @@ async function fetchRenderTaskStatus(jobId: string, taskId?: string | null) {
   return data.task ?? null;
 }
 
+async function fetchPresetRecommendationTaskStatus(jobId: string, taskId?: string | null) {
+  const search = taskId ? `?taskId=${encodeURIComponent(taskId)}` : "";
+  const response = await fetch(`/api/dashboard/jobs/${jobId}/plans${search}`, {
+    method: "GET",
+    cache: "no-store",
+  });
+  const data = (await response.json()) as {
+    ok?: boolean;
+    error?: string;
+    task?: PresetRecommendationTaskState | null;
+  };
+
+  if (!response.ok || !data.ok) {
+    throw new Error(data.error ?? "Unable to fetch preset tuning status.");
+  }
+
+  return data.task ?? null;
+}
+
 function buildRenderProgressMessage(input: {
   completed: number;
   total: number;
@@ -3155,6 +3496,10 @@ function buildRenderProgressMessage(input: {
 }) {
   const currentIndex = Math.min(input.total, input.completed + 1);
   return `Rendering ${currentIndex} of ${input.total}: ${input.currentLabel}.`;
+}
+
+function buildPresetRecommendationProgressMessage(input: PresetRecommendationProgressState) {
+  return `Tuning ${input.completed} of ${input.total} plans with image-aware preset selection.`;
 }
 
 function isPlanUnresolved(state: string) {

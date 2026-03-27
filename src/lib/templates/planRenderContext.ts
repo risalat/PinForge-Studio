@@ -8,6 +8,11 @@ export type PlanRenderContext = {
   itemNumber?: number;
   visualPreset?: TemplateVisualPresetId;
   colorPreset?: string;
+  presetRecommendationStatus?: "pending" | "recommended" | "failed" | "manual";
+  presetRecommendationSource?: "text_context" | "image_aware" | "manual";
+  presetRecommendedAt?: string;
+  presetRecommendationError?: string;
+  presetAutoRecommended?: boolean;
 };
 
 export function parsePlanRenderContext(value: string | null | undefined): PlanRenderContext {
@@ -44,6 +49,21 @@ export function serializePlanRenderContext(input: PlanRenderContext) {
   if (isVisualPreset(input.visualPreset)) {
     next.visualPreset = input.visualPreset;
   }
+  if (isPresetRecommendationStatus(input.presetRecommendationStatus)) {
+    next.presetRecommendationStatus = input.presetRecommendationStatus;
+  }
+  if (isPresetRecommendationSource(input.presetRecommendationSource)) {
+    next.presetRecommendationSource = input.presetRecommendationSource;
+  }
+  if (typeof input.presetRecommendedAt === "string" && input.presetRecommendedAt.trim()) {
+    next.presetRecommendedAt = input.presetRecommendedAt;
+  }
+  if (typeof input.presetRecommendationError === "string" && input.presetRecommendationError.trim()) {
+    next.presetRecommendationError = input.presetRecommendationError.trim();
+  }
+  if (typeof input.presetAutoRecommended === "boolean") {
+    next.presetAutoRecommended = input.presetAutoRecommended;
+  }
 
   return JSON.stringify(next);
 }
@@ -57,4 +77,21 @@ function isVisualPreset(value: unknown): value is TemplateVisualPresetId {
     typeof value === "string" &&
     templateVisualPresets.includes(value as TemplateVisualPresetId)
   );
+}
+
+function isPresetRecommendationStatus(
+  value: unknown,
+): value is NonNullable<PlanRenderContext["presetRecommendationStatus"]> {
+  return (
+    value === "pending" ||
+    value === "recommended" ||
+    value === "failed" ||
+    value === "manual"
+  );
+}
+
+function isPresetRecommendationSource(
+  value: unknown,
+): value is NonNullable<PlanRenderContext["presetRecommendationSource"]> {
+  return value === "text_context" || value === "image_aware" || value === "manual";
 }

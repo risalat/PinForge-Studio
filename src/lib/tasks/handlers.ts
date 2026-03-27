@@ -9,6 +9,7 @@ import { syncPublerPublicationRecordsForUser } from "@/lib/dashboard/publerSync"
 import {
   generateDescriptionsForJobPins,
   generateTitlesForJobPins,
+  recommendPlanPresetsForJobTask,
   renderPlansForJobTask,
   scheduleJobPins,
   uploadJobPinsToPubler,
@@ -32,6 +33,12 @@ const generateTitleBatchPayloadSchema = z.object({
   jobId: z.string().min(1),
   generatedPinIds: z.array(z.string().min(1)).optional(),
   aiCredentialId: z.string().min(1).nullable().optional(),
+});
+
+const recommendPlanPresetsPayloadSchema = z.object({
+  userId: z.string().min(1),
+  jobId: z.string().min(1),
+  planIds: z.array(z.string().min(1)).optional(),
 });
 
 const generateDescriptionBatchPayloadSchema = z.object({
@@ -96,6 +103,8 @@ export async function executeBackgroundTask(
     case BackgroundTaskKind.RENDER_PLANS:
     case BackgroundTaskKind.RERENDER_PLAN:
       return executeRenderPlansTask(task, context);
+    case BackgroundTaskKind.RECOMMEND_PLAN_PRESETS:
+      return executeRecommendPlanPresetsTask(task, context);
     case BackgroundTaskKind.UPLOAD_MEDIA_BATCH:
       return executeUploadMediaBatchTask(task, context);
     case BackgroundTaskKind.GENERATE_TITLE_BATCH:
@@ -162,6 +171,42 @@ async function executeGenerateTitleBatchTask(
     workerId: context.workerId,
     finishedAt: new Date().toISOString(),
     result,
+  } satisfies Prisma.InputJsonValue;
+
+  await context.reportProgress(progressJson);
+
+  return {
+    progressJson,
+  };
+}
+
+async function executeRecommendPlanPresetsTask(
+  task: BackgroundTask,
+  context: BackgroundTaskHandlerContext,
+): Promise<BackgroundTaskExecutionResult> {
+  const payload = recommendPlanPresetsPayloadSchema.parse(task.payloadJson);
+
+  await context.reportProgress({
+    stage: "running",
+    total: payload.planIds?.length ?? 0,
+    completed: 0,
+    workerId: context.workerId,
+    startedAt: new Date().toISOString(),
+  });
+
+  const result = await recommendPlanPresetsForJobTask({
+    userId: payload.userId,
+    jobId: payload.jobId,
+    planIds: payload.planIds,
+    onProgress: async (progress) => {
+      await context.reportProgress(progress satisfies Prisma.InputJsonValue);
+    },
+  });
+
+  const progressJson = {
+    ...result,
+    workerId: context.workerId,
+    finishedAt: new Date().toISOString(),
   } satisfies Prisma.InputJsonValue;
 
   await context.reportProgress(progressJson);

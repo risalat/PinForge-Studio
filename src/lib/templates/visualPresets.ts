@@ -2207,6 +2207,192 @@ async function getImageToneSignalsWithFallback(imageUrls: string[]) {
   }
 }
 
+type WeightedPresetRule = {
+  terms: string[];
+  scores: Array<readonly [TemplateVisualPresetId, number]>;
+};
+
+const STYLE_FAMILY_RULES: WeightedPresetRule[] = [
+  {
+    terms: ["farmhouse", "rustic", "country", "shiplap", "weathered", "reclaimed"],
+    scores: [
+      ["terracotta-ink", 3],
+      ["powder-blue-clay", 2],
+      ["olive-linen", 2],
+      ["jade-paprika", 2],
+    ],
+  },
+  {
+    terms: ["coastal", "beach", "seaside", "ocean", "nautical", "lakehouse"],
+    scores: [
+      ["powder-blue-clay", 3],
+      ["cobalt-coral", 2],
+      ["teal-flare", 2],
+      ["sage-cream", 1],
+    ],
+  },
+  {
+    terms: ["cottage", "grandmillennial", "floral", "romantic", "vintage", "heirloom"],
+    scores: [
+      ["rosewater-satin", 2],
+      ["petal-latte", 2],
+      ["cocoa-blush", 2],
+      ["ballet-slipper", 1],
+      ["raspberry-truffle", 1],
+    ],
+  },
+  {
+    terms: ["modern", "contemporary", "minimal", "scandinavian", "clean", "organic modern"],
+    scores: [
+      ["olive-linen", 3],
+      ["obsidian-punch", 2],
+      ["ink-lime", 2],
+      ["sage-cream", 1],
+    ],
+  },
+  {
+    terms: ["boho", "desert", "southwestern", "sunbaked", "earthy"],
+    scores: [
+      ["terracotta-ink", 3],
+      ["jade-paprika", 2],
+      ["sunset-punch", 1],
+    ],
+  },
+  {
+    terms: ["luxury", "glam", "editorial", "dramatic", "moody", "statement"],
+    scores: [
+      ["midnight-gold", 3],
+      ["obsidian-punch", 2],
+      ["raspberry-truffle", 1],
+      ["magenta-glow", 1],
+    ],
+  },
+  {
+    terms: ["colorful", "eclectic", "maximalist", "playful", "happy", "bold"],
+    scores: [
+      ["berry-citrus", 3],
+      ["sunset-punch", 2],
+      ["peony-punch", 2],
+      ["cobalt-coral", 2],
+      ["emerald-sun", 2],
+    ],
+  },
+];
+
+const ROOM_FAMILY_RULES: WeightedPresetRule[] = [
+  {
+    terms: ["kitchen", "cabinet", "pantry", "backsplash", "island"],
+    scores: [
+      ["sage-cream", 2],
+      ["jade-paprika", 2],
+      ["powder-blue-clay", 2],
+      ["cobalt-coral", 1],
+      ["butter-blush", 1],
+    ],
+  },
+  {
+    terms: ["bedroom", "bed", "nightstand", "headboard"],
+    scores: [
+      ["cocoa-blush", 2],
+      ["lavender-mist", 2],
+      ["rosewater-satin", 2],
+      ["midnight-gold", 1],
+    ],
+  },
+  {
+    terms: ["bathroom", "powder room", "vanity", "shower"],
+    scores: [
+      ["powder-blue-clay", 2],
+      ["peach-cloud", 1],
+      ["sage-cream", 1],
+      ["obsidian-punch", 1],
+    ],
+  },
+  {
+    terms: ["living room", "family room", "great room", "den", "fireplace"],
+    scores: [
+      ["olive-linen", 2],
+      ["terracotta-ink", 2],
+      ["sage-cream", 2],
+      ["obsidian-punch", 1],
+    ],
+  },
+  {
+    terms: ["nursery", "kids room", "playroom", "baby room"],
+    scores: [
+      ["ballet-slipper", 2],
+      ["mint-macaroon", 2],
+      ["butter-blush", 2],
+      ["powder-blue-clay", 2],
+      ["peach-cloud", 2],
+    ],
+  },
+  {
+    terms: ["entryway", "front door", "porch", "mudroom", "foyer"],
+    scores: [
+      ["terracotta-ink", 2],
+      ["jade-paprika", 2],
+      ["scarlet-cream", 1],
+      ["cobalt-coral", 1],
+    ],
+  },
+  {
+    terms: ["office", "desk", "study", "library", "workspace"],
+    scores: [
+      ["ink-lime", 2],
+      ["olive-linen", 2],
+      ["obsidian-punch", 2],
+      ["powder-blue-clay", 1],
+    ],
+  },
+];
+
+const THEME_FAMILY_RULES: WeightedPresetRule[] = [
+  {
+    terms: ["wood", "oak", "walnut", "leather", "grain"],
+    scores: [
+      ["terracotta-ink", 2],
+      ["jade-paprika", 2],
+      ["olive-linen", 1],
+    ],
+  },
+  {
+    terms: ["floral", "flower", "bloom", "garden", "botanical"],
+    scores: [
+      ["rosewater-satin", 2],
+      ["peony-punch", 2],
+      ["ballet-slipper", 1],
+      ["sage-cream", 1],
+    ],
+  },
+  {
+    terms: ["spring", "easter", "fresh"],
+    scores: [
+      ["butter-blush", 2],
+      ["mint-macaroon", 2],
+      ["peach-cloud", 2],
+      ["powder-blue-clay", 1],
+    ],
+  },
+  {
+    terms: ["summer", "sunny", "vacation"],
+    scores: [
+      ["sunset-punch", 2],
+      ["teal-flare", 2],
+      ["cobalt-coral", 1],
+      ["butter-blush", 1],
+    ],
+  },
+  {
+    terms: ["holiday", "christmas", "festive"],
+    scores: [
+      ["scarlet-cream", 2],
+      ["emerald-sun", 2],
+      ["midnight-gold", 1],
+    ],
+  },
+];
+
 function recommendPresetFromContext(
   input: {
     articleTitle: string;
@@ -2224,22 +2410,24 @@ function recommendPresetFromContext(
   },
   pixelSignals?: ImageToneSignals | null,
 ) {
-  const context = [
-    input.articleTitle,
-    input.pinTitle,
-    input.subtitle,
-    input.domain,
-    ...input.imageSignals.flatMap((signal) => [
+  const headlineContext = [input.articleTitle, input.pinTitle, input.subtitle]
+    .filter((value): value is string => Boolean(value?.trim()))
+    .join(" ")
+    .toLowerCase();
+  const imageMetadataContext = input.imageSignals
+    .flatMap((signal) => [
       signal.alt,
       signal.caption,
       signal.nearestHeading,
       signal.surroundingTextSnippet,
       ...signal.sectionHeadingPath,
-    ]),
-  ]
+    ])
     .filter((value): value is string => Boolean(value?.trim()))
     .join(" ")
     .toLowerCase();
+  const context = [headlineContext, headlineContext, input.domain, imageMetadataContext]
+    .filter((value) => value.trim() !== "")
+    .join(" ");
   const presetCandidates = (input.allowedPresetIds?.length
     ? input.allowedPresetIds
     : (Object.keys(SPLIT_VERTICAL_VISUAL_PRESETS) as TemplateVisualPresetId[]));
@@ -2473,6 +2661,13 @@ function recommendPresetFromContext(
     "playful",
   ], 2);
 
+  applyPresetRuleSet(scores, headlineContext, STYLE_FAMILY_RULES, 1.4);
+  applyPresetRuleSet(scores, imageMetadataContext, STYLE_FAMILY_RULES, 0.9);
+  applyPresetRuleSet(scores, headlineContext, ROOM_FAMILY_RULES, 1.35);
+  applyPresetRuleSet(scores, imageMetadataContext, ROOM_FAMILY_RULES, 0.8);
+  applyPresetRuleSet(scores, headlineContext, THEME_FAMILY_RULES, 1.15);
+  applyPresetRuleSet(scores, imageMetadataContext, THEME_FAMILY_RULES, 0.7);
+
   if (pixelSignals) {
     if (pixelSignals.brightness < 0.42 || pixelSignals.contrast > 0.24) {
       incrementScore(scores, "midnight-gold", 4);
@@ -2595,6 +2790,32 @@ function addKeywordScore(
   if (hits > 0) {
     incrementScore(scores, presetId, hits * weight);
   }
+}
+
+function applyPresetRuleSet(
+  scores: Map<TemplateVisualPresetId, number>,
+  context: string,
+  rules: WeightedPresetRule[],
+  multiplier = 1,
+) {
+  if (!context.trim()) {
+    return;
+  }
+
+  for (const rule of rules) {
+    const hits = countTermHits(context, rule.terms);
+    if (hits === 0) {
+      continue;
+    }
+
+    for (const [presetId, weight] of rule.scores) {
+      incrementScore(scores, presetId, hits * weight * multiplier);
+    }
+  }
+}
+
+function countTermHits(context: string, terms: string[]) {
+  return terms.filter((term) => context.includes(term)).length;
 }
 
 function incrementScore(

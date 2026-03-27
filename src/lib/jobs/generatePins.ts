@@ -57,6 +57,7 @@ import { getStorageProvider } from "@/lib/storage";
 import { buildStorageAssetUrl, resolveStoredAssetUrl } from "@/lib/storage/assetUrl";
 import { runWithWorkspaceOperationLock } from "@/lib/publer/workspaceOperationLock";
 import {
+  buildRecommendPlanPresetsTaskDedupeKey,
   buildGenerateTitleBatchTaskDedupeKey,
   buildGenerateDescriptionBatchTaskDedupeKey,
   buildRenderPlansTaskDedupeKey,
@@ -74,11 +75,13 @@ import {
   parsePlanRenderContext,
   serializePlanRenderContext,
   toPlanVisualPreset,
+  type PlanRenderContext,
 } from "@/lib/templates/planRenderContext";
 import { getTemplateConfig, TEMPLATE_CONFIGS } from "@/lib/templates/registry";
 import {
   getPresetIdsForCategories,
   getPresetIdsForTemplate,
+  recommendSplitVerticalVisualPreset,
   recommendSplitVerticalVisualPresetWithImageAwareness,
   splitVerticalBoldPresetIds,
   splitVerticalFemininePresetIds,
@@ -776,6 +779,7 @@ export async function createAssistedGenerationPlans(input: {
     input.pinCount,
     `${job.id}:preset-sequence:${input.presetStrategy ?? "recommended"}`,
   );
+  const shouldQueuePresetRecommendation = (input.presetStrategy ?? "recommended") === "recommended";
   const preparedPlans = await Promise.all(
     Array.from({ length: input.pinCount }).map(async (_, index) => {
       const templateId = templateSequence[index] ?? eligibleTemplateIds[index % eligibleTemplateIds.length];
@@ -807,6 +811,7 @@ export async function createAssistedGenerationPlans(input: {
         {
           allowedPresetPool: templatePresetPool,
           fallbackPreset: templateFallbackPreset,
+          recommendationMode: shouldQueuePresetRecommendation ? "text_context" : "image_aware",
         },
       );
 
@@ -900,6 +905,127 @@ export async function createAssistedGenerationPlans(input: {
       },
     }),
   ]);
+
+  const createdPlans = shouldQueuePresetRecommendation
+    ? await prisma.generationPlan.findMany({
+        where: {
+          jobId: job.id,
+          sortOrder: {
+            gte: baseSortOrder,
+            lt: baseSortOrder + orderedPreparedPlans.length,
+          },
+        },
+        orderBy: { sortOrder: "asc" },
+        select: { id: true },
+      })
+    : [];
+
+  let presetRecommendationTask:
+    | ReturnType<typeof serializeBackgroundTaskSummary>
+    | null = null;
+
+  if (shouldQueuePresetRecommendation && orderedPreparedPlans.length > 0) {
+    const taskResult = await enqueueBackgroundTask({
+      kind: BackgroundTaskKind.RECOMMEND_PLAN_PRESETS,
+      userId: input.userId,
+      jobId: input.jobId,
+      priority: 30,
+      dedupeKey: buildRecommendPlanPresetsTaskDedupeKey(
+        input.jobId,
+        createdPlans.map((plan) => plan.id),
+      ),
+      payloadJson: {
+        userId: input.userId,
+        jobId: input.jobId,
+        planIds: createdPlans.map((plan) => plan.id),
+      } satisfies Prisma.InputJsonValue,
+      progressJson: {
+        stage: "queued",
+        total: orderedPreparedPlans.length,
+        completed: 0,
+      } satisfies Prisma.InputJsonValue,
+      maxAttempts: 3,
+    });
+    presetRecommendationTask = serializeBackgroundTaskSummary(taskResult.task);
+  }
+
+  return {
+    createdPlanCount: orderedPreparedPlans.length,
+    presetRecommendationTask,
+  };
+}
+
+export async function queuePlanPresetRecommendation(input: {
+  userId: string;
+  jobId: string;
+  planIds?: string[];
+  force?: boolean;
+}) {
+  const job = await getOwnedJobPlansForRender(input.jobId, input.userId, input.planIds);
+  const targetPlans = job.generationPlans.filter((plan) => {
+    const existing = parsePlanRenderContext(plan.notes);
+    return (
+      plan.generatedPins.length === 0 &&
+      (input.force ||
+        existing.presetRecommendationSource !== "manual" ||
+        existing.presetAutoRecommended !== false)
+    );
+  });
+
+  if (targetPlans.length === 0) {
+    return {
+      queuedPlanCount: 0,
+      task: null as ReturnType<typeof serializeBackgroundTaskSummary> | null,
+      message: "No eligible plans are ready for preset tuning.",
+    };
+  }
+
+  await Promise.all(
+    targetPlans.map((plan) => {
+      const existing = parsePlanRenderContext(plan.notes);
+      return prisma.generationPlan.update({
+        where: { id: plan.id },
+        data: {
+          notes: serializePlanRenderContext({
+            ...existing,
+            presetRecommendationStatus: "pending",
+            presetRecommendationSource: existing.presetRecommendationSource ?? "text_context",
+            presetRecommendationError: undefined,
+            presetRecommendedAt: new Date().toISOString(),
+            presetAutoRecommended: true,
+          }),
+        },
+      });
+    }),
+  );
+
+  const taskResult = await enqueueBackgroundTask({
+    kind: BackgroundTaskKind.RECOMMEND_PLAN_PRESETS,
+    userId: input.userId,
+    jobId: input.jobId,
+    priority: 30,
+    dedupeKey: buildRecommendPlanPresetsTaskDedupeKey(
+      input.jobId,
+      targetPlans.map((plan) => plan.id),
+    ),
+    payloadJson: {
+      userId: input.userId,
+      jobId: input.jobId,
+      planIds: targetPlans.map((plan) => plan.id),
+    } satisfies Prisma.InputJsonValue,
+    progressJson: {
+      stage: "queued",
+      total: targetPlans.length,
+      completed: 0,
+    } satisfies Prisma.InputJsonValue,
+    maxAttempts: 3,
+  });
+
+  return {
+    queuedPlanCount: targetPlans.length,
+    task: serializeBackgroundTaskSummary(taskResult.task),
+    message: `Queued image-aware preset tuning for ${targetPlans.length} plan${targetPlans.length === 1 ? "" : "s"}.`,
+  };
 }
 
 export async function createManualGenerationPlan(input: {
@@ -1026,6 +1152,16 @@ export async function updateGenerationPlanRenderContext(input: {
       input.visualPreset !== undefined
         ? toPlanVisualPreset(input.visualPreset ?? undefined)
         : existing.visualPreset,
+    presetRecommendationStatus:
+      input.visualPreset !== undefined ? "manual" : existing.presetRecommendationStatus,
+    presetRecommendationSource:
+      input.visualPreset !== undefined ? "manual" : existing.presetRecommendationSource,
+    presetRecommendedAt:
+      input.visualPreset !== undefined ? new Date().toISOString() : existing.presetRecommendedAt,
+    presetRecommendationError:
+      input.visualPreset !== undefined ? undefined : existing.presetRecommendationError,
+    presetAutoRecommended:
+      input.visualPreset !== undefined ? false : existing.presetAutoRecommended,
   };
 
   await prisma.generationPlan.update({
@@ -1427,6 +1563,161 @@ export async function renderPlansForJobTask(input: {
             failedPlans,
             progress,
           };
+        },
+      ),
+  );
+}
+
+export async function recommendPlanPresetsForJobTask(input: {
+  userId: string;
+  jobId: string;
+  planIds?: string[];
+  onProgress?: (progress: {
+    stage: string;
+    total: number;
+    completed: number;
+    updatedPlanCount?: number;
+    skippedPlanCount?: number;
+    failedPlanCount?: number;
+  }) => Promise<void>;
+}) {
+  return runWithOperationContext(
+    {
+      action: "workflow.recommend_plan_presets",
+      userId: input.userId,
+      jobId: input.jobId,
+    },
+    async () =>
+      timeAsyncOperation(
+        "workflow.plan_preset_recommendation",
+        {
+          userId: input.userId,
+          jobId: input.jobId,
+          planCount: input.planIds?.length ?? null,
+        },
+        async () => {
+          const job = await getOwnedJobPlansForRender(input.jobId, input.userId, input.planIds);
+          const selectedPlanIds = input.planIds?.length ? new Set(input.planIds) : null;
+          const candidatePlans = job.generationPlans.filter(
+            (plan) => !selectedPlanIds || selectedPlanIds.has(plan.id),
+          );
+          const eligiblePlans = candidatePlans.filter((plan) => {
+            const existing = parsePlanRenderContext(plan.notes);
+            return (
+              existing.presetAutoRecommended !== false &&
+              plan.generatedPins.length === 0 &&
+              plan.status !== GenerationPlanStatus.GENERATED
+            );
+          });
+
+          await input.onProgress?.({
+            stage: "running",
+            total: eligiblePlans.length,
+            completed: 0,
+            updatedPlanCount: 0,
+            skippedPlanCount: Math.max(0, candidatePlans.length - eligiblePlans.length),
+            failedPlanCount: 0,
+          });
+
+          let updatedPlanCount = 0;
+          let skippedPlanCount = Math.max(0, candidatePlans.length - eligiblePlans.length);
+          let failedPlanCount = 0;
+
+          for (const [index, plan] of eligiblePlans.entries()) {
+            const existing = parsePlanRenderContext(plan.notes);
+
+            try {
+              const nextPreset = await recommendSplitVerticalVisualPresetWithImageAwareness({
+                articleTitle: job.articleTitleSnapshot,
+                pinTitle: existing.title || job.articleTitleSnapshot,
+                subtitle: existing.subtitle,
+                domain: job.domainSnapshot,
+                allowedPresetIds: getPresetIdsForTemplate(plan.templateId),
+                imageSignals: plan.imageAssignments.map((assignment) => assignment.sourceImage),
+              });
+
+              const latestPlan = await prisma.generationPlan.findUnique({
+                where: { id: plan.id },
+                select: {
+                  status: true,
+                  notes: true,
+                  _count: {
+                    select: {
+                      generatedPins: true,
+                    },
+                  },
+                },
+              });
+
+              if (!latestPlan) {
+                skippedPlanCount += 1;
+                continue;
+              }
+
+              const latestContext = parsePlanRenderContext(latestPlan.notes);
+              if (
+                latestContext.presetRecommendationSource === "manual" ||
+                latestContext.presetAutoRecommended === false ||
+                latestPlan._count.generatedPins > 0 ||
+                latestPlan.status === GenerationPlanStatus.GENERATED
+              ) {
+                skippedPlanCount += 1;
+                continue;
+              }
+
+              await prisma.generationPlan.update({
+                where: { id: plan.id },
+                data: {
+                  notes: serializePlanRenderContext({
+                    ...latestContext,
+                    visualPreset: nextPreset,
+                    presetRecommendationStatus: "recommended",
+                    presetRecommendationSource: "image_aware",
+                    presetRecommendedAt: new Date().toISOString(),
+                    presetRecommendationError: undefined,
+                    presetAutoRecommended: true,
+                  }),
+                },
+              });
+              updatedPlanCount += 1;
+            } catch (error) {
+              failedPlanCount += 1;
+              await prisma.generationPlan.update({
+                where: { id: plan.id },
+                data: {
+                  notes: serializePlanRenderContext({
+                    ...parsePlanRenderContext(plan.notes),
+                    presetRecommendationStatus: "failed",
+                    presetRecommendationError: normalizeErrorForLogging(error).message,
+                    presetRecommendedAt: new Date().toISOString(),
+                    presetAutoRecommended: true,
+                  }),
+                },
+              });
+            }
+
+            await input.onProgress?.({
+              stage: "running",
+              total: eligiblePlans.length,
+              completed: index + 1,
+              updatedPlanCount,
+              skippedPlanCount,
+              failedPlanCount,
+            });
+          }
+
+          const progress = {
+            stage: failedPlanCount > 0 ? "completed_with_failures" : "completed",
+            total: eligiblePlans.length,
+            completed: eligiblePlans.length,
+            updatedPlanCount,
+            skippedPlanCount,
+            failedPlanCount,
+          };
+
+          await input.onProgress?.(progress);
+
+          return progress;
         },
       ),
   );
@@ -3118,9 +3409,11 @@ async function buildSeedPlanRenderContext(
   options?: {
     allowedPresetPool?: TemplateVisualPresetId[];
     fallbackPreset?: TemplateVisualPresetId;
+    recommendationMode?: "image_aware" | "text_context";
   },
-) {
+): Promise<PlanRenderContext> {
   let visualPreset: TemplateVisualPresetId;
+  const recommendationMode = options?.recommendationMode ?? "image_aware";
 
   if (
     presetStrategy === "random_all" ||
@@ -3129,12 +3422,22 @@ async function buildSeedPlanRenderContext(
   ) {
     visualPreset = options?.fallbackPreset ?? pickRandomPreset(options?.allowedPresetPool);
   } else {
-    const recommendedPreset = await recommendSplitVerticalVisualPresetWithImageAwareness({
-      articleTitle: job.articleTitleSnapshot,
-      pinTitle: job.articleTitleSnapshot,
-      domain: job.domainSnapshot,
-      imageSignals: assignments.map((assignment) => assignment.sourceImage),
-    });
+    const recommendedPreset =
+      recommendationMode === "image_aware"
+        ? await recommendSplitVerticalVisualPresetWithImageAwareness({
+            articleTitle: job.articleTitleSnapshot,
+            pinTitle: job.articleTitleSnapshot,
+            domain: job.domainSnapshot,
+            imageSignals: assignments.map((assignment) => assignment.sourceImage),
+            allowedPresetIds: options?.allowedPresetPool,
+          })
+        : recommendSplitVerticalVisualPreset({
+            articleTitle: job.articleTitleSnapshot,
+            pinTitle: job.articleTitleSnapshot,
+            domain: job.domainSnapshot,
+            imageSignals: assignments.map((assignment) => assignment.sourceImage),
+            allowedPresetIds: options?.allowedPresetPool,
+          });
 
     visualPreset =
       options?.allowedPresetPool?.length && !options.allowedPresetPool.includes(recommendedPreset)
@@ -3145,6 +3448,16 @@ async function buildSeedPlanRenderContext(
   return {
     itemNumber: job.listCountHint ?? job.sourceImages.length,
     visualPreset,
+    presetRecommendationStatus:
+      presetStrategy === "recommended"
+        ? recommendationMode === "image_aware"
+          ? "recommended"
+          : "pending"
+        : undefined,
+    presetRecommendationSource:
+      presetStrategy === "recommended" ? recommendationMode : undefined,
+    presetRecommendedAt: new Date().toISOString(),
+    presetAutoRecommended: presetStrategy === "recommended",
   };
 }
 
