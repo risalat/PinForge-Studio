@@ -10,7 +10,8 @@ export type DashboardNavItem = {
     | "library"
     | "keys"
     | "integrations"
-    | "housekeeping";
+    | "housekeeping"
+    | "admin";
 };
 
 export const dashboardNavigation = [
@@ -36,6 +37,7 @@ export const dashboardNavigation = [
     items: [
       { label: "Integrations", href: "/dashboard/integrations", icon: "integrations" },
       { label: "Housekeeping", href: "/dashboard/housekeeping", icon: "housekeeping" },
+      { label: "Admin", href: "/dashboard/admin", icon: "admin" },
     ],
   },
 ] satisfies Array<{
@@ -173,6 +175,18 @@ export function getDashboardPageTitle(pathname: string) {
       primaryActionHref: "/dashboard/integrations",
       secondaryActionLabel: "Overview",
       secondaryActionHref: "/dashboard",
+    };
+  }
+
+  if (pathname === "/dashboard/admin") {
+    return {
+      eyebrow: "Admin",
+      title: "Operations control room",
+      description: "Monitor runtime health, task pressure, and workflow performance from one internal dashboard.",
+      primaryActionLabel: "Housekeeping",
+      primaryActionHref: "/dashboard/housekeeping",
+      secondaryActionLabel: "Publishing queue",
+      secondaryActionHref: "/dashboard/publishing",
     };
   }
 

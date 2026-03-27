@@ -23,6 +23,7 @@ export const env = {
   r2SecretAccessKey: process.env.R2_SECRET_ACCESS_KEY ?? "",
   r2PublicBaseUrl: process.env.R2_PUBLIC_BASE_URL ?? "",
   appUrl: resolveAppUrl(),
+  dashboardAdminEmails: parseCommaSeparatedValues(process.env.DASHBOARD_ADMIN_EMAILS ?? ""),
 };
 
 function resolveAppUrl() {
@@ -75,6 +76,10 @@ export function isR2Configured() {
 }
 
 function parseEncryptionFallbacks(value: string) {
+  return parseCommaSeparatedValues(value);
+}
+
+function parseCommaSeparatedValues(value: string) {
   return value
     .split(/[\r\n,]+/)
     .map((item) => item.trim())

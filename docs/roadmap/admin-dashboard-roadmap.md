@@ -2,7 +2,7 @@
 
 ## Status
 
-- Status: Future roadmap
+- Status: Phase A implemented
 - Audience: internal operators / admins
 - Not part of the current end-user workflow
 
@@ -233,8 +233,27 @@ As Studio grows, this dashboard will help with:
 - monitoring worker/scheduler health
 - spotting Publer or storage issues before users report them
 
-## Current recommendation
+## Phase A now implemented
 
-Do not implement this inside the main workflow yet.
+Current delivered surface:
 
-Keep it as a future internal roadmap item after the current workflow/performance work is fully stable in production.
+- `/dashboard/admin`
+- single-user internal admin access, with optional email allowlist support through `DASHBOARD_ADMIN_EMAILS`
+- system overview cards
+- persisted runtime heartbeats for:
+  - web
+  - worker
+  - scheduler
+- persisted operation timings from the existing workflow instrumentation
+- background task queue and recent-failure visibility
+- Publer lock/cache/operation visibility
+- storage and cleanup snapshot cards
+
+## Remaining roadmap
+
+Next recommended work stays the same:
+
+- Phase B: workspace diagnostics
+- Phase C: controlled admin actions
+
+Keep the dashboard read-only until the current operational views are stable in production.

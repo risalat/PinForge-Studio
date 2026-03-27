@@ -13,6 +13,7 @@ import {
 } from "@/lib/tasks/backgroundTasks";
 import { prisma } from "@/lib/prisma";
 import { logStructuredEvent } from "@/lib/observability/operationContext";
+import { touchRuntimeHeartbeat } from "@/lib/observability/persistence";
 
 const DEFAULT_SCHEDULER_INTERVAL_MS = 5 * 60 * 1000;
 const DEFAULT_SYNC_INTERVAL_MINUTES = 30;
@@ -59,6 +60,18 @@ export async function runBackgroundScheduler(
     staleTaskTimeoutMs,
     once: Boolean(options.once),
   });
+  await touchRuntimeHeartbeat({
+    kind: "SCHEDULER",
+    instanceId: schedulerId,
+    displayName: "Background scheduler",
+    minIntervalMs: 0,
+    metadataJson: {
+      pollIntervalMs,
+      syncIntervalMinutes,
+      tempCleanupDays,
+      once: Boolean(options.once),
+    },
+  });
 
   while (true) {
     await runSchedulerIteration({
@@ -68,6 +81,18 @@ export async function runBackgroundScheduler(
       taskRetentionDays,
       failedTaskRetentionDays,
       staleTaskTimeoutMs,
+    });
+    await touchRuntimeHeartbeat({
+      kind: "SCHEDULER",
+      instanceId: schedulerId,
+      displayName: "Background scheduler",
+      minIntervalMs: pollIntervalMs,
+      metadataJson: {
+        pollIntervalMs,
+        syncIntervalMinutes,
+        tempCleanupDays,
+        state: "sleeping",
+      },
     });
 
     if (options.once) {
@@ -86,6 +111,17 @@ async function runSchedulerIteration(input: {
   failedTaskRetentionDays: number;
   staleTaskTimeoutMs: number;
 }) {
+  await touchRuntimeHeartbeat({
+    kind: "SCHEDULER",
+    instanceId: input.schedulerId,
+    displayName: "Background scheduler",
+    minIntervalMs: 0,
+    metadataJson: {
+      syncIntervalMinutes: input.syncIntervalMinutes,
+      tempCleanupDays: input.tempCleanupDays,
+      state: "running_iteration",
+    },
+  });
   const recovered = await recoverExpiredBackgroundTasks({
     schedulerId: input.schedulerId,
     staleTaskTimeoutMs: input.staleTaskTimeoutMs,

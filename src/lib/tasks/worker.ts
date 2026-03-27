@@ -19,6 +19,7 @@ import {
   runWithOperationContext,
   timeAsyncOperation,
 } from "@/lib/observability/operationContext";
+import { touchRuntimeHeartbeat } from "@/lib/observability/persistence";
 
 type RunBackgroundWorkerOptions = {
   workerId?: string;
@@ -41,8 +42,30 @@ export async function runBackgroundWorker(options: RunBackgroundWorkerOptions = 
     leaseTimeoutMs,
     once: Boolean(options.once),
   });
+  await touchRuntimeHeartbeat({
+    kind: "WORKER",
+    instanceId: workerId,
+    displayName: "Background worker",
+    minIntervalMs: 0,
+    metadataJson: {
+      pollIntervalMs,
+      leaseTimeoutMs,
+      once: Boolean(options.once),
+    },
+  });
 
   while (true) {
+    await touchRuntimeHeartbeat({
+      kind: "WORKER",
+      instanceId: workerId,
+      displayName: "Background worker",
+      minIntervalMs: pollIntervalMs,
+      metadataJson: {
+        pollIntervalMs,
+        leaseTimeoutMs,
+        state: "polling",
+      },
+    });
     const task = await claimNextBackgroundTask({
       workerId,
       leaseTimeoutMs,
@@ -69,6 +92,19 @@ export async function runBackgroundWorker(options: RunBackgroundWorkerOptions = 
 }
 
 async function processBackgroundTask(task: BackgroundTask, workerId: string) {
+  await touchRuntimeHeartbeat({
+    kind: "WORKER",
+    instanceId: workerId,
+    displayName: "Background worker",
+    minIntervalMs: 0,
+    metadataJson: {
+      state: "processing",
+      taskId: task.id,
+      taskKind: task.kind,
+      workspaceId: task.workspaceId ?? null,
+      jobId: task.jobId ?? null,
+    },
+  });
   await runWithOperationContext(
     {
       correlationId: createCorrelationId("background_task"),

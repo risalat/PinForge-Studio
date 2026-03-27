@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
+import { recordOperationMetric } from "@/lib/observability/persistence";
 
 type OperationContext = {
   correlationId: string;
@@ -48,16 +49,40 @@ export async function timeAsyncOperation<T>(
 
   try {
     const result = await operation();
+    const durationMs = Date.now() - startedAt;
     logStructuredEvent("info", `${name}.succeeded`, {
       ...metadata,
-      durationMs: Date.now() - startedAt,
+      durationMs,
+    });
+    await recordOperationMetric({
+      operationName: name,
+      status: "SUCCEEDED",
+      durationMs,
+      metadataJson: sanitizeMetricMetadata({
+        ...metadata,
+        durationMs,
+      }),
+      context: getOperationContext(),
     });
     return result;
   } catch (error) {
+    const durationMs = Date.now() - startedAt;
+    const normalizedError = normalizeErrorForLogging(error);
     logStructuredEvent("error", `${name}.failed`, {
       ...metadata,
-      durationMs: Date.now() - startedAt,
-      error: normalizeErrorForLogging(error),
+      durationMs,
+      error: normalizedError,
+    });
+    await recordOperationMetric({
+      operationName: name,
+      status: "FAILED",
+      durationMs,
+      metadataJson: sanitizeMetricMetadata({
+        ...metadata,
+        durationMs,
+        error: normalizedError,
+      }),
+      context: getOperationContext(),
     });
     throw error;
   }
@@ -157,5 +182,15 @@ function safeJsonStringify(value: unknown) {
     return JSON.stringify(value);
   } catch {
     return String(value);
+  }
+}
+
+function sanitizeMetricMetadata(value: Record<string, unknown>) {
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch {
+    return {
+      note: "metric_metadata_serialization_failed",
+    };
   }
 }

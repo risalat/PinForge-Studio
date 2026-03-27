@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { NextResponse } from "next/server";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 import { isSupabaseAuthConfigured } from "@/lib/env";
+import { env } from "@/lib/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export async function getAuthenticatedSupabaseUser() {
@@ -25,6 +26,22 @@ export async function requireAuthenticatedDashboardUser(): Promise<SupabaseUser>
   }
 
   return user;
+}
+
+export async function requireDashboardAdminUser(): Promise<SupabaseUser> {
+  const user = await requireAuthenticatedDashboardUser();
+  const allowlist = new Set(env.dashboardAdminEmails.map((email) => email.toLowerCase()));
+
+  if (allowlist.size === 0) {
+    return user;
+  }
+
+  const email = user.email?.trim().toLowerCase() ?? "";
+  if (email && allowlist.has(email)) {
+    return user;
+  }
+
+  redirect("/dashboard");
 }
 
 export async function requireAuthenticatedDashboardApiUser() {

@@ -50,6 +50,17 @@ enum BackgroundTaskStatus {
   CANCELLED
 }
 
+enum RuntimeHeartbeatKind {
+  WEB
+  WORKER
+  SCHEDULER
+}
+
+enum OperationMetricStatus {
+  SUCCEEDED
+  FAILED
+}
+
 enum BackgroundTaskKind {
   RENDER_PLANS
   RERENDER_PLAN
@@ -467,6 +478,41 @@ model BackgroundTask {
   @@index([userId, status, createdAt])
   @@index([jobId, kind, status, createdAt])
   @@index([workspaceId, kind, status, createdAt])
+}
+
+model RuntimeHeartbeat {
+  id           String               @id @default(cuid())
+  kind         RuntimeHeartbeatKind
+  instanceId   String
+  displayName  String?
+  metadataJson Json?
+  lastSeenAt   DateTime             @default(now())
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  @@unique([kind, instanceId])
+  @@index([kind, lastSeenAt])
+}
+
+model OperationMetric {
+  id             String                @id @default(cuid())
+  operationName  String
+  status         OperationMetricStatus
+  correlationId  String?
+  userId         String?
+  jobId          String?
+  planId         String?
+  generatedPinId String?
+  workspaceId    String?
+  durationMs     Int?
+  metadataJson   Json?
+  occurredAt     DateTime              @default(now())
+  createdAt      DateTime              @default(now())
+
+  @@index([operationName, occurredAt])
+  @@index([status, occurredAt])
+  @@index([workspaceId, occurredAt])
+  @@index([userId, occurredAt])
 }
 
 model WorkspaceOperationLock {
