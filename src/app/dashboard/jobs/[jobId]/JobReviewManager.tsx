@@ -258,6 +258,7 @@ export function JobReviewManager({
   const [, startTransition] = useTransition();
   const [reviewFeedback, setReviewFeedback] = useState<FeedbackState>(null);
   const [plansFeedback, setPlansFeedback] = useState<FeedbackState>(null);
+  const [isImageReviewExpanded, setIsImageReviewExpanded] = useState(true);
   const [generationFeedback, setGenerationFeedback] = useState<FeedbackState>(null);
   const [previewPinIndex, setPreviewPinIndex] = useState<number | null>(null);
   const [previewSource, setPreviewSource] = useState<{ url: string; label: string } | null>(null);
@@ -1415,93 +1416,109 @@ export function JobReviewManager({
         <div className="flex items-center justify-between gap-4">
           <div>
             <h2 className="text-xl font-bold">Image review</h2>
+            <p className="mt-2 text-sm text-[var(--dashboard-subtle)]">
+              {images.filter((image) => image.isSelected).length} enabled of {images.length} images
+            </p>
           </div>
-          <button
-            type="button"
-            onClick={() => handleSaveReview("images")}
-            disabled={Boolean(activeAction) || isRenderingPlans}
-            aria-busy={activeAction?.kind === "save_review" && activeAction.source === "images"}
-            className={getButtonClass({
-              tone: "accent",
-              busy: activeAction?.kind === "save_review" && activeAction.source === "images",
-            })}
-          >
-            <BusyActionLabel
-              busy={activeAction?.kind === "save_review" && activeAction.source === "images"}
-              label="Save review"
-              busyLabel="Saving review..."
-              inverse
-            />
-          </button>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setIsImageReviewExpanded((current) => !current)}
+              className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)]"
+            >
+              {isImageReviewExpanded ? "Collapse images" : "Expand images"}
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSaveReview("images")}
+              disabled={Boolean(activeAction) || isRenderingPlans}
+              aria-busy={activeAction?.kind === "save_review" && activeAction.source === "images"}
+              className={getButtonClass({
+                tone: "accent",
+                busy: activeAction?.kind === "save_review" && activeAction.source === "images",
+              })}
+            >
+              <BusyActionLabel
+                busy={activeAction?.kind === "save_review" && activeAction.source === "images"}
+                label="Save review"
+                busyLabel="Saving review..."
+                inverse
+              />
+            </button>
+          </div>
         </div>
         {reviewFeedback?.source === "images" ? <InlineFeedback feedback={reviewFeedback} /> : null}
 
-        <div className="grid gap-3 rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-alt)] p-4 text-sm text-[var(--dashboard-subtle)] md:grid-cols-2">
-          <div>
-            <p className="font-semibold text-[var(--dashboard-text)]">Use in plans</p>
-            <p className="mt-1">
-              Enabled images can be used by assisted auto and can also be assigned manually.
-            </p>
-          </div>
-          <div>
-            <p className="font-semibold text-[var(--dashboard-text)]">Prefer in assisted auto</p>
-            <p className="mt-1">
-              This only biases assisted auto toward that image. It does not force it into every generated pin.
-            </p>
-          </div>
-        </div>
-
-        <div className="grid gap-4 lg:grid-cols-2">
-          {images.map((image) => (
-            <article
-              key={image.id}
-              className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-4"
-            >
-              <div className="flex flex-col gap-4 lg:flex-row">
-                <img
-                  src={image.url}
-                  alt={image.alt ?? "Source image"}
-                  className="h-48 w-full rounded-lg object-cover lg:w-40"
-                />
-                <div className="min-w-0 flex-1 space-y-2 text-sm text-[var(--dashboard-subtle)]">
-                  <div className="flex flex-wrap gap-4 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--dashboard-muted)]">
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={image.isSelected}
-                        onChange={(event) =>
-                          updateImage(image.id, {
-                            isSelected: event.target.checked,
-                            isPreferred: event.target.checked ? image.isPreferred : false,
-                          })
-                        }
-                      />
-                      Use in plans
-                    </label>
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={image.isPreferred}
-                        disabled={!image.isSelected}
-                        onChange={(event) => updateImage(image.id, { isPreferred: event.target.checked })}
-                      />
-                      Prefer in assisted auto
-                    </label>
-                  </div>
-                  <p className="text-xs text-[var(--dashboard-muted)]">{formatCompactUrl(image.url)}</p>
-                  <MetadataRow label="Alt" value={image.alt} />
-                  <MetadataRow label="Caption" value={image.caption} />
-                  <MetadataRow label="Nearest heading" value={image.nearestHeading} />
-                  <MetadataRow
-                    label="Section path"
-                    value={image.sectionHeadingPath.length > 0 ? image.sectionHeadingPath.join(" / ") : null}
-                  />
-                  <MetadataRow label="Snippet" value={image.surroundingTextSnippet} />
-                </div>
+        {isImageReviewExpanded ? (
+          <>
+            <div className="grid gap-3 rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-alt)] p-4 text-sm text-[var(--dashboard-subtle)] md:grid-cols-2">
+              <div>
+                <p className="font-semibold text-[var(--dashboard-text)]">Use in plans</p>
+                <p className="mt-1">
+                  Enabled images can be used by assisted auto and can also be assigned manually.
+                </p>
               </div>
-            </article>
-          ))}
-        </div>
+              <div>
+                <p className="font-semibold text-[var(--dashboard-text)]">Prefer in assisted auto</p>
+                <p className="mt-1">
+                  This only biases assisted auto toward that image. It does not force it into every generated pin.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              {images.map((image) => (
+                <article
+                  key={image.id}
+                  className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-4"
+                >
+                  <div className="flex flex-col gap-4 lg:flex-row">
+                    <img
+                      src={image.url}
+                      alt={image.alt ?? "Source image"}
+                      className="h-48 w-full rounded-lg object-cover lg:w-40"
+                    />
+                    <div className="min-w-0 flex-1 space-y-2 text-sm text-[var(--dashboard-subtle)]">
+                      <div className="flex flex-wrap gap-4 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--dashboard-muted)]">
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={image.isSelected}
+                            onChange={(event) =>
+                              updateImage(image.id, {
+                                isSelected: event.target.checked,
+                                isPreferred: event.target.checked ? image.isPreferred : false,
+                              })
+                            }
+                          />
+                          Use in plans
+                        </label>
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={image.isPreferred}
+                            disabled={!image.isSelected}
+                            onChange={(event) => updateImage(image.id, { isPreferred: event.target.checked })}
+                          />
+                          Prefer in assisted auto
+                        </label>
+                      </div>
+                      <p className="text-xs text-[var(--dashboard-muted)]">{formatCompactUrl(image.url)}</p>
+                      <MetadataRow label="Alt" value={image.alt} />
+                      <MetadataRow label="Caption" value={image.caption} />
+                      <MetadataRow label="Nearest heading" value={image.nearestHeading} />
+                      <MetadataRow
+                        label="Section path"
+                        value={image.sectionHeadingPath.length > 0 ? image.sectionHeadingPath.join(" / ") : null}
+                      />
+                      <MetadataRow label="Snippet" value={image.surroundingTextSnippet} />
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </>
+        ) : null}
       </section>
 
       <section

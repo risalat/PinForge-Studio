@@ -1,13 +1,38 @@
 "use client";
 
 import { BusyActionLabel } from "@/components/ui/BusyActionLabel";
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 type PublishingLaneFilter = "all" | "ready" | "scheduled" | "failed";
 type PublishingSort = "newest" | "oldest" | "title" | "pins_desc";
 
 export function DashboardPublishingTableControls({
+  initialQuery,
+  initialLane,
+  initialSort,
+  totalCount,
+  filteredCount,
+}: {
+  initialQuery: string;
+  initialLane: PublishingLaneFilter;
+  initialSort: PublishingSort;
+  totalCount: number;
+  filteredCount: number;
+}) {
+  return (
+    <DashboardPublishingTableControlsInner
+      key={`${initialQuery}|${initialLane}|${initialSort}`}
+      initialQuery={initialQuery}
+      initialLane={initialLane}
+      initialSort={initialSort}
+      totalCount={totalCount}
+      filteredCount={filteredCount}
+    />
+  );
+}
+
+function DashboardPublishingTableControlsInner({
   initialQuery,
   initialLane,
   initialSort,
@@ -27,10 +52,6 @@ export function DashboardPublishingTableControls({
   const [query, setQuery] = useState(initialQuery);
   const [lane, setLane] = useState<PublishingLaneFilter>(initialLane);
   const [sort, setSort] = useState<PublishingSort>(initialSort);
-
-  useEffect(() => setQuery(initialQuery), [initialQuery]);
-  useEffect(() => setLane(initialLane), [initialLane]);
-  useEffect(() => setSort(initialSort), [initialSort]);
 
   function updateQuery(next: { query?: string; lane?: PublishingLaneFilter; sort?: PublishingSort }) {
     startTransition(() => {

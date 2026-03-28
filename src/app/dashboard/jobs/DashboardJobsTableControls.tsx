@@ -1,13 +1,38 @@
 "use client";
 
 import { BusyActionLabel } from "@/components/ui/BusyActionLabel";
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 type JobStatusFilter = "all" | "in_review" | "generated" | "scheduled" | "failed" | "completed";
 type JobSort = "newest" | "oldest" | "title" | "pins_desc";
 
 export function DashboardJobsTableControls({
+  initialQuery,
+  initialStatus,
+  initialSort,
+  totalCount,
+  filteredCount,
+}: {
+  initialQuery: string;
+  initialStatus: JobStatusFilter;
+  initialSort: JobSort;
+  totalCount: number;
+  filteredCount: number;
+}) {
+  return (
+    <DashboardJobsTableControlsInner
+      key={`${initialQuery}|${initialStatus}|${initialSort}`}
+      initialQuery={initialQuery}
+      initialStatus={initialStatus}
+      initialSort={initialSort}
+      totalCount={totalCount}
+      filteredCount={filteredCount}
+    />
+  );
+}
+
+function DashboardJobsTableControlsInner({
   initialQuery,
   initialStatus,
   initialSort,
@@ -27,10 +52,6 @@ export function DashboardJobsTableControls({
   const [query, setQuery] = useState(initialQuery);
   const [status, setStatus] = useState<JobStatusFilter>(initialStatus);
   const [sort, setSort] = useState<JobSort>(initialSort);
-
-  useEffect(() => setQuery(initialQuery), [initialQuery]);
-  useEffect(() => setStatus(initialStatus), [initialStatus]);
-  useEffect(() => setSort(initialSort), [initialSort]);
 
   function updateQuery(next: { query?: string; status?: JobStatusFilter; sort?: JobSort }) {
     startTransition(() => {

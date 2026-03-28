@@ -196,62 +196,93 @@ function resolveOverlayColors(
     number: string;
   },
 ) {
-  const overlayBackground =
-    category === "dark-drama"
-      ? withAlpha(tintTowardsWhite(mixHex(palette.canvas, palette.footer, 0.18), 0.78), 0.9)
-      : category === "graphic-pop" || category === "fresh-vivid"
-        ? withAlpha(tintTowardsWhite(mixHex(palette.band, palette.canvas, 0.3), 0.84), 0.92)
-        : category === "feminine-bold"
-          ? withAlpha(tintTowardsWhite(mixHex(palette.band, palette.canvas, 0.26), 0.88), 0.92)
-          : withAlpha(tintTowardsWhite(mixHex(palette.canvas, palette.band, 0.16), 0.92), 0.91);
-  const flatOverlay = stripAlpha(overlayBackground);
-  const overlayHighlight = withAlpha(
-    tintTowardsWhite(mixHex(palette.band, palette.canvas, 0.18), 0.96),
-    category === "dark-drama" ? 0.26 : 0.54,
+  const lightSurface = pickLightestColor([
+    palette.canvas,
+    palette.divider,
+    palette.subtitle,
+    palette.band,
+  ]);
+  const accentBase = pickBoldestColor([
+    palette.title,
+    palette.number,
+    palette.band,
+    palette.domain,
+    palette.footer,
+  ]);
+  const supportingAccent = pickBoldestColor([
+    palette.number,
+    palette.domain,
+    palette.title,
+    palette.band,
+    palette.footer,
+  ]);
+  const overlayBackground = withAlpha(
+    tintTowardsWhite(
+      mixHex(
+        lightSurface,
+        category === "dark-drama" ? palette.divider : palette.canvas,
+        category === "dark-drama" ? 0.12 : 0.08,
+      ),
+      category === "dark-drama" ? 0.18 : 0.22,
+    ),
+    category === "dark-drama" ? 0.96 : 0.94,
   );
+  const flatOverlay = stripAlpha(overlayBackground);
+  const overlayHighlight = withAlpha(tintTowardsWhite(lightSurface, 0.3), 0.68);
   const overlayBase = withAlpha(
-    tintTowardsWhite(mixHex(palette.canvas, palette.footer, 0.14), category === "dark-drama" ? 0.78 : 0.9),
-    category === "dark-drama" ? 0.9 : 0.92,
+    mixHex(flatOverlay, category === "dark-drama" ? palette.canvas : lightSurface, 0.2),
+    category === "dark-drama" ? 0.96 : 0.94,
   );
 
-  const numberColor = ensureContrastColor(
-    flatOverlay,
-    deepenHex(mixHex(palette.number, palette.footer, 0.22), 0.28),
-    [deepenHex(palette.band, 0.34), deepenHex(palette.domain, 0.3), "#302822"],
-    5.2,
-  );
   const titleColor = ensureContrastColor(
     flatOverlay,
-    deepenHex(mixHex(palette.title, palette.band, 0.16), 0.3),
-    [deepenHex(palette.domain, 0.28), deepenHex(palette.number, 0.34), "#3e342d"],
+    accentBase,
+    [
+      deepenHex(accentBase, 0.16),
+      deepenHex(accentBase, 0.32),
+      deepenHex(supportingAccent, 0.28),
+      deepenHex(palette.footer, 0.22),
+      "#231b16",
+    ],
     6.4,
+  );
+  const numberColor = ensureContrastColor(
+    flatOverlay,
+    supportingAccent,
+    [
+      titleColor,
+      deepenHex(supportingAccent, 0.22),
+      deepenHex(accentBase, 0.36),
+      "#2d221d",
+    ],
+    5.6,
   );
   const dividerColor = withAlpha(
     ensureContrastColor(
       flatOverlay,
-      mixHex(titleColor, palette.divider, 0.4),
-      [titleColor, numberColor, deepenHex(palette.band, 0.28)],
+      mixHex(titleColor, lightSurface, 0.22),
+      [titleColor, numberColor, deepenHex(accentBase, 0.22)],
       2.8,
     ),
     0.62,
   );
   const domainColor = ensureContrastColor(
     flatOverlay,
-    deepenHex(mixHex(palette.domain, palette.band, 0.22), 0.22),
-    [numberColor, titleColor, "#433831"],
+    mixHex(titleColor, supportingAccent, 0.3),
+    [titleColor, numberColor, deepenHex(palette.footer, 0.22), "#433831"],
     4.8,
   );
   const overlayBorderColor = withAlpha(
     ensureContrastColor(
       flatOverlay,
-      mixHex(palette.divider, palette.band, 0.34),
-      [titleColor, numberColor],
+      mixHex(lightSurface, titleColor, 0.2),
+      [titleColor, numberColor, domainColor],
       1.6,
     ),
     category === "graphic-pop" || category === "feminine-bold" ? 0.34 : 0.2,
   );
   const overlayShadowColor = withAlpha(
-    deepenHex(mixHex(palette.footer, palette.band, 0.38), 0.4),
+    deepenHex(mixHex(accentBase, palette.footer, 0.4), 0.38),
     category === "dark-drama" ? 0.3 : 0.18,
   );
   const titleShadowColor = withAlpha(tintTowardsWhite(titleColor, 0.08), 0.16);
@@ -273,6 +304,31 @@ function resolveOverlayColors(
     domainColor,
     domainShadowColor,
   };
+}
+
+function pickLightestColor(colors: string[]) {
+  return [...colors].sort(
+    (left, right) => getRelativeLuminance(stripAlpha(right)) - getRelativeLuminance(stripAlpha(left)),
+  )[0];
+}
+
+function pickBoldestColor(colors: string[]) {
+  return [...colors]
+    .sort((left, right) => scoreBoldColor(stripAlpha(right)) - scoreBoldColor(stripAlpha(left)))[0];
+}
+
+function scoreBoldColor(hex: string) {
+  const rgb = parseHex(stripAlpha(hex));
+  if (!rgb) {
+    return 0;
+  }
+
+  const [red, green, blue] = rgb.map((value) => value / 255);
+  const max = Math.max(red, green, blue);
+  const min = Math.min(red, green, blue);
+  const saturation = max === 0 ? 0 : (max - min) / max;
+  const luminance = getRelativeLuminance(hex);
+  return saturation * 0.8 + luminance * 0.35;
 }
 
 function presetCanvas(

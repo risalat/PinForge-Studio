@@ -576,7 +576,7 @@ export async function createIntakeJob(input: {
           surroundingTextSnippet: image.surroundingTextSnippet?.trim() || null,
           sortOrder: index,
           isSelected: true,
-          isPreferred: index === 0,
+          isPreferred: false,
         })),
       },
     },
