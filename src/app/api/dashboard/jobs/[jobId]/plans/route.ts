@@ -29,6 +29,14 @@ const plansSchema = z.discriminatedUnion("mode", [
     mode: z.literal("assisted_auto"),
     pinCount: z.number().int().positive(),
     templateIds: z.array(z.string().min(1)).optional(),
+    templates: z
+      .array(
+        z.object({
+          templateId: z.string().min(1),
+          templateVersionId: z.string().min(1).nullable().optional(),
+        }),
+      )
+      .optional(),
     presetStrategy: z.enum(["recommended", "random_all", "random_bold", "random_feminine"]).optional(),
     presetCategoryIds: z.array(z.enum(templateVisualPresetCategories)).optional(),
     allowAnyPresetOverride: z.boolean().optional(),
@@ -36,6 +44,7 @@ const plansSchema = z.discriminatedUnion("mode", [
   z.object({
     mode: z.literal("manual"),
     templateId: z.string().min(1),
+    templateVersionId: z.string().min(1).nullable().optional(),
     sourceImageIds: z.array(z.string().min(1)).min(1),
   }),
   z.object({
@@ -142,7 +151,12 @@ export async function POST(request: Request, { params }: RouteProps) {
         userId: user.id,
         jobId,
         pinCount: payload.pinCount,
-        templateIds: payload.templateIds,
+        templates:
+          payload.templates ??
+          payload.templateIds?.map((templateId) => ({
+            templateId,
+            templateVersionId: null,
+          })),
         presetStrategy: payload.presetStrategy,
         presetCategoryIds: payload.presetCategoryIds,
         allowAnyPresetOverride: payload.allowAnyPresetOverride,
@@ -157,6 +171,7 @@ export async function POST(request: Request, { params }: RouteProps) {
         userId: user.id,
         jobId,
         templateId: payload.templateId,
+        templateVersionId: payload.templateVersionId,
         sourceImageIds: payload.sourceImageIds,
       });
     } else if (payload.mode === "update_render_context") {

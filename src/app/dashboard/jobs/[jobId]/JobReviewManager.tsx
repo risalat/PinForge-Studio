@@ -23,10 +23,26 @@ type SourceImageItem = {
 
 type TemplateOption = {
   id: string;
+  templateId: string;
+  templateVersionId: string | null;
+  selectionKey: string;
   name: string;
+  sourceKind: "BUILTIN" | "CUSTOM";
+  lifecycleStatus: "DRAFT" | "FINALIZED" | "ARCHIVED";
+  locked: boolean;
   imageSlotCount: number;
+  minImageSlotsRequired: number;
+  imagePolicyMode:
+    | "REQUIRE_EXACT"
+    | "ALLOW_FEWER_HIDE_UNUSED"
+    | "ALLOW_FEWER_DUPLICATE_LAST"
+    | "ALLOW_FEWER_FILL_PLACEHOLDER";
+  supportsSubtitle: boolean;
+  supportsItemNumber: boolean;
+  supportsDomain: boolean;
+  supportedBindings: string[];
+  allowedPresetCategories: string[];
   previewPath: string;
-  layoutType: string;
 };
 
 type VisualPresetOption = {
@@ -46,6 +62,9 @@ type PlanItem = {
   id: string;
   mode: string;
   templateId: string;
+  templateVersionId: string | null;
+  templateName: string;
+  previewPath: string;
   status: string;
   artworkReviewState: string;
   artworkFlagReason: string | null;
@@ -71,6 +90,8 @@ type GeneratedPinItem = {
   id: string;
   planId: string;
   templateId: string;
+  templateVersionId: string | null;
+  templateName: string;
   exportPath: string;
   mediaStatus: string;
   title: string | null;
@@ -205,7 +226,17 @@ export function JobReviewManager({
   const { notify } = useAppFeedback();
   const [images, setImages] = useState(initialImages);
   const [pinCount, setPinCount] = useState(3);
-  const [selectedTemplateIds, setSelectedTemplateIds] = useState(templates.map((item) => item.id));
+  const [selectedTemplateIds, setSelectedTemplateIds] = useState(
+    (() => {
+      const builtInSelectionKeys = templates
+        .filter((item) => item.sourceKind === "BUILTIN")
+        .map((item) => item.selectionKey);
+
+      return builtInSelectionKeys.length > 0
+        ? builtInSelectionKeys
+        : templates.map((item) => item.selectionKey);
+    })(),
+  );
   const [selectedPresetCategoryIds, setSelectedPresetCategoryIds] = useState<string[]>([]);
   const [templateSearchQuery, setTemplateSearchQuery] = useState("");
   const [presetCategorySearchQuery, setPresetCategorySearchQuery] = useState("");
@@ -213,10 +244,14 @@ export function JobReviewManager({
   const [assistedPresetStrategy, setAssistedPresetStrategy] = useState<
     "recommended" | "random_all" | "random_bold" | "random_feminine"
   >("recommended");
-  const [manualTemplateId, setManualTemplateId] = useState(initialManualTemplate?.id ?? "");
+  const [manualTemplateId, setManualTemplateId] = useState(
+    initialManualTemplate?.selectionKey ?? "",
+  );
   const [manualAssignedImageIds, setManualAssignedImageIds] = useState<string[]>(
     initialManualTemplate
-      ? Array.from({ length: initialManualTemplate.imageSlotCount }).map(
+      ? Array.from({
+          length: getManualSlotCount(initialManualTemplate, initialSelectedImages.length),
+        }).map(
           (_, slotIndex) =>
             initialSelectedImages[slotIndex % Math.max(initialSelectedImages.length, 1)]?.id ?? "",
         )
@@ -280,7 +315,8 @@ export function JobReviewManager({
   const [activeAction, setActiveAction] = useState<ReviewActionState>(null);
 
   const selectedImages = images.filter((image) => image.isSelected);
-  const manualTemplate = templates.find((item) => item.id === manualTemplateId) ?? null;
+  const manualTemplate =
+    templates.find((item) => item.selectionKey === manualTemplateId) ?? null;
   const filteredTemplates = templates.filter((template) =>
     template.name.toLowerCase().includes(templateSearchQuery.trim().toLowerCase()),
   );
@@ -420,7 +456,7 @@ export function JobReviewManager({
   }
 
   function selectAllTemplates() {
-    setSelectedTemplateIds(templates.map((item) => item.id));
+    setSelectedTemplateIds(templates.map((item) => item.selectionKey));
   }
 
   function clearTemplateSelection() {
@@ -463,14 +499,16 @@ export function JobReviewManager({
   }
 
   function seedManualAssignments(templateId: string) {
-    const template = templates.find((item) => item.id === templateId);
+    const template = templates.find((item) => item.selectionKey === templateId);
     if (!template) {
       setManualAssignedImageIds([]);
       return;
     }
 
     setManualAssignedImageIds((current) =>
-      Array.from({ length: template.imageSlotCount }).map(
+      Array.from({
+        length: getManualSlotCount(template, selectedImages.length),
+      }).map(
         (_, slotIndex) =>
           current[slotIndex] ??
           selectedImages[slotIndex % Math.max(selectedImages.length, 1)]?.id ??
@@ -839,10 +877,16 @@ export function JobReviewManager({
     setActiveAction({ kind: "assisted" });
     try {
       setPlansFeedback(null);
+      const selectedTemplates = templates.filter((template) =>
+        selectedTemplateIds.includes(template.selectionKey),
+      );
       const result = await runAction(`/api/dashboard/jobs/${jobId}/plans`, {
         mode: "assisted_auto",
         pinCount: Math.max(1, Number.isFinite(pinCount) ? pinCount : 1),
-        templateIds: selectedTemplateIds,
+        templates: selectedTemplates.map((template) => ({
+          templateId: template.templateId,
+          templateVersionId: template.templateVersionId,
+        })),
         presetStrategy: assistedPresetStrategy,
         presetCategoryIds: selectedPresetCategoryIds,
         allowAnyPresetOverride,
@@ -938,13 +982,17 @@ export function JobReviewManager({
   function handleManualPlan() {
     startTransition(async () => {
       setActiveAction({ kind: "manual" });
-      try {
-        setPlansFeedback(null);
-        await runAction(`/api/dashboard/jobs/${jobId}/plans`, {
-          mode: "manual",
-          templateId: manualTemplateId,
-          sourceImageIds: manualAssignedImageIds.filter((value) => value !== ""),
-        });
+        try {
+          setPlansFeedback(null);
+          if (!manualTemplate) {
+            throw new Error("Choose a template before creating a manual plan.");
+          }
+          await runAction(`/api/dashboard/jobs/${jobId}/plans`, {
+            mode: "manual",
+            templateId: manualTemplate.templateId,
+            templateVersionId: manualTemplate.templateVersionId,
+            sourceImageIds: manualAssignedImageIds.filter((value) => value !== ""),
+          });
         setPlansFeedback({
           tone: "success",
           message: "Manual plan added.",
@@ -1645,10 +1693,10 @@ export function JobReviewManager({
                       <p className="text-sm text-[var(--dashboard-subtle)]">No templates match this search.</p>
                     ) : (
                       filteredTemplates.map((template) => {
-                        const active = selectedTemplateIds.includes(template.id);
+                        const active = selectedTemplateIds.includes(template.selectionKey);
                         return (
                           <label
-                            key={template.id}
+                            key={template.selectionKey}
                             className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-2 ${
                               active
                                 ? "border-[var(--dashboard-accent)] bg-[var(--dashboard-accent-soft)]"
@@ -1659,14 +1707,14 @@ export function JobReviewManager({
                               <input
                                 type="checkbox"
                                 checked={active}
-                                onChange={() => toggleTemplate(template.id)}
+                                onChange={() => toggleTemplate(template.selectionKey)}
                               />
                               <span className="min-w-0">
                                 <span className="block truncate text-sm font-semibold text-[var(--dashboard-text)]">
                                   {template.name}
                                 </span>
                                 <span className="block text-xs text-[var(--dashboard-muted)]">
-                                  {template.imageSlotCount} slots
+                                  {template.imageSlotCount} slots · {template.sourceKind === "CUSTOM" ? "custom" : "built-in"} · min {template.minImageSlotsRequired}
                                 </span>
                               </span>
                             </span>
@@ -1809,8 +1857,8 @@ export function JobReviewManager({
                   className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-3 py-2"
                 >
                   {templates.map((template) => (
-                    <option key={template.id} value={template.id}>
-                      {template.name}
+                    <option key={template.selectionKey} value={template.selectionKey}>
+                      {template.name} {template.sourceKind === "CUSTOM" ? "(Custom)" : "(Built-in)"}
                     </option>
                   ))}
                 </select>
@@ -1818,9 +1866,16 @@ export function JobReviewManager({
 
               {manualTemplate ? (
                 <div className="grid gap-3">
-                  {Array.from({ length: manualTemplate.imageSlotCount }).map((_, slotIndex) => (
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-muted)]">
+                    {manualTemplate.sourceKind === "CUSTOM"
+                      ? `Min ${manualTemplate.minImageSlotsRequired} image${manualTemplate.minImageSlotsRequired === 1 ? "" : "s"} · ${manualTemplate.imagePolicyMode}`
+                      : `${manualTemplate.imageSlotCount} slots with duplicate-repeat fallback`}
+                  </p>
+                  {Array.from({
+                    length: getManualSlotCount(manualTemplate, selectedImages.length),
+                  }).map((_, slotIndex) => (
                     <label
-                      key={`${manualTemplate.id}-${slotIndex}`}
+                      key={`${manualTemplate.selectionKey}-${slotIndex}`}
                       className="block text-sm font-semibold text-[var(--dashboard-subtle)]"
                     >
                       Slot {slotIndex + 1}
@@ -2213,7 +2268,7 @@ export function JobReviewManager({
                             ) : (
                               <img
                                 src={currentPin.exportPath}
-                                alt={draft?.title || currentPin.title || plan.templateId}
+                                alt={draft?.title || currentPin.title || plan.templateName}
                                 className="aspect-[2/3] w-full object-cover transition duration-200 group-hover:scale-[1.02]"
                                 onError={() => markPinAssetMissing(currentPin.id)}
                               />
@@ -2240,7 +2295,7 @@ export function JobReviewManager({
                         <div className="mt-4 space-y-3">
                           <div>
                             <div className="flex items-center justify-between gap-3">
-                              <p className="text-base font-bold text-[var(--dashboard-text)]">{plan.templateId}</p>
+                              <p className="text-base font-bold text-[var(--dashboard-text)]">{plan.templateName}</p>
                               <StatusPill
                                 label={`${plan.generatedPinCount} output${plan.generatedPinCount === 1 ? "" : "s"}`}
                                 tone="neutral"
@@ -2386,7 +2441,7 @@ export function JobReviewManager({
                           className="min-w-0 flex-1 text-left"
                         >
                           <div className="flex flex-wrap items-center gap-2">
-                            <p className="font-semibold text-[var(--dashboard-text)]">{plan.templateId}</p>
+                            <p className="font-semibold text-[var(--dashboard-text)]">{plan.templateName}</p>
                             <StatusPill label={formatLabel(plan.status)} tone={toneForPlanStatus(plan.status)} />
                             {plan.artworkReviewState !== "NORMAL" ? (
                               <StatusPill
@@ -2438,7 +2493,7 @@ export function JobReviewManager({
                   <div className="flex flex-wrap items-start justify-between gap-4">
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="text-lg font-bold text-[var(--dashboard-text)]">{selectedPlan.templateId}</h3>
+                          <h3 className="text-lg font-bold text-[var(--dashboard-text)]">{selectedPlan.templateName}</h3>
                           <StatusPill
                             label={formatLabel(selectedPlan.status)}
                             tone={toneForPlanStatus(selectedPlan.status)}
@@ -2526,8 +2581,8 @@ export function JobReviewManager({
                           busyLabel="Discarding plan..."
                         />
                       </button>
-                      <Link
-                        href={templates.find((template) => template.id === selectedPlan.templateId)?.previewPath ?? "/library"}
+                        <Link
+                         href={selectedPlan.previewPath ?? "/library"}
                         className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)]"
                       >
                         Preview template
@@ -2728,7 +2783,7 @@ export function JobReviewManager({
                               </button>
                               <div className="space-y-3 text-sm text-[var(--dashboard-subtle)]">
                                 <div className="flex flex-wrap gap-2">
-                                  <StatusPill label={pin.templateId} tone="neutral" />
+                                  <StatusPill label={pin.templateName} tone="neutral" />
                                   <StatusPill
                                     label={formatLabel(pin.mediaStatus)}
                                     tone={toneForPinStatus(pin.mediaStatus)}
@@ -2810,7 +2865,7 @@ export function JobReviewManager({
             <div className="flex flex-wrap items-start justify-between gap-4 border-b border-[var(--dashboard-line)] px-5 py-5">
               <div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="text-xl font-bold text-[var(--dashboard-text)]">{selectedPlan.templateId}</h3>
+                  <h3 className="text-xl font-bold text-[var(--dashboard-text)]">{selectedPlan.templateName}</h3>
                   <StatusPill label={formatLabel(selectedPlan.status)} tone={toneForPlanStatus(selectedPlan.status)} />
                   <StatusPill
                     label={
@@ -2947,7 +3002,7 @@ export function JobReviewManager({
                   >
                     <img
                       src={selectedPlanCurrentPin.exportPath}
-                      alt={selectedPlanDraft?.title || selectedPlanCurrentPin.title || selectedPlan.templateId}
+                        alt={selectedPlanDraft?.title || selectedPlanCurrentPin.title || selectedPlan.templateName}
                       className="aspect-[2/3] w-full object-cover"
                       onError={() => markPinAssetMissing(selectedPlanCurrentPin.id)}
                     />
@@ -3024,8 +3079,8 @@ export function JobReviewManager({
                       Open any source image full size while adjusting the artwork copy.
                     </p>
                   </div>
-                  <Link
-                    href={templates.find((template) => template.id === selectedPlan.templateId)?.previewPath ?? "/library"}
+                    <Link
+                     href={selectedPlan.previewPath ?? "/library"}
                     className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)]"
                   >
                     Preview template
@@ -3115,7 +3170,7 @@ export function JobReviewManager({
                           </button>
                           <div className="space-y-3 text-sm text-[var(--dashboard-subtle)]">
                             <div className="flex flex-wrap gap-2">
-                              <StatusPill label={pin.templateId} tone="neutral" />
+                              <StatusPill label={pin.templateName} tone="neutral" />
                               <StatusPill label={formatLabel(pin.mediaStatus)} tone={toneForPinStatus(pin.mediaStatus)} />
                               {pin.isScheduled ? <StatusPill label="Scheduled" tone="good" /> : null}
                             </div>
@@ -3198,8 +3253,8 @@ export function JobReviewManager({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(12,18,28,0.72)] p-6 backdrop-blur-sm">
           <div className="max-h-[92vh] w-full max-w-6xl overflow-hidden rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] shadow-[var(--dashboard-shadow-md)]">
             <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--dashboard-line)] px-5 py-4">
-              <div>
-                <p className="text-sm font-semibold text-[var(--dashboard-text)]">{previewPin.templateId}</p>
+                <div>
+                  <p className="text-sm font-semibold text-[var(--dashboard-text)]">{previewPin.templateName}</p>
                 <p className="mt-1 text-sm text-[var(--dashboard-subtle)]">
                   {previewPin.title || "No saved title"}
                 </p>
@@ -3281,7 +3336,7 @@ export function JobReviewManager({
                     Media state
                   </p>
                   <div className="mt-2 flex flex-wrap gap-2">
-                    <StatusPill label={previewPin.templateId} tone="neutral" />
+                    <StatusPill label={previewPin.templateName} tone="neutral" />
                     <StatusPill
                       label={formatLabel(previewPin.mediaStatus)}
                       tone={toneForPinStatus(previewPin.mediaStatus)}
@@ -3352,6 +3407,23 @@ function StatusPill({
       {label}
     </span>
   );
+}
+
+function getManualSlotCount(template: TemplateOption, selectedImageCount: number) {
+  if (template.sourceKind !== "CUSTOM") {
+    return template.imageSlotCount;
+  }
+
+  if (template.imagePolicyMode === "REQUIRE_EXACT") {
+    return template.imageSlotCount;
+  }
+
+  const boundedSelectedCount = Math.max(
+    template.minImageSlotsRequired,
+    Math.min(template.imageSlotCount, Math.max(selectedImageCount, 0)),
+  );
+
+  return boundedSelectedCount;
 }
 
 function FilterChip({

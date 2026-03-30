@@ -79,6 +79,12 @@ import {
 } from "@/lib/templates/planRenderContext";
 import { getTemplateConfig, TEMPLATE_CONFIGS } from "@/lib/templates/registry";
 import {
+  buildTemplateSelectionKey,
+  resolveSelectableTemplateCandidateForUser,
+  type SelectableTemplateCandidate,
+  type TemplateSelectionRef,
+} from "@/lib/templates/selectableTemplates";
+import {
   getPresetIdsForCategories,
   getPresetIdsForTemplate,
   recommendSplitVerticalVisualPreset,
@@ -311,6 +317,7 @@ const generationPlanForRenderSelect = {
   jobId: true,
   mode: true,
   templateId: true,
+  templateVersionId: true,
   sortOrder: true,
   status: true,
   notes: true,
@@ -323,6 +330,16 @@ const generationPlanForRenderSelect = {
       id: true,
       name: true,
       componentKey: true,
+      sourceKind: true,
+      rendererKind: true,
+      activeVersionId: true,
+    },
+  },
+  templateVersion: {
+    select: {
+      id: true,
+      versionNumber: true,
+      summaryJson: true,
     },
   },
   imageAssignments: {
@@ -354,6 +371,7 @@ const generatedPinForPublishSelect = {
   jobId: true,
   planId: true,
   templateId: true,
+  templateVersionId: true,
   exportPath: true,
   storageKey: true,
   createdAt: true,
@@ -364,15 +382,30 @@ const generatedPinForPublishSelect = {
       componentKey: true,
     },
   },
+  templateVersion: {
+    select: {
+      id: true,
+      versionNumber: true,
+      summaryJson: true,
+    },
+  },
   plan: {
     select: {
       id: true,
       templateId: true,
+      templateVersionId: true,
       notes: true,
       artworkReviewState: true,
       artworkFlagReason: true,
       rerenderRequestedAt: true,
       rerenderError: true,
+      templateVersion: {
+        select: {
+          id: true,
+          versionNumber: true,
+          summaryJson: true,
+        },
+      },
       imageAssignments: {
         select: {
           id: true,
@@ -745,7 +778,7 @@ export async function createAssistedGenerationPlans(input: {
   userId: string;
   jobId: string;
   pinCount: number;
-  templateIds?: string[];
+  templates?: TemplateSelectionRef[];
   presetStrategy?: AssistedPresetStrategy;
   presetCategoryIds?: TemplateVisualPresetCategoryId[];
   allowAnyPresetOverride?: boolean;
@@ -757,19 +790,30 @@ export async function createAssistedGenerationPlans(input: {
     throw new Error("Select at least one source image before creating generation plans.");
   }
 
-  const eligibleTemplateIds = (input.templateIds?.length ? input.templateIds : Object.keys(TEMPLATE_CONFIGS))
-    .filter((templateId) => Boolean(getTemplateConfig(templateId)));
-
-  if (eligibleTemplateIds.length === 0) {
-    throw new Error("Choose at least one valid template.");
-  }
+  const requestedTemplates =
+    input.templates?.length
+      ? dedupeTemplateSelections(input.templates)
+      : Object.keys(TEMPLATE_CONFIGS).map((templateId) => ({
+          templateId,
+          templateVersionId: null,
+        }));
+  const eligibleTemplates = await resolveGenerationTemplatesForSelections(
+    input.userId,
+    requestedTemplates,
+  );
+  eligibleTemplates.forEach((template) =>
+    assertTemplateCanUseImageCount(template, selectedImages.length),
+  );
 
   const baseSortOrder = job._count.generationPlans;
   const preferredImages = selectedImages.filter((image) => image.isPreferred);
   const selectedImagePool = shuffleBySeed(selectedImages, `${job.id}:selected-images`);
   const preferredImagePool = shuffleBySeed(preferredImages, `${job.id}:preferred-images`);
+  const templatesByKey = new Map(
+    eligibleTemplates.map((template) => [template.selectionKey, template]),
+  );
   const templateSequence = buildBalancedSequence(
-    eligibleTemplateIds,
+    eligibleTemplates.map((template) => template.selectionKey),
     input.pinCount,
     `${job.id}:template-sequence`,
   );
@@ -782,8 +826,10 @@ export async function createAssistedGenerationPlans(input: {
   const shouldQueuePresetRecommendation = (input.presetStrategy ?? "recommended") === "recommended";
   const preparedPlans = await Promise.all(
     Array.from({ length: input.pinCount }).map(async (_, index) => {
-      const templateId = templateSequence[index] ?? eligibleTemplateIds[index % eligibleTemplateIds.length];
-      const template = getTemplateConfig(templateId);
+      const templateKey =
+        templateSequence[index] ??
+        eligibleTemplates[index % eligibleTemplates.length]?.selectionKey;
+      const template = templateKey ? templatesByKey.get(templateKey) : null;
 
       if (!template) {
         return null;
@@ -792,13 +838,15 @@ export async function createAssistedGenerationPlans(input: {
       const assignedImages = buildAssistedImageAssignments({
         selectedImages: selectedImagePool,
         preferredImages: preferredImagePool,
-        slotCount: template.imageSlotCount,
+        slotCount: getAssignedImageSlotCount(template, selectedImages.length),
         planIndex: index,
-        templateId,
+        templateId: template.selectionKey,
       });
-      const templatePresetPool = input.allowAnyPresetOverride
-        ? presetPool
-        : getPresetIdsForTemplate(templateId, presetPool);
+      const templatePresetPool = getAllowedPresetPoolForTemplate(
+        template,
+        presetPool,
+        Boolean(input.allowAnyPresetOverride),
+      );
       const templateFallbackPreset = templatePresetPool.includes(presetSequence[index]!)
         ? presetSequence[index]
         : templatePresetPool[0];
@@ -817,7 +865,8 @@ export async function createAssistedGenerationPlans(input: {
 
       return {
         template,
-        templateId,
+        templateId: template.templateId,
+        templateVersionId: template.templateVersionId,
         sortOrder: baseSortOrder + index,
         notes: serializePlanRenderContext(renderContext),
         assignedImages,
@@ -840,28 +889,15 @@ export async function createAssistedGenerationPlans(input: {
 
   const templatesToUpsert = Array.from(
     new Map(
-      orderedPreparedPlans.map((preparedPlan) => [preparedPlan.template.id, preparedPlan.template]),
+      orderedPreparedPlans
+        .filter((preparedPlan) => preparedPlan.template.sourceKind === "BUILTIN")
+        .map((preparedPlan) => [preparedPlan.template.templateId, preparedPlan.template]),
     ).values(),
   );
 
   await prisma.$transaction([
     ...templatesToUpsert.map((template) =>
-      prisma.template.upsert({
-        where: { id: template.id },
-        update: {
-          name: template.name,
-          componentKey: template.componentKey,
-          configJson: template as unknown as Prisma.InputJsonValue,
-          isActive: true,
-        },
-        create: {
-          id: template.id,
-          name: template.name,
-          componentKey: template.componentKey,
-          configJson: template as unknown as Prisma.InputJsonValue,
-          isActive: true,
-        },
-      }),
+      upsertBuiltInTemplateRecord(template.templateId),
     ),
     ...orderedPreparedPlans.map((preparedPlan) =>
       prisma.generationPlan.create({
@@ -869,6 +905,7 @@ export async function createAssistedGenerationPlans(input: {
           jobId: job.id,
           mode: GenerationPlanMode.ASSISTED_AUTO,
           templateId: preparedPlan.templateId,
+          templateVersionId: preparedPlan.templateVersionId,
           sortOrder: preparedPlan.sortOrder,
           status: GenerationPlanStatus.READY,
           notes: preparedPlan.notes,
@@ -1032,14 +1069,19 @@ export async function createManualGenerationPlan(input: {
   userId: string;
   jobId: string;
   templateId: string;
+  templateVersionId?: string | null;
   sourceImageIds: string[];
 }) {
   const job = await getOwnedJobSourceImages(input.jobId, input.userId);
-  const template = getTemplateConfig(input.templateId);
+  const templateCandidate = await resolveSelectableTemplateCandidateForUser(input.userId, {
+    templateId: input.templateId,
+    templateVersionId: input.templateVersionId ?? null,
+  });
 
-  if (!template) {
-    throw new Error("Unknown template.");
+  if (!templateCandidate) {
+    throw new Error("Choose a valid built-in template or a finalized custom template.");
   }
+  const template = templateCandidate as SelectableTemplateCandidate;
 
   if (input.sourceImageIds.length === 0) {
     throw new Error("Choose at least one source image.");
@@ -1051,26 +1093,21 @@ export async function createManualGenerationPlan(input: {
     throw new Error("No valid source images were provided.");
   }
 
-  await prisma.template.upsert({
-    where: { id: template.id },
-    update: {
-      name: template.name,
-      componentKey: template.componentKey,
-      configJson: template as unknown as Prisma.InputJsonValue,
-      isActive: true,
-    },
-    create: {
-      id: template.id,
-      name: template.name,
-      componentKey: template.componentKey,
-      configJson: template as unknown as Prisma.InputJsonValue,
-      isActive: true,
-    },
-  });
+  assertTemplateCanUseImageCount(template, chosenIds.length);
 
-  const manualAssignedImages = Array.from({ length: template.imageSlotCount }).map(
-    (_, slotIndex) =>
-      job.sourceImages.find((image) => image.id === chosenIds[slotIndex % chosenIds.length])!,
+  if (template.sourceKind === "BUILTIN") {
+    await upsertBuiltInTemplateRecord(template.templateId);
+  }
+
+  const assignedSourceImageIds =
+    template.sourceKind === "BUILTIN"
+      ? Array.from({ length: template.imageSlotCount }).map(
+          (_, slotIndex) => chosenIds[slotIndex % chosenIds.length]!,
+        )
+      : chosenIds.slice(0, getAssignedImageSlotCount(template, chosenIds.length));
+
+  const manualAssignedImages = assignedSourceImageIds.map(
+    (sourceImageId) => job.sourceImages.find((image) => image.id === sourceImageId)!,
   );
   const manualRenderContext = await buildSeedPlanRenderContext(
     job,
@@ -1079,7 +1116,7 @@ export async function createManualGenerationPlan(input: {
     })),
     "recommended",
     {
-      allowedPresetPool: getPresetIdsForTemplate(input.templateId),
+      allowedPresetPool: template.allowedPresetIds,
     },
   );
 
@@ -1087,13 +1124,14 @@ export async function createManualGenerationPlan(input: {
     data: {
       jobId: job.id,
       mode: GenerationPlanMode.MANUAL,
-      templateId: input.templateId,
+      templateId: template.templateId,
+      templateVersionId: template.templateVersionId,
       sortOrder: job._count.generationPlans,
       status: GenerationPlanStatus.READY,
       notes: serializePlanRenderContext(manualRenderContext),
       imageAssignments: {
-        create: Array.from({ length: template.imageSlotCount }).map((_, slotIndex) => ({
-          sourceImageId: chosenIds[slotIndex % chosenIds.length],
+        create: assignedSourceImageIds.map((sourceImageId, slotIndex) => ({
+          sourceImageId,
           slotIndex,
         })),
       },
@@ -1111,6 +1149,124 @@ export async function createManualGenerationPlan(input: {
   );
 
   return plan;
+}
+
+function dedupeTemplateSelections(selections: TemplateSelectionRef[]) {
+  return Array.from(
+    new Map(
+      selections.map((selection) => [buildTemplateSelectionKey(selection), selection]),
+    ).values(),
+  );
+}
+
+async function resolveGenerationTemplatesForSelections(
+  userId: string,
+  selections: TemplateSelectionRef[],
+): Promise<SelectableTemplateCandidate[]> {
+  const resolvedTemplates = await Promise.all(
+    dedupeTemplateSelections(selections).map(async (selection) => {
+      const template = await resolveSelectableTemplateCandidateForUser(userId, selection);
+      if (!template) {
+        throw new Error(
+          "Choose only built-in templates or finalized custom templates for plan generation.",
+        );
+      }
+
+      return template as SelectableTemplateCandidate;
+    }),
+  );
+
+  if (resolvedTemplates.length === 0) {
+    throw new Error("Choose at least one template before creating plans.");
+  }
+
+  return resolvedTemplates;
+}
+
+function upsertBuiltInTemplateRecord(templateId: string) {
+  const templateConfig = getTemplateConfig(templateId);
+  if (!templateConfig) {
+    throw new Error(`Unknown built-in template: ${templateId}`);
+  }
+
+  return prisma.template.upsert({
+    where: { id: templateConfig.id },
+    update: {
+      name: templateConfig.name,
+      componentKey: templateConfig.componentKey,
+      configJson: templateConfig as unknown as Prisma.InputJsonValue,
+      isActive: true,
+    },
+    create: {
+      id: templateConfig.id,
+      name: templateConfig.name,
+      componentKey: templateConfig.componentKey,
+      configJson: templateConfig as unknown as Prisma.InputJsonValue,
+      isActive: true,
+    },
+  });
+}
+
+function assertTemplateCanUseImageCount(
+  template: SelectableTemplateCandidate,
+  selectedImageCount: number,
+) {
+  if (selectedImageCount < template.minImageSlotsRequired) {
+    throw new Error(
+      `${template.name} needs at least ${template.minImageSlotsRequired} selected image${
+        template.minImageSlotsRequired === 1 ? "" : "s"
+      }.`,
+    );
+  }
+
+  if (
+    template.sourceKind === "CUSTOM" &&
+    template.imagePolicyMode === "REQUIRE_EXACT" &&
+    selectedImageCount < template.imageSlotCount
+  ) {
+    throw new Error(
+      `${template.name} requires ${template.imageSlotCount} selected image${
+        template.imageSlotCount === 1 ? "" : "s"
+      } because its runtime image policy is exact.`,
+    );
+  }
+}
+
+function getAssignedImageSlotCount(
+  template: SelectableTemplateCandidate,
+  selectedImageCount: number,
+) {
+  if (template.sourceKind !== "CUSTOM") {
+    return template.imageSlotCount;
+  }
+
+  if (template.imagePolicyMode === "REQUIRE_EXACT") {
+    return template.imageSlotCount;
+  }
+
+  return Math.max(
+    template.minImageSlotsRequired,
+    Math.min(template.imageSlotCount, selectedImageCount),
+  );
+}
+
+function getAllowedPresetPoolForTemplate(
+  template: SelectableTemplateCandidate,
+  preferredPresetPool: readonly TemplateVisualPresetId[],
+  allowAnyPresetOverride: boolean,
+) {
+  if (allowAnyPresetOverride) {
+    return preferredPresetPool.length > 0 ? [...preferredPresetPool] : [...templateVisualPresets];
+  }
+
+  const templatePresetPool =
+    template.allowedPresetIds.length > 0 ? template.allowedPresetIds : [...templateVisualPresets];
+  const intersection =
+    preferredPresetPool.length > 0
+      ? preferredPresetPool.filter((presetId) => templatePresetPool.includes(presetId))
+      : templatePresetPool;
+
+  return intersection.length > 0 ? intersection : templatePresetPool;
 }
 
 export async function updateGenerationPlanRenderContext(input: {
@@ -1313,7 +1469,41 @@ export async function generatePinsForJob(input: {
   planIds?: string[];
   aiCredentialId?: string;
 }) {
+  if (shouldRenderInlineInLocalDevelopment()) {
+    const result = await renderPlansForJobTask({
+      userId: input.userId,
+      jobId: input.jobId,
+      planIds: input.planIds,
+      aiCredentialId: input.aiCredentialId ?? null,
+    });
+
+    if (result.generatedPins.length === 0 && result.failedPlans.length > 0) {
+      throw new Error(result.failedPlans[0]?.error || "Rendering failed.");
+    }
+
+    return {
+      queuedPlanCount: result.progress.total,
+      reused: false,
+      task: null as ReturnType<typeof serializeBackgroundTaskSummary> | null,
+      inline: true,
+      failedPlans: result.failedPlans,
+      generatedPinCount: result.generatedPins.length,
+    };
+  }
+
   return queuePlanRenderTask(input);
+}
+
+function shouldRenderInlineInLocalDevelopment() {
+  if (process.env.NODE_ENV === "production") {
+    return false;
+  }
+
+  if (process.env.PINFORGE_FORCE_BACKGROUND_QUEUE === "true") {
+    return false;
+  }
+
+  return /127\.0\.0\.1|localhost/i.test(env.appUrl);
 }
 
 export async function renderPlansForJobTask(input: {
@@ -1406,27 +1596,31 @@ export async function renderPlansForJobTask(input: {
             });
 
             try {
-              const template = TEMPLATE_CONFIGS[plan.templateId];
-              if (!template) {
+              const builtInTemplate = TEMPLATE_CONFIGS[plan.templateId];
+              const resolvedTemplateVersionId =
+                plan.templateVersionId ??
+                (builtInTemplate ? null : plan.template.activeVersionId ?? null);
+
+              if (builtInTemplate) {
+                await prisma.template.upsert({
+                  where: { id: builtInTemplate.id },
+                  update: {
+                    name: builtInTemplate.name,
+                    componentKey: builtInTemplate.componentKey,
+                    configJson: builtInTemplate as unknown as Prisma.InputJsonValue,
+                    isActive: true,
+                  },
+                  create: {
+                    id: builtInTemplate.id,
+                    name: builtInTemplate.name,
+                    componentKey: builtInTemplate.componentKey,
+                    configJson: builtInTemplate as unknown as Prisma.InputJsonValue,
+                    isActive: true,
+                  },
+                });
+              } else if (!resolvedTemplateVersionId) {
                 throw new Error(`Unknown template configuration: ${plan.templateId}`);
               }
-
-              await prisma.template.upsert({
-                where: { id: template.id },
-                update: {
-                  name: template.name,
-                  componentKey: template.componentKey,
-                  configJson: template as unknown as Prisma.InputJsonValue,
-                  isActive: true,
-                },
-                create: {
-                  id: template.id,
-                  name: template.name,
-                  componentKey: template.componentKey,
-                  configJson: template as unknown as Prisma.InputJsonValue,
-                  isActive: true,
-                },
-              });
 
               const recentArtworkTitles = generatedPins
                 .map((pin) => pin.pinCopy?.title?.trim())
@@ -1444,6 +1638,7 @@ export async function renderPlansForJobTask(input: {
               await prisma.generationPlan.update({
                 where: { id: plan.id },
                 data: {
+                  templateVersionId: resolvedTemplateVersionId,
                   notes: nextRenderContext,
                 },
               });
@@ -1452,6 +1647,7 @@ export async function renderPlansForJobTask(input: {
                 jobId: job.id,
                 planId: plan.id,
                 templateId: plan.templateId,
+                templateVersionId: resolvedTemplateVersionId,
               });
               const exportUrl = exportObject.publicUrl ?? buildStorageAssetUrl(exportObject.key);
 
@@ -1460,6 +1656,7 @@ export async function renderPlansForJobTask(input: {
                   jobId: job.id,
                   planId: plan.id,
                   templateId: plan.templateId,
+                  templateVersionId: resolvedTemplateVersionId,
                   exportPath: exportUrl,
                   storageKey: exportObject.key,
                   pinCopy: {
@@ -1632,7 +1829,10 @@ export async function recommendPlanPresetsForJobTask(input: {
                 pinTitle: existing.title || job.articleTitleSnapshot,
                 subtitle: existing.subtitle,
                 domain: job.domainSnapshot,
-                allowedPresetIds: getPresetIdsForTemplate(plan.templateId),
+                allowedPresetIds: getAllowedPresetIdsForTemplateGeneration({
+                  templateId: plan.templateId,
+                  templateVersionSummaryJson: plan.templateVersion?.summaryJson,
+                }),
                 imageSignals: plan.imageAssignments.map((assignment) => assignment.sourceImage),
               });
 
@@ -3621,14 +3821,14 @@ async function generateRenderCopyForPlan(
   aiConfigs: ResolvedAICredentialConfig[],
   recentArtworkTitles: string[] = [],
 ) {
-  const templateConfig = getTemplateConfig(plan.templateId);
-  if (!templateConfig) {
-    throw new Error(`Unknown template configuration: ${plan.templateId}`);
-  }
-
   const existing = parsePlanRenderContext(plan.notes);
-  const supportsSubtitle = templateConfig.textFields.includes("subtitle");
-  const numberTreatment = templateConfig.features.numberTreatment;
+  const templateMetadata = getTemplateGenerationMetadata({
+    templateId: plan.templateId,
+    templateName: plan.template.name,
+    templateVersionSummaryJson: plan.templateVersion?.summaryJson,
+  });
+  const supportsSubtitle = templateMetadata.supportsSubtitle;
+  const numberTreatment = templateMetadata.numberTreatment;
   const itemNumber = existing.itemNumber ?? job.listCountHint ?? job.sourceImages.length;
   const titleLocked = existing.titleLocked ?? Boolean(existing.title?.trim());
   const subtitleLocked = existing.subtitleLocked ?? Boolean(existing.subtitle?.trim());
@@ -3646,9 +3846,10 @@ async function generateRenderCopyForPlan(
         generatePinRenderCopy(
           buildRenderCopyRequest(job, {
             templateId: plan.templateId,
-            templateName: plan.template.name,
+            templateName: templateMetadata.templateName,
             templateSupportsSubtitle: supportsSubtitle,
             numberTreatment,
+            copyHints: templateMetadata.copyHints,
             imageAssignments: plan.imageAssignments,
             itemNumber,
             lockedTitle: title,
@@ -3690,7 +3891,10 @@ async function generateRenderCopyForPlan(
       pinTitle: shapedCopy.title,
       subtitle: shapedCopy.subtitle,
       domain: job.domainSnapshot,
-      allowedPresetIds: getPresetIdsForTemplate(plan.templateId),
+      allowedPresetIds: getAllowedPresetIdsForTemplateGeneration({
+        templateId: plan.templateId,
+        templateVersionSummaryJson: plan.templateVersion?.summaryJson,
+      }),
       imageSignals: plan.imageAssignments.map((assignment) => assignment.sourceImage),
     }));
 
@@ -3700,6 +3904,140 @@ async function generateRenderCopyForPlan(
     itemNumber,
     visualPreset,
   };
+}
+
+type TemplateCopyHints = {
+  headlineStyle: string | null;
+  preferredWordCount: number | null;
+  preferredMaxChars: number | null;
+  preferredMaxLines: number | null;
+  numberPlacement: string | null;
+  toneTags: string[];
+};
+
+type TemplateGenerationMetadata = {
+  templateName: string;
+  supportsSubtitle: boolean;
+  numberTreatment: TemplateNumberTreatment;
+  copyHints: TemplateCopyHints;
+};
+
+function getTemplateGenerationMetadata(input: {
+  templateId: string;
+  templateName?: string | null;
+  templateVersionSummaryJson?: Prisma.JsonValue | null;
+}): TemplateGenerationMetadata {
+  const templateConfig = getTemplateConfig(input.templateId);
+  if (templateConfig) {
+    const artworkRule = getArtworkTitleRule(input.templateId);
+
+    return {
+      templateName: input.templateName?.trim() || templateConfig.name,
+      supportsSubtitle: templateConfig.textFields.includes("subtitle"),
+      numberTreatment: templateConfig.features.numberTreatment,
+      copyHints: {
+        headlineStyle:
+          templateConfig.features.numberTreatment === "hero" ? "number-led" : "title-only",
+        preferredWordCount: artworkRule.maxWords,
+        preferredMaxChars: artworkRule.maxChars,
+        preferredMaxLines: artworkRule.maxLines,
+        numberPlacement:
+          templateConfig.features.numberTreatment === "none" ? "none" : "separate",
+        toneTags: [],
+      },
+    };
+  }
+
+  const summary = parseRuntimeTemplateSummaryHints(input.templateVersionSummaryJson);
+
+  return {
+    templateName: input.templateName?.trim() || "Custom runtime template",
+    supportsSubtitle: summary.supportsSubtitle,
+    numberTreatment: summary.supportsItemNumber ? "hero" : "none",
+    copyHints: {
+      headlineStyle: summary.headlineStyle,
+      preferredWordCount: summary.preferredWordCount,
+      preferredMaxChars: summary.preferredMaxChars,
+      preferredMaxLines: summary.preferredMaxLines,
+      numberPlacement: summary.numberPlacement,
+      toneTags: summary.toneTags,
+    },
+  };
+}
+
+function getAllowedPresetIdsForTemplateGeneration(input: {
+  templateId: string;
+  templateVersionSummaryJson?: Prisma.JsonValue | null;
+}) {
+  const templateConfig = getTemplateConfig(input.templateId);
+  if (templateConfig) {
+    return getPresetIdsForTemplate(input.templateId);
+  }
+
+  const summary = parseRuntimeTemplateSummaryHints(input.templateVersionSummaryJson);
+  if (summary.allowedPresetIds.length > 0) {
+    return summary.allowedPresetIds;
+  }
+
+  const categoryPresetIds = getPresetIdsForCategories(summary.allowedPresetCategories);
+  return categoryPresetIds.length > 0 ? categoryPresetIds : [...templateVisualPresets];
+}
+
+function parseRuntimeTemplateSummaryHints(summaryJson: Prisma.JsonValue | null | undefined) {
+  const record =
+    summaryJson && typeof summaryJson === "object" && !Array.isArray(summaryJson)
+      ? (summaryJson as Record<string, unknown>)
+      : null;
+
+  return {
+    supportsSubtitle: Boolean(record?.supportsSubtitle),
+    supportsItemNumber: Boolean(record?.supportsItemNumber),
+    headlineStyle:
+      typeof record?.headlineStyle === "string" ? record.headlineStyle : null,
+    preferredWordCount:
+      typeof record?.preferredWordCount === "number" ? record.preferredWordCount : null,
+    preferredMaxChars:
+      typeof record?.preferredMaxChars === "number" ? record.preferredMaxChars : null,
+    preferredMaxLines:
+      typeof record?.preferredMaxLines === "number" ? record.preferredMaxLines : null,
+    numberPlacement:
+      typeof record?.numberPlacement === "string" ? record.numberPlacement : null,
+    allowedPresetIds: Array.isArray(record?.allowedPresetIds)
+      ? record.allowedPresetIds.filter((value): value is TemplateVisualPresetId =>
+          templateVisualPresets.includes(value as TemplateVisualPresetId),
+        )
+      : [],
+    allowedPresetCategories: Array.isArray(record?.allowedPresetCategories)
+      ? record.allowedPresetCategories.filter(
+          (value): value is TemplateVisualPresetCategoryId =>
+            typeof value === "string",
+        )
+      : [],
+    toneTags: Array.isArray(record?.toneTags)
+      ? record.toneTags.filter((value): value is string => typeof value === "string")
+      : [],
+  };
+}
+
+function buildCopyHintToneParts(copyHints?: Partial<TemplateCopyHints> | null) {
+  if (!copyHints) {
+    return [] as string[];
+  }
+
+  return [
+    copyHints.headlineStyle ? `Headline style: ${copyHints.headlineStyle}` : null,
+    copyHints.numberPlacement ? `Number placement: ${copyHints.numberPlacement}` : null,
+    copyHints.preferredMaxLines
+      ? `Artwork title target: ${copyHints.preferredMaxLines} lines`
+      : null,
+    copyHints.preferredWordCount
+      ? `Artwork title target: ${copyHints.preferredWordCount} words`
+      : null,
+    copyHints.preferredMaxChars
+      ? `Artwork title target: ${copyHints.preferredMaxChars} chars`
+      : null,
+    copyHints.toneTags?.length ? `Tone tags: ${copyHints.toneTags.join(", ")}` : null,
+  ].filter((value): value is string => Boolean(value));
 }
 
 function buildRenderCopyRequest(
@@ -3717,7 +4055,8 @@ function buildRenderCopyRequest(
     templateName: string;
     templateSupportsSubtitle: boolean;
     numberTreatment: TemplateNumberTreatment;
-      imageAssignments: Array<{
+    copyHints?: Partial<TemplateCopyHints>;
+    imageAssignments: Array<{
       sourceImage: {
         url: string;
         alt: string | null;
@@ -3731,27 +4070,27 @@ function buildRenderCopyRequest(
     lockedTitle?: string;
     recentTitles?: string[];
   },
-  ): GeneratePinRenderCopyRequest {
-    const titleRequest = buildTitleRequest(job, pin, {
-      recentTitles: pin.recentTitles,
-    });
-    const artworkRule = getArtworkTitleRule(pin.templateId);
-    const artworkGoal = getArtworkGoal(pin.templateId, pin.templateSupportsSubtitle);
-    return {
-      ...titleRequest,
-      locked_title: pin.lockedTitle?.trim() || undefined,
-      subtitle_style_hint: getSubtitleStyleHint(pin.templateId, pin.templateSupportsSubtitle),
-      template_id: pin.templateId,
-      template_name: pin.templateName,
-      template_supports_subtitle: pin.templateSupportsSubtitle,
-      template_number_treatment: pin.numberTreatment,
-      artwork_goal: artworkGoal,
-      artwork_title_single_line: artworkRule.singleLine,
-      artwork_title_max_chars: artworkRule.maxChars,
-      artwork_title_max_words: artworkRule.maxWords,
-      artwork_title_max_lines: artworkRule.maxLines,
-    };
-  }
+): GeneratePinRenderCopyRequest {
+  const titleRequest = buildTitleRequest(job, pin, {
+    recentTitles: pin.recentTitles,
+  });
+  const artworkRule = getArtworkTitleRule(pin.templateId);
+  const artworkGoal = getArtworkGoal(pin.templateId, pin.templateSupportsSubtitle);
+  return {
+    ...titleRequest,
+    locked_title: pin.lockedTitle?.trim() || undefined,
+    subtitle_style_hint: getSubtitleStyleHint(pin.templateId, pin.templateSupportsSubtitle),
+    template_id: pin.templateId,
+    template_name: pin.templateName,
+    template_supports_subtitle: pin.templateSupportsSubtitle,
+    template_number_treatment: pin.numberTreatment,
+    artwork_goal: artworkGoal,
+    artwork_title_single_line: artworkRule.singleLine,
+    artwork_title_max_chars: pin.copyHints?.preferredMaxChars ?? artworkRule.maxChars,
+    artwork_title_max_words: pin.copyHints?.preferredWordCount ?? artworkRule.maxWords,
+    artwork_title_max_lines: pin.copyHints?.preferredMaxLines ?? artworkRule.maxLines,
+  };
+}
 
 function buildTitleRequest(
   job: {
@@ -3768,6 +4107,7 @@ function buildTitleRequest(
     templateName: string;
     templateSupportsSubtitle: boolean;
     numberTreatment: TemplateNumberTreatment;
+    copyHints?: Partial<TemplateCopyHints>;
     imageAssignments: Array<{
       sourceImage: {
         url: string;
@@ -3787,7 +4127,11 @@ function buildTitleRequest(
     recentTitles?: string[];
   },
 ): GeneratePinTitleRequest {
-  const toneParts = [job.toneHint?.trim(), `Template: ${pin.templateName}`].filter(Boolean);
+  const toneParts = [
+    job.toneHint?.trim(),
+    `Template: ${pin.templateName}`,
+    ...buildCopyHintToneParts(pin.copyHints),
+  ].filter(Boolean);
   const images = pin.imageAssignments.map((assignment) =>
     buildDedupedImageContext(assignment.sourceImage),
   );
@@ -5009,14 +5353,19 @@ function buildPublishingTitleBatchEntries(input: {
 
   return input.chunk.map((pin) => {
     const coordination = input.keywordPlan.get(pin.id);
+    const templateMetadata = getTemplateGenerationMetadata({
+      templateId: pin.templateId,
+      templateName: pin.template.name,
+      templateVersionSummaryJson:
+        pin.templateVersion?.summaryJson ?? pin.plan.templateVersion?.summaryJson,
+    });
     const request = buildTitleRequest(
       input.job,
       {
-        templateName: pin.template.name,
-        templateSupportsSubtitle:
-          getTemplateConfig(pin.templateId)?.textFields.includes("subtitle") ?? false,
-        numberTreatment:
-          getTemplateConfig(pin.templateId)?.features.numberTreatment ?? "none",
+        templateName: templateMetadata.templateName,
+        templateSupportsSubtitle: templateMetadata.supportsSubtitle,
+        numberTreatment: templateMetadata.numberTreatment,
+        copyHints: templateMetadata.copyHints,
         imageAssignments: pin.plan.imageAssignments,
         itemNumber:
           parsePlanRenderContext(pin.plan.notes).itemNumber ??

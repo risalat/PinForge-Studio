@@ -1,7 +1,8 @@
 import { isDatabaseConfigured } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
+import { getSampleRuntimeTemplateRenderProps } from "@/lib/runtime-templates/sampleData";
 import { parsePlanRenderContext } from "@/lib/templates/planRenderContext";
-import { getSampleTemplateProps } from "@/lib/templates/registry";
+import { getSampleTemplateProps, getTemplateConfig } from "@/lib/templates/registry";
 import { templateVisualPresets, type TemplateRenderProps } from "@/lib/templates/types";
 
 export async function getRenderPayload(
@@ -10,7 +11,9 @@ export async function getRenderPayload(
   planId?: string,
 ): Promise<TemplateRenderProps> {
   if (!jobId || !isDatabaseConfigured()) {
-    return getSampleTemplateProps(templateId);
+    return getTemplateConfig(templateId)
+      ? getSampleTemplateProps(templateId)
+      : getSampleRuntimeTemplateRenderProps();
   }
 
   try {
@@ -58,10 +61,17 @@ export async function getRenderPayload(
         renderContext.visualPreset ?? renderContext.colorPreset,
         templateId,
       ),
-      images: imageUrls.length > 0 ? imageUrls : getSampleTemplateProps(templateId).images,
+      images:
+        imageUrls.length > 0
+          ? imageUrls
+          : getTemplateConfig(templateId)
+            ? getSampleTemplateProps(templateId).images
+            : getSampleRuntimeTemplateRenderProps().images,
     };
   } catch {
-    return getSampleTemplateProps(templateId);
+    return getTemplateConfig(templateId)
+      ? getSampleTemplateProps(templateId)
+      : getSampleRuntimeTemplateRenderProps();
   }
 }
 
@@ -73,5 +83,7 @@ function toVisualPreset(value: unknown, templateId: string) {
     return value as (typeof templateVisualPresets)[number];
   }
 
-  return getSampleTemplateProps(templateId).visualPreset;
+  return getTemplateConfig(templateId)
+    ? getSampleTemplateProps(templateId).visualPreset
+    : getSampleRuntimeTemplateRenderProps().visualPreset;
 }

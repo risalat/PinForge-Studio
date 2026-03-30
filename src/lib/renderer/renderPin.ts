@@ -2,6 +2,7 @@ import process from "node:process";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { env } from "@/lib/env";
 import { logStructuredEvent } from "@/lib/observability/operationContext";
+import { getRuntimeTemplateForRender } from "@/lib/runtime-templates/db";
 import { getStorageProvider } from "@/lib/storage";
 import { getTemplateConfig } from "@/lib/templates/registry";
 
@@ -9,6 +10,7 @@ type RenderPinInput = {
   jobId: string;
   planId: string;
   templateId: string;
+  templateVersionId?: string | null;
 };
 
 type BrowserLaunchMode = "native" | "custom_executable";
@@ -38,7 +40,7 @@ const MAX_BROWSER_HEAP_MB = Number.parseInt(
   10,
 );
 
-export async function renderPin({ jobId, planId, templateId }: RenderPinInput) {
+export async function renderPin({ jobId, planId, templateId, templateVersionId }: RenderPinInput) {
   const storageProvider = getStorageProvider();
   const key = createRenderedPinStorageKey(jobId, planId, templateId);
 
@@ -46,7 +48,12 @@ export async function renderPin({ jobId, planId, templateId }: RenderPinInput) {
     const browser = await getSharedBrowser();
 
     try {
-      const screenshot = await renderPinScreenshot(browser, { jobId, planId, templateId });
+      const screenshot = await renderPinScreenshot(browser, {
+        jobId,
+        planId,
+        templateId,
+        templateVersionId,
+      });
       sharedBrowserState.renderCount += 1;
       await recycleSharedBrowserIfNeeded("render_threshold");
 
@@ -73,9 +80,11 @@ export async function renderPin({ jobId, planId, templateId }: RenderPinInput) {
   throw new Error("Unable to render pin.");
 }
 
-async function renderPinScreenshot(browser: Browser, { jobId, planId, templateId }: RenderPinInput) {
-  const templateConfig = getTemplateConfig(templateId);
-  const viewport = templateConfig?.canvas ?? { width: 1080, height: 1920 };
+async function renderPinScreenshot(
+  browser: Browser,
+  { jobId, planId, templateId, templateVersionId }: RenderPinInput,
+) {
+  const viewport = await resolveRenderViewport(templateId, templateVersionId);
 
   const context = await browser.newContext({
     viewport,
@@ -84,7 +93,10 @@ async function renderPinScreenshot(browser: Browser, { jobId, planId, templateId
   const page = await context.newPage();
 
   try {
-    const url = `${env.appUrl}/render/${templateId}?jobId=${jobId}&planId=${planId}`;
+    const versionQuery = templateVersionId?.trim()
+      ? `&versionId=${encodeURIComponent(templateVersionId.trim())}`
+      : "";
+    const url = `${env.appUrl}/render/${templateId}?jobId=${jobId}&planId=${planId}${versionQuery}`;
     await page.goto(url, {
       waitUntil: "domcontentloaded",
       timeout: 60_000,
@@ -96,6 +108,30 @@ async function renderPinScreenshot(browser: Browser, { jobId, planId, templateId
   } finally {
     await closeRenderContext(context);
   }
+}
+
+async function resolveRenderViewport(
+  templateId: string,
+  templateVersionId?: string | null,
+) {
+  const templateConfig = getTemplateConfig(templateId);
+  if (templateConfig?.canvas) {
+    return templateConfig.canvas;
+  }
+
+  const runtimeTemplate = await getRuntimeTemplateForRender({
+    templateId,
+    versionId: templateVersionId,
+  });
+
+  if (runtimeTemplate?.template.canvasWidth && runtimeTemplate?.template.canvasHeight) {
+    return {
+      width: runtimeTemplate.template.canvasWidth,
+      height: runtimeTemplate.template.canvasHeight,
+    };
+  }
+
+  return { width: 1080, height: 1920 };
 }
 
 async function waitForStableCanvas(page: Page) {

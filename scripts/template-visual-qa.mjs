@@ -12,6 +12,9 @@ const TEMPLATE_IDS = [
   "four-image-grid-title-footer",
   "hero-text-triple-split-footer",
 ];
+const RUNTIME_TEMPLATE_ENTRIES = parseRuntimeTemplateEntries(
+  process.env.RUNTIME_TEMPLATE_IDS || "",
+);
 
 async function main() {
   await fs.mkdir(OUTPUT_DIR, { recursive: true });
@@ -32,6 +35,18 @@ async function main() {
     await capture(page, renderUrl, path.join(OUTPUT_DIR, `${templateId}-render.png`));
   }
 
+  for (const entry of RUNTIME_TEMPLATE_ENTRIES) {
+    const search = entry.versionId ? `?versionId=${entry.versionId}` : "";
+    const previewUrl = `${BASE_URL}/preview/runtime/${entry.templateId}${search}`;
+    const renderUrl = `${BASE_URL}/render/${entry.templateId}${search}`;
+    const fileStem = entry.versionId
+      ? `runtime-${entry.templateId}-${entry.versionId}`
+      : `runtime-${entry.templateId}`;
+
+    await capture(page, previewUrl, path.join(OUTPUT_DIR, `${fileStem}-preview.png`));
+    await capture(page, renderUrl, path.join(OUTPUT_DIR, `${fileStem}-render.png`));
+  }
+
   await browser.close();
 
   console.log(`Saved template QA screenshots to ${OUTPUT_DIR}`);
@@ -41,6 +56,20 @@ async function main() {
 async function capture(page, url, filePath) {
   await page.goto(url, { waitUntil: "networkidle" });
   await page.screenshot({ path: filePath, fullPage: true });
+}
+
+function parseRuntimeTemplateEntries(value) {
+  return value
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) => {
+      const [templateId, versionId] = entry.split("@").map((part) => part.trim());
+      return {
+        templateId,
+        versionId: versionId || null,
+      };
+    });
 }
 
 main().catch((error) => {

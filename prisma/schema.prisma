@@ -133,6 +133,22 @@ enum PublicationSyncMode {
   INCREMENTAL
 }
 
+enum TemplateSourceKind {
+  BUILTIN
+  CUSTOM
+}
+
+enum TemplateLifecycleStatus {
+  DRAFT
+  FINALIZED
+  ARCHIVED
+}
+
+enum TemplateRendererKind {
+  BUILTIN_COMPONENT
+  RUNTIME_SCHEMA
+}
+
 model User {
   id                  String   @id @default(cuid())
   authUserId          String?  @unique
@@ -149,6 +165,8 @@ model User {
   backgroundTasks     BackgroundTask[]
   publerMetadataCaches PublerMetadataCache[]
   postPulseSnapshots  PostPulseSnapshot[]
+  createdTemplates    Template[]        @relation("UserCreatedTemplates")
+  createdTemplateVersions TemplateVersion[] @relation("UserCreatedTemplateVersions")
 }
 
 model Post {
@@ -263,6 +281,7 @@ model GenerationPlan {
   jobId            String
   mode             GenerationPlanMode
   templateId       String
+  templateVersionId String?
   sortOrder        Int                  @default(0)
   status           GenerationPlanStatus @default(DRAFT)
   artworkReviewState ArtworkReviewState @default(NORMAL)
@@ -274,12 +293,14 @@ model GenerationPlan {
   updatedAt        DateTime             @updatedAt
   job              GenerationJob        @relation(fields: [jobId], references: [id], onDelete: Cascade)
   template         Template             @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  templateVersion  TemplateVersion?     @relation(fields: [templateVersionId], references: [id], onDelete: SetNull)
   imageAssignments GenerationPlanImageAssignment[]
   generatedPins    GeneratedPin[]
   backgroundTasks  BackgroundTask[]
 
   @@index([jobId, status, sortOrder])
   @@index([jobId, artworkReviewState, sortOrder])
+  @@index([templateVersionId])
 }
 
 model GenerationPlanImageAssignment {
@@ -300,6 +321,7 @@ model GeneratedPin {
   jobId             String
   planId            String
   templateId        String
+  templateVersionId String?
   exportPath        String
   storageKey        String?
   createdAt         DateTime         @default(now())
@@ -307,6 +329,7 @@ model GeneratedPin {
   job               GenerationJob    @relation(fields: [jobId], references: [id], onDelete: Cascade)
   plan              GenerationPlan   @relation(fields: [planId], references: [id], onDelete: Cascade)
   template          Template         @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  templateVersion   TemplateVersion? @relation(fields: [templateVersionId], references: [id], onDelete: SetNull)
   pinCopy           PinCopy?
   publerMedia       PublerMedia?
   scheduleRunItems  ScheduleRunItem[]
@@ -315,6 +338,7 @@ model GeneratedPin {
 
   @@index([jobId, createdAt])
   @@index([planId])
+  @@index([templateVersionId])
 }
 
 model PublicationRecord {
@@ -367,14 +391,57 @@ model PublicationSyncState {
 }
 
 model Template {
-  id              String           @id
+  id              String                 @id @default(cuid())
   name            String
-  componentKey    String           @unique
+  componentKey    String                 @unique
   configJson      Json
-  isActive        Boolean          @default(true)
-  createdAt       DateTime         @default(now())
+  isActive        Boolean                @default(true)
+  sourceKind      TemplateSourceKind     @default(BUILTIN)
+  rendererKind    TemplateRendererKind   @default(BUILTIN_COMPONENT)
+  lifecycleStatus TemplateLifecycleStatus @default(FINALIZED)
+  slug            String?                @unique
+  description     String?
+  createdByUserId String?
+  activeVersionId String?                @unique
+  thumbnailPath   String?
+  previewImagePath String?
+  canvasWidth     Int                    @default(1080)
+  canvasHeight    Int                    @default(1920)
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  createdByUser   User?                  @relation("UserCreatedTemplates", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  activeVersion   TemplateVersion?       @relation("ActiveTemplateVersion", fields: [activeVersionId], references: [id], onDelete: SetNull)
+  versions        TemplateVersion[]      @relation("TemplateVersions")
   generatedPins   GeneratedPin[]
   generationPlans GenerationPlan[]
+
+  @@index([sourceKind, lifecycleStatus, updatedAt])
+  @@index([createdByUserId, updatedAt])
+}
+
+model TemplateVersion {
+  id               String                  @id @default(cuid())
+  templateId       String
+  versionNumber    Int
+  lifecycleStatus  TemplateLifecycleStatus @default(DRAFT)
+  schemaJson       Json
+  editorStateJson  Json?
+  summaryJson      Json?
+  validationJson   Json?
+  isActive         Boolean                 @default(false)
+  isLocked         Boolean                 @default(false)
+  createdByUserId  String?
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+  template         Template                @relation("TemplateVersions", fields: [templateId], references: [id], onDelete: Cascade)
+  activeForTemplate Template?              @relation("ActiveTemplateVersion")
+  createdByUser    User?                   @relation("UserCreatedTemplateVersions", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  generationPlans  GenerationPlan[]
+  generatedPins    GeneratedPin[]
+
+  @@unique([templateId, versionNumber])
+  @@index([templateId, lifecycleStatus, createdAt])
+  @@index([createdByUserId, createdAt])
 }
 
 model PublerMedia {

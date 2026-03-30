@@ -29,6 +29,7 @@ export const dashboardNavigation = [
     heading: "Assets",
     items: [
       { label: "Library", href: "/dashboard/library", icon: "library" },
+      { label: "Templates", href: "/dashboard/templates", icon: "library" },
       { label: "API Keys", href: "/dashboard/api-keys", icon: "keys" },
     ],
   },
@@ -139,6 +140,18 @@ export function getDashboardPageTitle(pathname: string) {
       primaryActionHref: "/dashboard/jobs",
       secondaryActionLabel: "Publishing queue",
       secondaryActionHref: "/dashboard/publishing",
+    };
+  }
+
+  if (pathname === "/dashboard/templates") {
+    return {
+      eyebrow: "Templates",
+      title: "Custom runtime templates",
+      description: "Create starter drafts and inspect versioned runtime-template records.",
+      primaryActionLabel: "Library",
+      primaryActionHref: "/dashboard/library",
+      secondaryActionLabel: "Jobs board",
+      secondaryActionHref: "/dashboard/jobs",
     };
   }
 

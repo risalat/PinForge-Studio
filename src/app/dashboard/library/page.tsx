@@ -1,128 +1,283 @@
 import Link from "next/link";
-import { getTemplateLibraryEntries } from "@/lib/templates/library";
+import type { ReactNode } from "react";
+import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
+import { requireAuthenticatedDashboardUser } from "@/lib/auth/dashboardSession";
+import { renderRuntimeTemplate } from "@/lib/runtime-templates/renderRuntimeTemplate";
+import { listCustomTemplatesForUser } from "@/lib/runtime-templates/db";
 import { renderTemplate } from "@/lib/templates/registry";
+import {
+  getBuiltInTemplateLibraryEntries,
+  listFinalizedCustomTemplateCandidatesForUser,
+} from "@/lib/templates/selectableTemplates";
 
 const THUMBNAIL_WIDTH = 280;
 const THUMBNAIL_SCALE = THUMBNAIL_WIDTH / 1080;
 const THUMBNAIL_HEIGHT = Math.round(1920 * THUMBNAIL_SCALE);
 
-export default function DashboardLibraryPage() {
-  const templates = getTemplateLibraryEntries();
+export default async function DashboardLibraryPage() {
+  await requireAuthenticatedDashboardUser();
+  const user = await getOrCreateDashboardUser();
+  const [builtIns, customFinalized, customTemplates] = await Promise.all([
+    Promise.resolve(getBuiltInTemplateLibraryEntries()),
+    listFinalizedCustomTemplateCandidatesForUser(user.id),
+    listCustomTemplatesForUser(user.id),
+  ]);
+  const finalizedCustomTemplates = customFinalized.filter(
+    (
+      template,
+    ): template is NonNullable<(typeof customFinalized)[number]> => Boolean(template),
+  );
+  const draftCount = customTemplates.filter((template) => template.lifecycleStatus === "DRAFT").length;
+  const archivedCount = customTemplates.filter((template) => template.lifecycleStatus === "ARCHIVED").length;
 
   return (
     <div className="space-y-8 text-[var(--dashboard-text)]">
-      <section className="grid gap-4 xl:grid-cols-3">
-        <LibraryMetric label="Templates" value={String(templates.length)} />
-        <LibraryMetric
-          label="Subtitle-aware"
-          value={String(templates.filter((template) => template.textFields.includes("subtitle")).length)}
-        />
-        <LibraryMetric
-          label="Number-aware"
-          value={String(
-            templates.filter((template) => template.features.numberTreatment !== "none").length,
-          )}
-        />
+      <section className="grid gap-4 xl:grid-cols-5">
+        <LibraryMetric label="Selectable Templates" value={String(builtIns.length + finalizedCustomTemplates.length)} />
+        <LibraryMetric label="Built-in Templates" value={String(builtIns.length)} />
+        <LibraryMetric label="Finalized Custom" value={String(finalizedCustomTemplates.length)} />
+        <LibraryMetric label="Drafts" value={String(draftCount)} linkHref="/dashboard/templates" linkLabel="Open drafts" />
+        <LibraryMetric label="Archived" value={String(archivedCount)} linkHref="/dashboard/templates" linkLabel="Open manager" />
       </section>
 
-      <section className="grid gap-6 2xl:grid-cols-2">
-        {templates.map((template) => (
-          <article
-            key={template.id}
-            className="rounded-[32px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-6 shadow-[var(--dashboard-shadow-sm)]"
-          >
-            <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
-              <div className="rounded-[26px] bg-[var(--dashboard-panel-alt)] p-4">
-                <div
-                  className="overflow-hidden rounded-[22px] bg-white shadow-[var(--dashboard-shadow-sm)]"
-                  style={{
-                    width: THUMBNAIL_WIDTH,
-                    height: THUMBNAIL_HEIGHT,
-                  }}
-                >
+      <LibrarySection
+        title="Built-in Templates"
+        description="Production-safe built-in components. These continue to use the locked registry path exactly as before."
+      >
+        <div className="grid gap-6 2xl:grid-cols-2">
+          {builtIns.map((template) => (
+            <article
+              key={template.id}
+              className="rounded-[32px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-6 shadow-[var(--dashboard-shadow-sm)]"
+            >
+              <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
+                <div className="rounded-[26px] bg-[var(--dashboard-panel-alt)] p-4">
                   <div
-                    style={{
-                      width: 1080,
-                      height: 1920,
-                      transform: `scale(${THUMBNAIL_SCALE})`,
-                      transformOrigin: "top left",
-                    }}
+                    className="overflow-hidden rounded-[22px] bg-white shadow-[var(--dashboard-shadow-sm)]"
+                    style={{ width: THUMBNAIL_WIDTH, height: THUMBNAIL_HEIGHT }}
                   >
-                    {renderTemplate(template.id, template.sampleProps)}
+                    <div
+                      style={{
+                        width: 1080,
+                        height: 1920,
+                        transform: `scale(${THUMBNAIL_SCALE})`,
+                        transformOrigin: "top left",
+                      }}
+                    >
+                      {renderTemplate(template.id, template.sampleProps)}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex min-w-0 flex-col justify-between gap-6">
+                  <div className="space-y-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Tag label="Built-in" tone="accent" />
+                      <Tag label={`${template.imageSlotCount} image slots`} />
+                      <Tag label={template.features.overlay ? "Overlay" : "Editorial"} />
+                    </div>
+
+                    <div>
+                      <h2 className="text-3xl font-black tracking-[-0.04em]">{template.name}</h2>
+                      <p className="mt-2 text-sm font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
+                        {template.id}
+                      </p>
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <DetailCard label="Text fields" value={template.textFields.join(", ")} />
+                      <DetailCard
+                        label="Status"
+                        value={template.locked ? "Locked production template" : "Draft"}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-3">
+                    <Link
+                      href={template.previewPath ?? `/preview/${template.id}`}
+                      className="rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-5 py-3 text-sm font-semibold text-white"
+                    >
+                      Open preview
+                    </Link>
+                    <Link
+                      href={`/render/${template.id}`}
+                      className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-5 py-3 text-sm font-semibold text-[var(--dashboard-subtle)]"
+                    >
+                      Render route
+                    </Link>
+                    <Link
+                      href="/dashboard/jobs"
+                      className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-5 py-3 text-sm font-semibold text-[var(--dashboard-subtle)]"
+                    >
+                      Use in jobs
+                    </Link>
                   </div>
                 </div>
               </div>
+            </article>
+          ))}
+        </div>
+      </LibrarySection>
 
-              <div className="flex min-w-0 flex-col justify-between gap-6">
-                <div className="space-y-4">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Tag label={template.locked ? "Locked" : "Draft"} tone="accent" />
-                    <Tag label={`${template.imageSlotCount} image slots`} />
-                    <Tag
-                      label={
-                        template.features.numberTreatment === "hero"
-                          ? "Hero number"
-                          : template.features.numberTreatment === "badge"
-                            ? "Badge number"
-                            : "Title led"
-                      }
-                    />
+      <LibrarySection
+        title="My Finalized Custom Templates"
+        description="Only finalized and locked runtime-template versions appear here and in the production plan picker."
+      >
+        {finalizedCustomTemplates.length === 0 ? (
+          <div className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-6 text-sm text-[var(--dashboard-subtle)] shadow-[var(--dashboard-shadow-sm)]">
+            No finalized custom templates yet. Finalize a draft from the template manager first.
+          </div>
+        ) : (
+          <div className="grid gap-6 2xl:grid-cols-2">
+            {finalizedCustomTemplates.map((template) => (
+              <article
+                key={template.selectionKey}
+                className="rounded-[32px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-6 shadow-[var(--dashboard-shadow-sm)]"
+              >
+                <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
+                  <div className="rounded-[26px] bg-[var(--dashboard-panel-alt)] p-4">
+                    <div
+                      className="overflow-hidden rounded-[22px] bg-white shadow-[var(--dashboard-shadow-sm)]"
+                      style={{ width: THUMBNAIL_WIDTH, height: THUMBNAIL_HEIGHT }}
+                    >
+                      <div
+                        style={{
+                          width: 1080,
+                          height: 1920,
+                          transform: `scale(${THUMBNAIL_SCALE})`,
+                          transformOrigin: "top left",
+                        }}
+                      >
+                        {template.runtimeSchemaJson
+                          ? renderRuntimeTemplate(template.runtimeSchemaJson, template.sampleProps)
+                          : null}
+                      </div>
+                    </div>
                   </div>
 
-                  <div>
-                    <h2 className="text-3xl font-black tracking-[-0.04em]">{template.name}</h2>
-                    <p className="mt-2 text-sm font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
-                      {template.id}
-                    </p>
-                  </div>
+                  <div className="flex min-w-0 flex-col justify-between gap-6">
+                    <div className="space-y-4">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Tag label="Custom" tone="accent" />
+                        <Tag label="Finalized" />
+                        <Tag label={`v${template.versionNumber ?? 1}`} />
+                        <Tag label={`${template.imageSlotCount} image slots`} />
+                      </div>
 
-                  <p className="text-sm leading-7 text-[var(--dashboard-subtle)]">
-                    {getTemplateDescription(template.id)}
-                  </p>
+                      <div>
+                        <h2 className="text-3xl font-black tracking-[-0.04em]">{template.name}</h2>
+                        <p className="mt-2 text-sm font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
+                          {template.slug || template.templateId}
+                        </p>
+                      </div>
 
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <DetailCard label="Text fields" value={template.textFields.join(", ")} />
-                    <DetailCard
-                      label="Usage"
-                      value={getTemplateUsage(template.id)}
-                    />
+                      <p className="text-sm leading-7 text-[var(--dashboard-subtle)]">
+                        {template.description || "Runtime-schema custom template."}
+                      </p>
+
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <DetailCard label="Bindings" value={template.supportedBindings.join(", ")} />
+                        <DetailCard
+                          label="Preset families"
+                          value={template.allowedPresetCategories.length > 0 ? template.allowedPresetCategories.join(", ") : "All presets"}
+                        />
+                        <DetailCard
+                          label="Image policy"
+                          value={`${template.imagePolicyMode} | min ${template.minImageSlotsRequired}`}
+                        />
+                        <DetailCard
+                          label="Copy hints"
+                          value={[
+                            template.copyHints.headlineStyle,
+                            template.copyHints.preferredMaxLines
+                              ? `${template.copyHints.preferredMaxLines} lines`
+                              : null,
+                            template.copyHints.preferredWordCount
+                              ? `${template.copyHints.preferredWordCount} words`
+                              : null,
+                          ]
+                            .filter(Boolean)
+                            .join(" | ") || "Default runtime hints"}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-3">
+                      <Link
+                        href={template.previewPath}
+                        className="rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-5 py-3 text-sm font-semibold text-white"
+                      >
+                        Preview runtime
+                      </Link>
+                      <Link
+                        href={template.renderPath}
+                        className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-5 py-3 text-sm font-semibold text-[var(--dashboard-subtle)]"
+                      >
+                        Render route
+                      </Link>
+                      <Link
+                        href="/dashboard/jobs"
+                        className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-5 py-3 text-sm font-semibold text-[var(--dashboard-subtle)]"
+                      >
+                        Use in jobs
+                      </Link>
+                      <Link
+                        href="/dashboard/templates"
+                        className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-5 py-3 text-sm font-semibold text-[var(--dashboard-subtle)]"
+                      >
+                        Manage lifecycle
+                      </Link>
+                    </div>
                   </div>
                 </div>
-
-                <div className="flex flex-wrap gap-3">
-                  <Link
-                    href={template.previewPath ?? `/preview/${template.id}`}
-                    className="rounded-full dashboard-accent-action dashboard-accent-action bg-[var(--dashboard-accent)] px-5 py-3 text-sm font-semibold text-white"
-                  >
-                    Open preview
-                  </Link>
-                  <Link
-                    href={`/render/${template.id}`}
-                    className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-5 py-3 text-sm font-semibold text-[var(--dashboard-subtle)]"
-                  >
-                    Render route
-                  </Link>
-                  <Link
-                    href="/dashboard/jobs"
-                    className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-5 py-3 text-sm font-semibold text-[var(--dashboard-subtle)]"
-                  >
-                    Use in jobs
-                  </Link>
-                </div>
-              </div>
-            </div>
-          </article>
-        ))}
-      </section>
+              </article>
+            ))}
+          </div>
+        )}
+      </LibrarySection>
     </div>
   );
 }
 
-function LibraryMetric({ label, value }: { label: string; value: string }) {
+function LibrarySection({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="space-y-4">
+      <div>
+        <h2 className="text-2xl font-black tracking-[-0.04em]">{title}</h2>
+        <p className="mt-2 text-sm text-[var(--dashboard-subtle)]">{description}</p>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function LibraryMetric(input: {
+  label: string;
+  value: string;
+  linkHref?: string;
+  linkLabel?: string;
+}) {
   return (
     <div className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-5 shadow-[var(--dashboard-shadow-sm)]">
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">{label}</p>
-      <p className="mt-3 text-4xl font-black">{value}</p>
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">{input.label}</p>
+      <p className="mt-3 text-4xl font-black">{input.value}</p>
+      {input.linkHref && input.linkLabel ? (
+        <Link
+          href={input.linkHref}
+          className="mt-4 inline-flex rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)]"
+        >
+          {input.linkLabel}
+        </Link>
+      ) : null}
     </div>
   );
 }
@@ -149,102 +304,3 @@ function DetailCard({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
-
-function getTemplateDescription(templateId: string) {
-  switch (templateId) {
-    case "split-vertical-title":
-      return "Editorial split layout with kicker, title, footer sync, and image-aware preset selection.";
-    case "split-vertical-title-no-subtitle":
-      return "Split layout for cleaner standalone headlines with a dominant title band and footer harmony.";
-    case "split-vertical-title-number":
-      return "Split layout with a hero number badge, locked editorial typography, and stronger listicle packaging.";
-    case "single-image-subtitle-title-cta":
-      return "Single-image editorial card with a reference-locked subtitle, headline, and footer CTA treatment.";
-    case "single-image-header-title-domain-cta":
-      return "Single full-bleed image with a translucent top header card, editorial kicker, uppercase title, and inline domain CTA.";
-    case "single-image-title-footer":
-      return "Single-image layout with a white subtitle strip, a deep footer title panel, and a compact read-more plus domain row.";
-    case "single-image-overlay-number-title-domain":
-      return "Single-image overlay layout with a centered hero number, enlarged title strip, and compact domain line inside a soft lower panel.";
-    case "four-image-masonry-hero-number-domain-pill":
-      return "Four-image masonry collage with a centered number medallion, bold title card, and compact domain pill.";
-    case "four-image-grid-number-title-domain":
-      return "Four-image asymmetric grid with a centered hero number, full-width title band, and domain pill.";
-    case "four-image-grid-title-footer":
-      return "Clean four-image grid with a translucent center title band and a full-width footer domain bar.";
-    case "four-image-grid-center-band-title-domain":
-      return "Four-image equal grid with a white center title box, colored rails, compact kicker line, and a clean footer domain row.";
-    case "five-image-center-band-number-domain":
-      return "Two-over-three image collage with a warm center band, boxed hero number, stacked title lines, and a centered domain pill.";
-    case "hero-arch-sidebar-triptych":
-      return "Poster-style layout with a tall editorial sidebar, a framed arched hero image, and a three-image lower strip.";
-    case "three-image-center-poster-number-footer":
-      return "Centered poster-card layout with one top hero photo, two lower supporting photos, a strong hero number, and a footer domain pill.";
-    case "four-image-split-band-number":
-      return "Four-image split collage with a dark center band, centered hero number badge, and a locked two-line 1-word/2-word headline.";
-    case "two-image-slant-band-number-domain":
-      return "Hero image plus lower split collage with a diagonal white title banner, separate number badge, script opener, and rounded domain pill.";
-    case "hero-text-triple-split-footer":
-      return "Warm editorial layout with one hero image, a full-width text panel, and a lower triple-split strip capped by a footer domain bar.";
-    case "six-image-triple-split-slant-hero-footer":
-      return "Six-image collage with a triple top strip, tilted middle photos, editorial title band, and full-width footer.";
-    case "nine-image-grid-overlay-number-footer":
-      return "Nine-image square grid with a centered number medallion, editorial title band, and compact footer pill.";
-    case "masonry-grid-number-title-footer":
-      return "Seven-image masonry collage with a centered number card, dark editorial title band, and footer domain pill.";
-    case "hero-two-split-text":
-      return "Full-width hero image with a side-by-side number and three-line title strip, followed by a lower two-image split.";
-    default:
-      return "Locked Pinterest template ready for preview, render, and manual plan use.";
-  }
-}
-
-function getTemplateUsage(templateId: string) {
-  switch (templateId) {
-    case "split-vertical-title":
-      return "Best for pins that need a subtitle and more editorial packaging.";
-    case "split-vertical-title-no-subtitle":
-      return "Best for cleaner pins with a dominant headline.";
-    case "split-vertical-title-number":
-      return "Best for numbered listicles that need a visible count hook.";
-    case "single-image-subtitle-title-cta":
-      return "Best for single-image pins where the subtitle names a paint, product, or featured idea.";
-    case "single-image-header-title-domain-cta":
-      return "Best for single-image tutorial or explainer pins where the title and CTA need to sit together in a clean top header.";
-    case "single-image-title-footer":
-      return "Best for single-image editorial pins where a soft image needs a strong dark title block and a subtle footer CTA.";
-    case "single-image-overlay-number-title-domain":
-      return "Best for simple listicle pins where one large photo, a clear count, and a wider two-line title strip are enough.";
-    case "four-image-masonry-hero-number-domain-pill":
-      return "Best for multi-image inspiration roundups that need a visible count and centered title block.";
-    case "four-image-grid-number-title-domain":
-      return "Best for roundup pins that need a strong listicle badge, big title band, and simple four-image structure.";
-    case "four-image-grid-title-footer":
-      return "Best for clean inspiration roundups where the title should sit across the middle without a separate number badge.";
-    case "four-image-grid-center-band-title-domain":
-      return "Best for bright roundup pins where the center title box itself needs to feel like the main design element.";
-    case "five-image-center-band-number-domain":
-      return "Best for decor or inspiration roundups that need a fuller five-image collage with the number and headline anchored in a calm center band.";
-    case "hero-arch-sidebar-triptych":
-      return "Best for premium roundup pins where one dominant hero image should feel like a magazine cover and the supporting images act as a finishing strip.";
-    case "three-image-center-poster-number-footer":
-      return "Best for number-led decor roundups where the artwork title should feel like a printed poster card rather than a normal text band.";
-    case "four-image-split-band-number":
-      return "Best for short, punchy three-word listicle titles where the first word needs to dominate the center strip.";
-    case "two-image-slant-band-number-domain":
-      return "Best for decorative listicle pins where a soft script opener, bold lower title, and split lower image pair create stronger visual movement.";
-    case "hero-text-triple-split-footer":
-      return "Best for seasonal decor or roundup pins where one strong hero photo should lead before supporting detail shots.";
-    case "six-image-triple-split-slant-hero-footer":
-      return "Best for exterior or roundup pins that benefit from multiple angles plus one strong hero image.";
-    case "nine-image-grid-overlay-number-footer":
-      return "Best for dense inspiration roundups that need many examples plus a strong listicle hook.";
-    case "masonry-grid-number-title-footer":
-      return "Best for editorial collage pins that need a richer masonry structure with a centered count hook.";
-    case "hero-two-split-text":
-      return "Best for listicle pins that need one dominant hero, a huge count, and a strong stacked title in the center strip.";
-    default:
-      return "Best for locked template-driven render tests and job planning.";
-  }
-}
-

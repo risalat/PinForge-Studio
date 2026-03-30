@@ -16,7 +16,10 @@ import {
   getWorkspaceProfileForUserId,
 } from "@/lib/settings/integrationSettings";
 import { resolveStoredAssetUrl } from "@/lib/storage/assetUrl";
-import { getTemplateLibraryEntries } from "@/lib/templates/library";
+import {
+  listSelectableTemplateCandidatesForUser,
+  type SelectableTemplateCandidate,
+} from "@/lib/templates/selectableTemplates";
 import { parsePlanRenderContext } from "@/lib/templates/planRenderContext";
 import {
   getTemplateVisualPresetCategory,
@@ -70,13 +73,9 @@ export default async function DashboardJobDetailsPage({ params }: PageProps) {
     );
   }
 
-  const templates = getTemplateLibraryEntries().map((template) => ({
-    id: template.id,
-    name: template.name,
-    imageSlotCount: template.imageSlotCount,
-    previewPath: template.previewPath ?? `/preview/${template.id}`,
-    layoutType: template.features.overlay ? "overlay" : "editorial",
-  }));
+  const templates = (await listSelectableTemplateCandidatesForUser(user.id)).filter(
+    (template): template is SelectableTemplateCandidate => Boolean(template),
+  );
 
   const statusLabel = formatLabel(job.status);
   const milestoneCount = job.milestones.length;
@@ -164,6 +163,12 @@ export default async function DashboardJobDetailsPage({ params }: PageProps) {
             id: plan.id,
             mode: plan.mode,
             templateId: plan.templateId,
+            templateVersionId: plan.templateVersionId,
+            templateName: plan.template.name,
+            previewPath:
+              plan.templateVersionId
+                ? `/dashboard/templates/${plan.templateId}/preview?versionId=${plan.templateVersionId}`
+                : `/preview/${plan.templateId}`,
             status: plan.status,
             artworkReviewState: plan.artworkReviewState,
             artworkFlagReason: plan.artworkFlagReason,
@@ -186,6 +191,8 @@ export default async function DashboardJobDetailsPage({ params }: PageProps) {
               id: pin.id,
               planId: pin.planId,
               templateId: pin.templateId,
+              templateVersionId: pin.templateVersionId,
+              templateName: pin.template.name,
               exportPath: resolveStoredAssetUrl({
                 storageKey: pin.storageKey,
                 exportPath: pin.exportPath,

@@ -12,6 +12,7 @@ type AutoFitTitleProps = {
   fontFamily?: string;
   fontWeight?: CSSProperties["fontWeight"];
   letterSpacing?: string;
+  textAlign?: CSSProperties["textAlign"];
   textTransform?: CSSProperties["textTransform"];
   fontStyle?: CSSProperties["fontStyle"];
 };
@@ -27,6 +28,7 @@ export function AutoFitTitle({
   fontFamily,
   fontWeight,
   letterSpacing,
+  textAlign,
   textTransform,
   fontStyle,
 }: AutoFitTitleProps) {
@@ -43,6 +45,7 @@ export function AutoFitTitle({
       fontFamily={fontFamily}
       fontWeight={fontWeight}
       letterSpacing={letterSpacing}
+      textAlign={textAlign}
       textTransform={textTransform}
       fontStyle={fontStyle}
     />

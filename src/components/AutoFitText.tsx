@@ -14,6 +14,7 @@ type AutoFitTextProps = {
   fontFamily?: string;
   fontWeight?: CSSProperties["fontWeight"];
   letterSpacing?: string;
+  textAlign?: CSSProperties["textAlign"];
   textTransform?: CSSProperties["textTransform"];
   fontStyle?: CSSProperties["fontStyle"];
 };
@@ -30,6 +31,7 @@ export function AutoFitText({
   fontFamily,
   fontWeight,
   letterSpacing,
+  textAlign,
   textTransform,
   fontStyle,
 }: AutoFitTextProps) {
@@ -111,6 +113,7 @@ export function AutoFitText({
     maxLines,
     minFontSize,
     text,
+    textAlign,
     textTransform,
   ]);
 
@@ -122,6 +125,7 @@ export function AutoFitText({
     fontWeight,
     letterSpacing,
     lineHeight,
+    textAlign,
     textTransform,
     whiteSpace: maxLines === 1 ? "nowrap" : undefined,
   } satisfies CSSProperties;
