@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import type {
   RuntimeTemplateDocument,
   RuntimeTemplateElement,
@@ -48,8 +48,6 @@ import {
 type InspectorPanelProps = {
   document: RuntimeTemplateDocument;
   selectedElement: RuntimeTemplateElement | null;
-  validationResult: RuntimeTemplateValidationResult<RuntimeTemplateDocument>;
-  persistedValidationResult?: RuntimeTemplateValidationResult<RuntimeTemplateDocument> | null;
   currentPreset: TemplateVisualPresetId;
   onUpdateDocument: (updater: (document: RuntimeTemplateDocument) => RuntimeTemplateDocument) => void;
   onUpdateElement: (
@@ -62,15 +60,27 @@ export function InspectorPanel(props: InspectorPanelProps) {
   const {
     document,
     selectedElement,
-    validationResult,
-    persistedValidationResult,
     currentPreset,
     onUpdateDocument,
     onUpdateElement,
   } = props;
+  const quickColorTargets = useMemo(
+    () => getInspectorQuickColorTargets(selectedElement),
+    [selectedElement],
+  );
+  const [quickColorTargetId, setQuickColorTargetId] = useState<string>("");
+  const activeQuickColorTargetId = quickColorTargets.some(
+    (target) => target.id === quickColorTargetId,
+  )
+    ? quickColorTargetId
+    : (quickColorTargets[0]?.id ?? "");
+  const presetPaletteSwatches = useMemo(
+    () => getPresetPaletteSwatches(currentPreset),
+    [currentPreset],
+  );
 
   return (
-    <section className="flex h-full min-h-[calc(100vh-10rem)] flex-col rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] shadow-[var(--dashboard-shadow-sm)]">
+    <section className="flex h-full min-h-0 flex-col rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] shadow-[var(--dashboard-shadow-sm)]">
       <div className="border-b border-[var(--dashboard-line)] px-4 py-3">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
           Inspector
@@ -81,28 +91,90 @@ export function InspectorPanel(props: InspectorPanelProps) {
       </div>
 
       <div className="flex-1 overflow-y-auto p-4">
-        {selectedElement ? (
-          <SelectedElementInspector
-            document={document}
-            selectedElement={selectedElement}
-            currentPreset={currentPreset}
-            onUpdateElement={onUpdateElement}
-            onUpdateDocument={onUpdateDocument}
-          />
-        ) : (
-          <DocumentInspector
-            document={document}
-            currentPreset={currentPreset}
-            onUpdateDocument={onUpdateDocument}
-          />
-        )}
-        <div className="mt-4">
-          <ValidationPanel
-            validationResult={validationResult}
-            persistedValidationResult={persistedValidationResult}
-            currentPreset={currentPreset}
+        <div className="space-y-5">
+          {selectedElement ? (
+            <SelectedElementInspector
+              document={document}
+              selectedElement={selectedElement}
+              currentPreset={currentPreset}
+              onUpdateElement={onUpdateElement}
+              onUpdateDocument={onUpdateDocument}
+            />
+          ) : (
+            <DocumentInspector
+              document={document}
+              currentPreset={currentPreset}
+              onUpdateDocument={onUpdateDocument}
+            />
+          )}
+
+          <PresetPaletteTray
+            swatches={presetPaletteSwatches}
+            targets={quickColorTargets}
+            activeTargetId={activeQuickColorTargetId}
+            onChangeTarget={setQuickColorTargetId}
+            onApplyColor={(value) => {
+              const target = quickColorTargets.find(
+                (entry) => entry.id === activeQuickColorTargetId,
+              );
+              if (!target) {
+                return;
+              }
+
+              if (target.scope === "document") {
+                onUpdateDocument((current) => ({
+                  ...setRuntimeTemplatePresetBackgroundOverride(
+                    current,
+                    currentPreset,
+                    {
+                      customFill: value || undefined,
+                    },
+                    value
+                      ? { lockFields: ["customFill"] }
+                      : { unlockFields: ["customFill"] },
+                  ),
+                  background: {
+                    ...current.background,
+                    customFill: undefined,
+                  },
+                }));
+                return;
+              }
+
+              if (target.elementId) {
+                updatePresetScopedElementColor(
+                  onUpdateDocument,
+                  currentPreset,
+                  target.elementId,
+                  target.field,
+                  value,
+                );
+              }
+            }}
           />
         </div>
+      </div>
+    </section>
+  );
+}
+
+export function ValidationSidebar(props: {
+  validationResult: RuntimeTemplateValidationResult<RuntimeTemplateDocument>;
+  persistedValidationResult?: RuntimeTemplateValidationResult<RuntimeTemplateDocument> | null;
+  currentPreset: TemplateVisualPresetId;
+}) {
+  return (
+    <section className="flex h-full min-h-0 flex-col rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] shadow-[var(--dashboard-shadow-sm)]">
+      <div className="border-b border-[var(--dashboard-line)] px-4 py-3">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
+          Validation
+        </p>
+        <h2 className="mt-1 text-lg font-bold text-[var(--dashboard-text)]">
+          Finalize readiness
+        </h2>
+      </div>
+      <div className="flex-1 overflow-y-auto p-4">
+        <ValidationPanel {...props} />
       </div>
     </section>
   );
@@ -1181,4 +1253,170 @@ function formatPresetLabel(
     .split("-")
     .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
     .join(" ");
+}
+
+type InspectorQuickColorTarget = {
+  id: string;
+  label: string;
+  scope: "document" | "element";
+  elementId?: string;
+  field:
+    | "customFill"
+    | "customBorderColor"
+    | "overlayCustomFill"
+    | "customTextColor";
+};
+
+function getInspectorQuickColorTargets(
+  selectedElement: RuntimeTemplateElement | null,
+): InspectorQuickColorTarget[] {
+  if (!selectedElement) {
+    return [
+      {
+        id: "document-background",
+        label: "Background",
+        scope: "document",
+        field: "customFill",
+      },
+    ];
+  }
+
+  switch (selectedElement.type) {
+    case "imageFrame":
+    case "imageGrid":
+      return [
+        {
+          id: `${selectedElement.id}-fill`,
+          label: "Fill",
+          scope: "element",
+          elementId: selectedElement.id,
+          field: "customFill",
+        },
+        {
+          id: `${selectedElement.id}-overlay`,
+          label: "Overlay",
+          scope: "element",
+          elementId: selectedElement.id,
+          field: "overlayCustomFill",
+        },
+        {
+          id: `${selectedElement.id}-border`,
+          label: "Border",
+          scope: "element",
+          elementId: selectedElement.id,
+          field: "customBorderColor",
+        },
+      ];
+    case "shapeBlock":
+      return [
+        {
+          id: `${selectedElement.id}-fill`,
+          label: "Fill",
+          scope: "element",
+          elementId: selectedElement.id,
+          field: "customFill",
+        },
+        {
+          id: `${selectedElement.id}-border`,
+          label: "Border",
+          scope: "element",
+          elementId: selectedElement.id,
+          field: "customBorderColor",
+        },
+      ];
+    case "overlay":
+      return [
+        {
+          id: `${selectedElement.id}-fill`,
+          label: "Overlay",
+          scope: "element",
+          elementId: selectedElement.id,
+          field: "customFill",
+        },
+      ];
+    case "divider":
+      return [
+        {
+          id: `${selectedElement.id}-border`,
+          label: "Divider",
+          scope: "element",
+          elementId: selectedElement.id,
+          field: "customBorderColor",
+        },
+      ];
+    default:
+      return [
+        {
+          id: `${selectedElement.id}-text`,
+          label: "Text",
+          scope: "element",
+          elementId: selectedElement.id,
+          field: "customTextColor",
+        },
+      ];
+  }
+}
+
+function getPresetPaletteSwatches(presetId: TemplateVisualPresetId) {
+  const palette = resolveRuntimeTemplateTokens(presetId).preset.palette;
+  const orderedColors = [
+    palette.canvas,
+    palette.band,
+    palette.footer,
+    palette.divider,
+    palette.title,
+    palette.subtitle,
+    palette.domain,
+    palette.number,
+  ];
+
+  return orderedColors.filter((value, index, values) => values.indexOf(value) === index);
+}
+
+function PresetPaletteTray(props: {
+  swatches: string[];
+  targets: InspectorQuickColorTarget[];
+  activeTargetId: string;
+  onChangeTarget: (value: string) => void;
+  onApplyColor: (value: string) => void;
+}) {
+  const { swatches, targets, activeTargetId, onChangeTarget, onApplyColor } = props;
+
+  if (swatches.length === 0 || targets.length === 0) {
+    return null;
+  }
+
+  return (
+    <SectionCard title="Preset palette">
+      {targets.length > 1 ? (
+        <div className="mb-1">
+          <select
+            value={activeTargetId}
+            onChange={(event) => onChangeTarget(event.target.value)}
+            className="w-full rounded-xl border border-[var(--dashboard-line)] bg-white px-3 py-2 text-sm font-semibold text-[var(--dashboard-text)] outline-none focus:border-[var(--dashboard-accent)]"
+          >
+            {targets.map((target) => (
+              <option key={target.id} value={target.id}>
+                {target.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
+
+      <div className="grid grid-cols-8 gap-2">
+        {swatches.map((value) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => onApplyColor(value)}
+            className="h-8 w-full rounded-lg border border-[var(--dashboard-line)] transition hover:scale-[1.03] hover:border-[var(--dashboard-accent)]"
+            style={{ background: value }}
+            aria-label={`Apply ${value}`}
+            title={value}
+          />
+        ))}
+      </div>
+    </SectionCard>
+  );
 }

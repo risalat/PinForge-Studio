@@ -30,7 +30,7 @@ export function LayerPanel(props: LayerPanelProps) {
   const layers = [...elements].sort((left, right) => right.zIndex - left.zIndex);
 
   return (
-    <section className="h-full space-y-3 rounded-[24px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-4 shadow-[var(--dashboard-shadow-sm)]">
+    <section className="flex h-full min-h-0 flex-col rounded-[24px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-4 shadow-[var(--dashboard-shadow-sm)]">
       <div className="flex items-center justify-between gap-2">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
           Layers
@@ -39,7 +39,7 @@ export function LayerPanel(props: LayerPanelProps) {
           {layers.length}
         </span>
       </div>
-      <div className="space-y-2">
+      <div className="mt-3 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
         {layers.map((element) => {
           const selected = element.id === selectedElementId;
           return (

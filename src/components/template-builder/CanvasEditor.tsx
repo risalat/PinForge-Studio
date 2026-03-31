@@ -65,8 +65,8 @@ export function CanvasEditor(props: CanvasEditorProps) {
   const stageHeight = Math.round(document.canvas.height * editorState.zoom);
 
   return (
-    <section className="flex h-full min-h-[calc(100vh-10rem)] flex-col rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] shadow-[var(--dashboard-shadow-sm)]">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--dashboard-line)] px-4 py-3">
+    <section className="flex h-full min-h-0 flex-col rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] shadow-[var(--dashboard-shadow-sm)]">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--dashboard-line)] px-4 py-2.5">
         <div className="flex items-center gap-3">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
             Canvas

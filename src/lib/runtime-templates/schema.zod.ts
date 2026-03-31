@@ -303,12 +303,6 @@ export const runtimeTemplateDocumentDraftSchema = runtimeTemplateDocumentObjectS
 export const runtimeTemplateDocumentSchema = runtimeTemplateDocumentObjectSchema
   .superRefine((value, context) => {
     const elementIds = new Set<string>();
-    const semanticRoleCounts = {
-      title: 0,
-      subtitle: 0,
-      itemNumber: 0,
-      domain: 0,
-    };
     let maxBoundImageSlot = -1;
 
     value.elements.forEach((element, index) => {
@@ -329,21 +323,6 @@ export const runtimeTemplateDocumentSchema = runtimeTemplateDocumentObjectSchema
         });
       }
 
-      if (element.type === "titleText" || element.type === "subtitleText" || element.type === "domainText" || element.type === "numberText" || element.type === "ctaText" || element.type === "labelText") {
-        if (element.semanticRole === "title") {
-          semanticRoleCounts.title += 1;
-        }
-        if (element.semanticRole === "subtitle") {
-          semanticRoleCounts.subtitle += 1;
-        }
-        if (element.semanticRole === "itemNumber") {
-          semanticRoleCounts.itemNumber += 1;
-        }
-        if (element.semanticRole === "domain") {
-          semanticRoleCounts.domain += 1;
-        }
-      }
-
       if (element.type === "imageFrame") {
         maxBoundImageSlot = Math.max(maxBoundImageSlot, element.slotIndex);
       }
@@ -353,62 +332,6 @@ export const runtimeTemplateDocumentSchema = runtimeTemplateDocumentObjectSchema
         maxBoundImageSlot = Math.max(maxBoundImageSlot, element.slotStartIndex + slotCount - 1);
       }
     });
-
-    if (semanticRoleCounts.title !== 1) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Exactly one primary title semantic role is required.",
-        path: ["elements"],
-      });
-    }
-
-    if (semanticRoleCounts.subtitle > 1) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Only one primary subtitle semantic role is supported in v1.",
-        path: ["elements"],
-      });
-    }
-
-    if (semanticRoleCounts.itemNumber > 1) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Only one primary itemNumber semantic role is supported in v1.",
-        path: ["elements"],
-      });
-    }
-
-    if (semanticRoleCounts.domain > 1) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Only one primary domain semantic role is supported in v1.",
-        path: ["elements"],
-      });
-    }
-
-    if (value.capabilities.supportsSubtitle && semanticRoleCounts.subtitle === 0) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "supportsSubtitle is enabled but no element is bound to subtitle.",
-        path: ["capabilities", "supportsSubtitle"],
-      });
-    }
-
-    if (value.capabilities.supportsDomain && semanticRoleCounts.domain === 0) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "supportsDomain is enabled but no element is bound to domain.",
-        path: ["capabilities", "supportsDomain"],
-      });
-    }
-
-    if (value.capabilities.supportsItemNumber && semanticRoleCounts.itemNumber === 0) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "supportsItemNumber is enabled but no element is bound to itemNumber.",
-        path: ["capabilities", "supportsItemNumber"],
-      });
-    }
 
     if (value.capabilities.imageSlotCount < value.validationRules.imagePolicy.minSlotsRequired) {
       context.addIssue({

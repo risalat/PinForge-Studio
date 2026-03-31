@@ -225,15 +225,15 @@ function buildLayoutValidation(
   const coveredSlotCount = getCoveredImageSlotCount(document);
 
   if (!titleElement) {
-    errors.push(issue("error", "missing_primary_title", "A runtime template needs one primary title element.", "elements", "layout"));
+    warnings.push(issue("warning", "missing_primary_title", "No title element is currently bound in this template.", "elements", "layout"));
   }
 
   if (imageElements.length === 0) {
-    errors.push(issue("error", "missing_image_binding", "A runtime template needs at least one image-bound element.", "elements", "layout"));
+    warnings.push(issue("warning", "missing_image_binding", "No image-bound elements are currently present in this template.", "elements", "layout"));
   }
 
   if (document.capabilities.supportsDomain && !domainElement) {
-    errors.push(issue("error", "missing_primary_domain", "supportsDomain is enabled but no primary domain element exists.", "elements", "layout"));
+    warnings.push(issue("warning", "missing_primary_domain", "supportsDomain is enabled but no domain element is currently bound.", "elements", "layout"));
   }
 
   if (document.capabilities.imageSlotCount > coveredSlotCount) {

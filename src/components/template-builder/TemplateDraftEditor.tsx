@@ -12,7 +12,10 @@ import {
 } from "react";
 import { CanvasEditor } from "@/components/template-builder/CanvasEditor";
 import { ElementCatalog } from "@/components/template-builder/ElementCatalog";
-import { InspectorPanel } from "@/components/template-builder/InspectorPanel";
+import {
+  InspectorPanel,
+  ValidationSidebar,
+} from "@/components/template-builder/InspectorPanel";
 import { LayerPanel } from "@/components/template-builder/LayerPanel";
 import { getRuntimeTemplateGridSlotCount } from "@/lib/runtime-templates/imageGridPresets";
 import { autoFixRuntimeTemplatePresetStyles } from "@/lib/runtime-templates/presetFixer";
@@ -556,33 +559,6 @@ export function TemplateDraftEditor(props: TemplateDraftEditorProps) {
         return;
       }
 
-      if (
-        isPrimaryRoleElement(target) &&
-        document.elements.filter(
-          (element) =>
-            isPrimaryRoleElement(element) && element.semanticRole === target.semanticRole,
-        ).length === 1
-      ) {
-        setSaveStatus({
-          state: "error",
-          message: `A runtime template draft must keep one ${target.semanticRole} binding.`,
-        });
-        return;
-      }
-
-      if (
-        (target.type === "imageFrame" || target.type === "imageGrid") &&
-        document.elements.filter(
-          (element) => element.type === "imageFrame" || element.type === "imageGrid",
-        ).length === 1
-      ) {
-        setSaveStatus({
-          state: "error",
-          message: "A runtime template draft must keep at least one image-bound element.",
-        });
-        return;
-      }
-
       applyDocumentUpdate((current) => ({
         ...current,
         elements: current.elements.filter((element) => element.id !== elementId),
@@ -741,128 +717,106 @@ export function TemplateDraftEditor(props: TemplateDraftEditorProps) {
 
   return (
     <div className="space-y-4 text-[var(--dashboard-text)]">
-      <section className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-4 py-3 shadow-[var(--dashboard-shadow-sm)]">
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-          <div className="min-w-0 space-y-2">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--dashboard-muted)]">
-              Runtime template draft editor
-            </p>
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-[1.85rem] font-black tracking-[-0.05em]">{templateName}</h1>
-              <span className={getSaveStatusClassName(saveStatus)}>
-                {saveStatus.message}
-              </span>
-              <MetaChip>{`v${versionNumber}`}</MetaChip>
-              <MetaChip>{versionLifecycleStatus}</MetaChip>
-              <MetaChip>{versionLocked ? "Locked" : "Editable"}</MetaChip>
-              {savedValidationResult ? (
-                <MetaChip>
-                  {savedValidationResult.blockingErrorCount > 0
-                    ? `${savedValidationResult.blockingErrorCount} issue(s)`
-                    : "Validation clean"}
-                </MetaChip>
-              ) : null}
+      <section className="sticky top-3 z-30 rounded-[24px] border border-[var(--dashboard-line)] bg-[color:var(--dashboard-panel-strong)]/96 px-4 py-3 shadow-[var(--dashboard-shadow-sm)] backdrop-blur">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0 flex items-center gap-2">
+            <Link
+              href="/dashboard/templates"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] text-[var(--dashboard-subtle)] transition hover:text-[var(--dashboard-text)]"
+              aria-label="Back to templates"
+            >
+              <BackIcon />
+            </Link>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="truncate text-[1.7rem] font-black tracking-[-0.05em]">{templateName}</h1>
+                <MetaChip>{`v${versionNumber}`}</MetaChip>
+                <MetaChip>{versionLifecycleStatus}</MetaChip>
+                <MetaChip>{versionLocked ? "Locked" : "Editable"}</MetaChip>
+                {savedValidationResult ? (
+                  <MetaChip
+                    tone={
+                      savedValidationResult.blockingErrorCount > 0
+                        ? "warning"
+                        : "success"
+                    }
+                  >
+                    {savedValidationResult.blockingErrorCount > 0
+                      ? `${savedValidationResult.blockingErrorCount} issue(s)`
+                      : "Validation clean"}
+                  </MetaChip>
+                ) : null}
+                <span className={getSaveStatusClassName(saveStatus)}>{saveStatus.message}</span>
+              </div>
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            <Link
-              href="/dashboard/templates"
-              className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)]"
-            >
-              Back to templates
-            </Link>
-            <button
-              type="button"
+          <div className="flex flex-wrap items-center gap-2">
+            <IconToolbarButton
+              label="Undo"
               onClick={undoDraftChange}
               disabled={historyState.past.length === 0 || actionState !== "idle"}
-              className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] disabled:opacity-50"
-            >
-              Undo
-            </button>
-            <button
-              type="button"
+              icon={<UndoIcon />}
+            />
+            <IconToolbarButton
+              label="Redo"
               onClick={redoDraftChange}
               disabled={historyState.future.length === 0 || actionState !== "idle"}
-              className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] disabled:opacity-50"
-            >
-              Redo
-            </button>
-            <button
-              type="button"
+              icon={<RedoIcon />}
+            />
+            <IconToolbarButton
+              label="Duplicate draft"
               onClick={() => void handleDuplicateDraft()}
-              className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)]"
-            >
-              Duplicate draft
-            </button>
-              <button
-                type="button"
-                onClick={() => void handlePreview()}
-                className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)]"
-              >
-                Preview draft
-              </button>
-              <button
-                type="button"
-                onClick={handleAutoFixCurrentPreset}
-                disabled={actionState !== "idle"}
-                className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] disabled:opacity-60"
-              >
-                Fix current preset
-              </button>
-              <button
-                type="button"
-                onClick={handleAutoFixPresets}
-                disabled={actionState !== "idle"}
-                className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] disabled:opacity-60"
-              >
-                Auto-fix presets
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleRunValidation()}
-                disabled={actionState !== "idle"}
-                className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] disabled:opacity-60"
-            >
-              {actionState === "validating" ? "Running validation..." : "Run validation"}
-              </button>
-            <button
-              type="button"
+              icon={<DuplicateIcon />}
+            />
+            <EditorActionButton label="Preview" onClick={() => void handlePreview()} />
+            <EditorActionButton
+              label="Fix preset"
+              onClick={handleAutoFixCurrentPreset}
+              disabled={actionState !== "idle"}
+            />
+            <EditorActionButton
+              label="Fix all"
+              onClick={handleAutoFixPresets}
+              disabled={actionState !== "idle"}
+            />
+            <EditorActionButton
+              label={actionState === "validating" ? "Validating..." : "Validate"}
+              onClick={() => void handleRunValidation()}
+              disabled={actionState !== "idle"}
+            />
+            <EditorActionButton
+              label="Save"
               onClick={() => void handleManualSave()}
               disabled={actionState !== "idle"}
-              className="rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-5 py-2.5 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)]"
-            >
-              Save draft
-            </button>
-            <button
-              type="button"
+              primary
+            />
+            <EditorActionButton
+              label={actionState === "finalizing" ? "Finalizing..." : "Finalize"}
               onClick={() => void handleFinalize()}
               disabled={actionState !== "idle"}
-              className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-5 py-2.5 text-sm font-semibold text-[var(--dashboard-subtle)] disabled:opacity-60"
-            >
-              {actionState === "finalizing" ? "Finalizing..." : "Finalize version"}
-            </button>
+            />
           </div>
+        </div>
+
+        <div className="mt-3 border-t border-[var(--dashboard-line)] pt-3">
+          <QuickControlBar
+            document={document}
+            selectedElement={selectedElement}
+            onUpdateDocument={applyDocumentUpdate}
+            onUpdateElement={updateElement}
+            onDeleteElement={handleDeleteElement}
+            onDuplicateElement={handleDuplicateElement}
+            onBringForward={(elementId) => handleReorderElement(elementId, "forward")}
+            onSendBackward={(elementId) => handleReorderElement(elementId, "backward")}
+            onToggleVisibility={handleToggleVisibility}
+            onToggleLocked={handleToggleLocked}
+          />
         </div>
       </section>
 
-      <section className="sticky top-3 z-20 rounded-[24px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-4 py-3 shadow-[var(--dashboard-shadow-sm)] backdrop-blur">
-        <QuickControlBar
-          document={document}
-          selectedElement={selectedElement}
-          onUpdateDocument={applyDocumentUpdate}
-          onUpdateElement={updateElement}
-          onDeleteElement={handleDeleteElement}
-          onDuplicateElement={handleDuplicateElement}
-          onBringForward={(elementId) => handleReorderElement(elementId, "forward")}
-          onSendBackward={(elementId) => handleReorderElement(elementId, "backward")}
-          onToggleVisibility={handleToggleVisibility}
-          onToggleLocked={handleToggleLocked}
-        />
-      </section>
-
-      <div className="grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)_340px]">
-        <aside className="grid gap-3 xl:grid-cols-[72px_minmax(0,1fr)]">
+      <div className="grid items-start gap-4 xl:grid-cols-[300px_minmax(0,1fr)_340px_340px]">
+        <aside className="sticky top-[7.5rem] grid h-[calc(100vh-8.25rem)] min-h-0 gap-3 overflow-hidden xl:grid-cols-[64px_minmax(0,1fr)]">
           <nav className="rounded-[24px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-2 shadow-[var(--dashboard-shadow-sm)]">
             <div className="flex flex-col gap-2">
               <SidebarTabButton
@@ -886,7 +840,7 @@ export function TemplateDraftEditor(props: TemplateDraftEditorProps) {
             </div>
           </nav>
 
-          <div className="min-w-0">
+          <div className="min-w-0 overflow-y-auto">
             {leftPanel === "elements" ? (
               <ElementCatalog onAddElement={handleAddElement} />
             ) : null}
@@ -916,32 +870,42 @@ export function TemplateDraftEditor(props: TemplateDraftEditorProps) {
           </div>
         </aside>
 
-        <CanvasEditor
-          document={document}
-          payload={{
-            ...getSampleRuntimeTemplateRenderProps(),
-            visualPreset,
-          }}
-          editorState={editorState}
-          selectedElementId={editorState.selectedElementId}
-          onSelectElement={(elementId) =>
-            setEditorState((current) => ({ ...current, selectedElementId: elementId }))
-          }
-          onUpdateElement={updateElement}
-          onUpdateEditorState={updateEditorState}
-          onBeginHistoryAction={pushHistorySnapshot}
-          onChangeVisualPreset={updateVisualPreset}
-        />
+        <div className="sticky top-[7.5rem] h-[calc(100vh-8.25rem)] min-h-0">
+          <CanvasEditor
+            document={document}
+            payload={{
+              ...getSampleRuntimeTemplateRenderProps(),
+              visualPreset,
+            }}
+            editorState={editorState}
+            selectedElementId={editorState.selectedElementId}
+            onSelectElement={(elementId) =>
+              setEditorState((current) => ({ ...current, selectedElementId: elementId }))
+            }
+            onUpdateElement={updateElement}
+            onUpdateEditorState={updateEditorState}
+            onBeginHistoryAction={pushHistorySnapshot}
+            onChangeVisualPreset={updateVisualPreset}
+          />
+        </div>
 
-        <InspectorPanel
-          document={document}
-          selectedElement={selectedElement}
-          validationResult={validationResult}
-          persistedValidationResult={savedValidationResult}
-          currentPreset={visualPreset}
-          onUpdateDocument={applyDocumentUpdate}
-          onUpdateElement={updateElement}
-        />
+        <div className="sticky top-[7.5rem] h-[calc(100vh-8.25rem)] min-h-0">
+          <InspectorPanel
+            document={document}
+            selectedElement={selectedElement}
+            currentPreset={visualPreset}
+            onUpdateDocument={applyDocumentUpdate}
+            onUpdateElement={updateElement}
+          />
+        </div>
+
+        <div className="sticky top-[7.5rem] h-[calc(100vh-8.25rem)] min-h-0">
+          <ValidationSidebar
+            validationResult={validationResult}
+            persistedValidationResult={savedValidationResult}
+            currentPreset={visualPreset}
+          />
+        </div>
       </div>
     </div>
   );
@@ -955,12 +919,9 @@ function TemplateMetaPanel(props: {
 }) {
   return (
     <section className="space-y-3 rounded-[24px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-4 shadow-[var(--dashboard-shadow-sm)]">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
-          Template
-        </p>
-        <MetaChip>Draft metadata</MetaChip>
-      </div>
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
+        Template
+      </p>
       <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
         Name
         <input
@@ -973,7 +934,7 @@ function TemplateMetaPanel(props: {
       <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
         Description
         <textarea
-          rows={6}
+          rows={4}
           value={props.templateDescription}
           onChange={(event) => props.onChangeTemplateDescription(event.target.value)}
           className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-2 text-[var(--dashboard-text)] outline-none focus:border-[var(--dashboard-accent)]"
@@ -1034,14 +995,12 @@ function QuickControlBar(props: {
     onToggleVisibility,
     onToggleLocked,
   } = props;
+  const [showGeometry, setShowGeometry] = useState(false);
 
   if (!selectedElement) {
     return (
-      <div className="space-y-3">
+      <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-2">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
-            Quick controls
-          </p>
           <MetaChip>Document</MetaChip>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -1107,89 +1066,110 @@ function QuickControlBar(props: {
   }
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
-          Quick controls
-        </p>
-        <MetaChip>{selectedElement.name}</MetaChip>
-        <MetaChip>{selectedElement.type}</MetaChip>
-        {hasTextSemanticRole(selectedElement) ? (
-          <MetaChip>{selectedElement.semanticRole}</MetaChip>
-        ) : null}
+    <div className="space-y-2">
+      <div className="overflow-x-auto">
+        <div className="flex min-w-max items-center gap-2">
+          <MetaChip>{selectedElement.name}</MetaChip>
+          <MetaChip>{selectedElement.type}</MetaChip>
+          {hasTextSemanticRole(selectedElement) ? (
+            <MetaChip>{selectedElement.semanticRole}</MetaChip>
+          ) : null}
+          <div className="ml-1 flex items-center gap-2 rounded-full border border-[color:color-mix(in_srgb,var(--dashboard-accent)_16%,var(--dashboard-line))] bg-[color:color-mix(in_srgb,var(--dashboard-accent)_7%,white)] px-2 py-1">
+            <button
+              type="button"
+              onClick={() => setShowGeometry((current) => !current)}
+              className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] ${
+                showGeometry
+                  ? "border-[color:color-mix(in_srgb,#0f766e_28%,var(--dashboard-line))] bg-white text-[#0f766e]"
+                  : "border-[color:color-mix(in_srgb,#0f766e_18%,var(--dashboard-line))] bg-[color:color-mix(in_srgb,#0f766e_9%,white)] text-[#0f766e]"
+              }`}
+            >
+              <span className="text-[10px] tracking-[0.08em]">
+                {showGeometry ? "Hide position" : `Pos ${Math.round(selectedElement.x)} · ${Math.round(selectedElement.y)}`}
+              </span>
+            </button>
+          </div>
+          <div className="flex items-center gap-2 rounded-full border border-[color:color-mix(in_srgb,var(--dashboard-accent)_16%,var(--dashboard-line))] bg-[color:color-mix(in_srgb,var(--dashboard-accent)_7%,white)] px-2 py-1">
+          <ToolbarActionButton icon={<DuplicateIcon />} label="Duplicate" onClick={() => onDuplicateElement(selectedElement.id)} accent />
+          <ToolbarActionButton icon={<BringForwardIcon />} label="Front" onClick={() => onBringForward(selectedElement.id)} accent />
+          <ToolbarActionButton icon={<SendBackwardIcon />} label="Back" onClick={() => onSendBackward(selectedElement.id)} accent />
+          <ToolbarActionButton
+            icon={selectedElement.visible ? <HideIcon /> : <ShowIcon />}
+            label={selectedElement.visible ? "Hide" : "Show"}
+            onClick={() => onToggleVisibility(selectedElement.id)}
+            accent
+          />
+          <ToolbarActionButton
+            icon={selectedElement.locked ? <UnlockIcon /> : <LockIcon />}
+            label={selectedElement.locked ? "Unlock" : "Lock"}
+            onClick={() => onToggleLocked(selectedElement.id)}
+            accent
+          />
+          <ToolbarActionButton
+            label="Delete"
+            icon={<DeleteIcon />}
+            destructive
+            onClick={() => onDeleteElement(selectedElement.id)}
+          />
+          </div>
+          {renderQuickBindingFields(selectedElement, onUpdateElement)}
+        </div>
       </div>
-      <div className="flex flex-wrap gap-2">
-        <ToolbarActionButton label="Dup" onClick={() => onDuplicateElement(selectedElement.id)} />
-        <ToolbarActionButton label="Front" onClick={() => onBringForward(selectedElement.id)} />
-        <ToolbarActionButton label="Back" onClick={() => onSendBackward(selectedElement.id)} />
-        <ToolbarActionButton
-          label={selectedElement.visible ? "Hide" : "Show"}
-          onClick={() => onToggleVisibility(selectedElement.id)}
-        />
-        <ToolbarActionButton
-          label={selectedElement.locked ? "Unlock" : "Lock"}
-          onClick={() => onToggleLocked(selectedElement.id)}
-        />
-        <ToolbarActionButton
-          label="Delete"
-          destructive
-          onClick={() => onDeleteElement(selectedElement.id)}
-        />
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <CompactNumberField
-          label="X"
-          value={selectedElement.x}
-          onChange={(value) =>
-            onUpdateElement(selectedElement.id, (element) => ({ ...element, x: value }))
-          }
-        />
-        <CompactNumberField
-          label="Y"
-          value={selectedElement.y}
-          onChange={(value) =>
-            onUpdateElement(selectedElement.id, (element) => ({ ...element, y: value }))
-          }
-        />
-        <CompactNumberField
-          label="W"
-          value={selectedElement.width}
-          minimum={20}
-          maximum={1080}
-          onChange={(value) =>
-            onUpdateElement(selectedElement.id, (element) => ({ ...element, width: value }))
-          }
-        />
-        <CompactNumberField
-          label="H"
-          value={selectedElement.height}
-          minimum={20}
-          maximum={1920}
-          onChange={(value) =>
-            onUpdateElement(selectedElement.id, (element) => ({ ...element, height: value }))
-          }
-        />
-        <CompactNumberField
-          label="Rot"
-          value={selectedElement.rotation}
-          minimum={-180}
-          maximum={180}
-          onChange={(value) =>
-            onUpdateElement(selectedElement.id, (element) => ({ ...element, rotation: value }))
-          }
-        />
-        <CompactNumberField
-          label="Opacity"
-          value={selectedElement.opacity}
-          minimum={0}
-          maximum={1}
-          step={0.05}
-          onChange={(value) =>
-            onUpdateElement(selectedElement.id, (element) => ({ ...element, opacity: value }))
-          }
-        />
-        {renderQuickBindingFields(selectedElement, onUpdateElement)}
-      </div>
+      {showGeometry ? (
+        <div className="flex flex-wrap gap-2 rounded-[18px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-2">
+          <CompactNumberField
+            label="X"
+            value={selectedElement.x}
+            onChange={(value) =>
+              onUpdateElement(selectedElement.id, (element) => ({ ...element, x: value }))
+            }
+          />
+          <CompactNumberField
+            label="Y"
+            value={selectedElement.y}
+            onChange={(value) =>
+              onUpdateElement(selectedElement.id, (element) => ({ ...element, y: value }))
+            }
+          />
+          <CompactNumberField
+            label="W"
+            value={selectedElement.width}
+            minimum={20}
+            maximum={1080}
+            onChange={(value) =>
+              onUpdateElement(selectedElement.id, (element) => ({ ...element, width: value }))
+            }
+          />
+          <CompactNumberField
+            label="H"
+            value={selectedElement.height}
+            minimum={20}
+            maximum={1920}
+            onChange={(value) =>
+              onUpdateElement(selectedElement.id, (element) => ({ ...element, height: value }))
+            }
+          />
+          <CompactNumberField
+            label="Rot"
+            value={selectedElement.rotation}
+            minimum={-180}
+            maximum={180}
+            onChange={(value) =>
+              onUpdateElement(selectedElement.id, (element) => ({ ...element, rotation: value }))
+            }
+          />
+          <CompactNumberField
+            label="Opacity"
+            value={selectedElement.opacity}
+            minimum={0}
+            maximum={1}
+            step={0.05}
+            onChange={(value) =>
+              onUpdateElement(selectedElement.id, (element) => ({ ...element, opacity: value }))
+            }
+          />
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1499,9 +1479,16 @@ function getQuickTextSemanticOptions(
   return ["decorative", "cta", "subtitle"];
 }
 
-function MetaChip(props: { children: ReactNode }) {
+function MetaChip(props: { children: ReactNode; tone?: "default" | "warning" | "success" }) {
+  const className =
+    props.tone === "warning"
+      ? "rounded-full border border-[color:color-mix(in_srgb,#e37b2d_24%,var(--dashboard-line))] bg-[color:color-mix(in_srgb,#e37b2d_10%,white)] px-3 py-1 text-[#a95418]"
+      : props.tone === "success"
+        ? "rounded-full border border-[color:color-mix(in_srgb,#0f766e_22%,var(--dashboard-line))] bg-[color:color-mix(in_srgb,#0f766e_8%,white)] px-3 py-1 text-[#0f766e]"
+        : "rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-1";
+
   return (
-    <span className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-1">
+    <span className={className}>
       {props.children}
     </span>
   );
@@ -1511,18 +1498,65 @@ function ToolbarActionButton(props: {
   label: string;
   onClick: () => void;
   destructive?: boolean;
+  icon?: ReactNode;
+  accent?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={props.onClick}
-      className={`rounded-full border px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] ${
+      className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] ${
         props.destructive
           ? "border-[var(--dashboard-danger-border)] bg-[var(--dashboard-danger-soft)] text-[var(--dashboard-danger-ink)]"
+          : props.accent
+            ? "border-[color:color-mix(in_srgb,var(--dashboard-accent)_14%,var(--dashboard-line))] bg-[color:color-mix(in_srgb,var(--dashboard-accent)_10%,white)] text-[var(--dashboard-accent-strong)]"
           : "border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] text-[var(--dashboard-subtle)]"
       }`}
     >
+      {props.icon ? <span className="h-3.5 w-3.5">{props.icon}</span> : null}
       {props.label}
+    </button>
+  );
+}
+
+function EditorActionButton(props: {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  primary?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={props.onClick}
+      disabled={props.disabled}
+      className={`rounded-full px-4 py-2 text-sm font-semibold transition disabled:opacity-50 ${
+        props.primary
+          ? "dashboard-accent-action bg-[var(--dashboard-accent)] text-white shadow-[var(--dashboard-shadow-accent)]"
+          : "border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] text-[var(--dashboard-subtle)]"
+      }`}
+    >
+      {props.label}
+    </button>
+  );
+}
+
+function IconToolbarButton(props: {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  icon: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={props.label}
+      title={props.label}
+      onClick={props.onClick}
+      disabled={props.disabled}
+      className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] text-[var(--dashboard-subtle)] transition hover:text-[var(--dashboard-text)] disabled:opacity-50"
+    >
+      <span className="h-4 w-4">{props.icon}</span>
     </button>
   );
 }
@@ -1555,6 +1589,102 @@ function TemplateIcon() {
       <path d="M8 8h8" />
       <path d="M8 12h8" />
       <path d="M8 16h5" />
+    </svg>
+  );
+}
+
+function BackIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-full w-full fill-none stroke-current stroke-[1.9]">
+      <path d="M15 6 9 12l6 6" />
+    </svg>
+  );
+}
+
+function UndoIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-full w-full fill-none stroke-current stroke-[1.9]">
+      <path d="M9 9 5 13l4 4" />
+      <path d="M5 13h8a6 6 0 1 1 0 12" />
+    </svg>
+  );
+}
+
+function RedoIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-full w-full fill-none stroke-current stroke-[1.9]">
+      <path d="m15 9 4 4-4 4" />
+      <path d="M19 13h-8a6 6 0 1 0 0 12" />
+    </svg>
+  );
+}
+
+function DuplicateIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-full w-full fill-none stroke-current stroke-[1.8]">
+      <rect x="8" y="8" width="10" height="10" rx="2" />
+      <path d="M6 14H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v1" />
+    </svg>
+  );
+}
+
+function BringForwardIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-full w-full fill-none stroke-current stroke-[1.8]">
+      <path d="M7 17h10" />
+      <path d="M12 7v10" />
+      <path d="m8 10 4-4 4 4" />
+    </svg>
+  );
+}
+
+function SendBackwardIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-full w-full fill-none stroke-current stroke-[1.8]">
+      <path d="M7 7h10" />
+      <path d="M12 7v10" />
+      <path d="m8 14 4 4 4-4" />
+    </svg>
+  );
+}
+
+function HideIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-full w-full fill-none stroke-current stroke-[1.8]">
+      <path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6Z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
+function ShowIcon() {
+  return <HideIcon />;
+}
+
+function LockIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-full w-full fill-none stroke-current stroke-[1.8]">
+      <rect x="5" y="11" width="14" height="10" rx="2" />
+      <path d="M8 11V8a4 4 0 1 1 8 0v3" />
+    </svg>
+  );
+}
+
+function UnlockIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-full w-full fill-none stroke-current stroke-[1.8]">
+      <rect x="5" y="11" width="14" height="10" rx="2" />
+      <path d="M8 11V8a4 4 0 0 1 7-2" />
+    </svg>
+  );
+}
+
+function DeleteIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-full w-full fill-none stroke-current stroke-[1.8]">
+      <path d="M4 7h16" />
+      <path d="M9 7V5h6v2" />
+      <path d="m7 7 1 12h8l1-12" />
     </svg>
   );
 }
@@ -2031,29 +2161,6 @@ function hasTextSemanticRole(
     element.type === "numberText" ||
     element.type === "ctaText" ||
     element.type === "labelText"
-  );
-}
-
-function isPrimaryRoleElement(
-  element: RuntimeTemplateElement,
-): element is Extract<
-  RuntimeTemplateElement,
-  {
-    type:
-      | "titleText"
-      | "subtitleText"
-      | "domainText"
-      | "numberText"
-      | "ctaText"
-      | "labelText";
-  }
-> {
-  return (
-    hasTextSemanticRole(element) &&
-    (element.semanticRole === "title" ||
-      element.semanticRole === "subtitle" ||
-      element.semanticRole === "itemNumber" ||
-      element.semanticRole === "domain")
   );
 }
 

@@ -25,6 +25,8 @@ export function DashboardShell({
   const pathname = usePathname();
   const header = getDashboardPageTitle(pathname);
   const isAdminRoute = pathname.startsWith("/dashboard/admin");
+  const isTemplateEditorRoute =
+    pathname.startsWith("/dashboard/templates/") && pathname.endsWith("/edit");
 
   if (isAdminRoute) {
     return (
@@ -119,49 +121,53 @@ export function DashboardShell({
         </aside>
 
         <div className="min-w-0">
-          <header className="sticky top-0 z-20 border-b border-[var(--dashboard-line)] bg-[color:var(--dashboard-canvas)]/92 backdrop-blur-xl">
-            <div className="flex flex-col gap-5 px-5 py-5 lg:px-8">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.26em] text-[var(--dashboard-muted)]">
-                    {header.eyebrow}
-                  </p>
-                  <h1 className="mt-2 text-3xl font-black tracking-[-0.04em] text-[var(--dashboard-text)] lg:text-4xl">
-                    {header.title}
-                  </h1>
-                  <p className="mt-2 max-w-3xl text-sm text-[var(--dashboard-subtle)]">
-                    {header.description}
-                  </p>
+          {isTemplateEditorRoute ? null : (
+            <header className="sticky top-0 z-20 border-b border-[var(--dashboard-line)] bg-[color:var(--dashboard-canvas)]/92 backdrop-blur-xl">
+              <div className="flex flex-col gap-5 px-5 py-5 lg:px-8">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.26em] text-[var(--dashboard-muted)]">
+                      {header.eyebrow}
+                    </p>
+                    <h1 className="mt-2 text-3xl font-black tracking-[-0.04em] text-[var(--dashboard-text)] lg:text-4xl">
+                      {header.title}
+                    </h1>
+                    <p className="mt-2 max-w-3xl text-sm text-[var(--dashboard-subtle)]">
+                      {header.description}
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-3">
+                    <DashboardNotificationCenter calendarNotifications={calendarNotifications} />
+                    {header.secondaryActionHref && header.secondaryActionLabel ? (
+                    <Link
+                      href={header.secondaryActionHref}
+                      className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-text)]"
+                    >
+                      {header.secondaryActionLabel}
+                    </Link>
+                    ) : null}
+                    <Link
+                      href={header.primaryActionHref}
+                      className="rounded-full dashboard-accent-action dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)]"
+                    >
+                      {header.primaryActionLabel}
+                    </Link>
+                  </div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-3">
-                  <DashboardNotificationCenter calendarNotifications={calendarNotifications} />
-                  {header.secondaryActionHref && header.secondaryActionLabel ? (
-                  <Link
-                    href={header.secondaryActionHref}
-                    className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-text)]"
-                  >
-                    {header.secondaryActionLabel}
-                  </Link>
-                  ) : null}
-                  <Link
-                    href={header.primaryActionHref}
-                    className="rounded-full dashboard-accent-action dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)]"
-                  >
-                    {header.primaryActionLabel}
-                  </Link>
+                <div className="flex flex-wrap items-center gap-2 text-sm text-[var(--dashboard-subtle)]">
+                  <span className="font-medium text-[var(--dashboard-text)]">{buildBreadcrumb(pathname)}</span>
+                  <span className="h-1 w-1 rounded-full bg-[var(--dashboard-line)]" />
+                  <span>{header.eyebrow}</span>
                 </div>
               </div>
+            </header>
+          )}
 
-              <div className="flex flex-wrap items-center gap-2 text-sm text-[var(--dashboard-subtle)]">
-                <span className="font-medium text-[var(--dashboard-text)]">{buildBreadcrumb(pathname)}</span>
-                <span className="h-1 w-1 rounded-full bg-[var(--dashboard-line)]" />
-                <span>{header.eyebrow}</span>
-              </div>
-            </div>
-          </header>
-
-          <main className="px-5 py-6 lg:px-8 lg:py-8">{children}</main>
+          <main className={isTemplateEditorRoute ? "px-5 py-5 lg:px-8 lg:py-5" : "px-5 py-6 lg:px-8 lg:py-8"}>
+            {children}
+          </main>
         </div>
       </div>
     </div>
