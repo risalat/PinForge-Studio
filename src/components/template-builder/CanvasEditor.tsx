@@ -63,6 +63,29 @@ export function CanvasEditor(props: CanvasEditorProps) {
     .sort((left, right) => right.zIndex - left.zIndex);
   const stageWidth = Math.round(document.canvas.width * editorState.zoom);
   const stageHeight = Math.round(document.canvas.height * editorState.zoom);
+  const handleStagePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.target !== event.currentTarget) {
+      return;
+    }
+
+    clearSelection();
+  };
+
+  const handleCanvasSurfacePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.target !== event.currentTarget) {
+      return;
+    }
+
+    clearSelection();
+  };
+  const handleWorkspacePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const targetNode = event.target as Node | null;
+    if (targetNode && stageRef.current?.contains(targetNode)) {
+      return;
+    }
+
+    clearSelection();
+  };
 
   return (
     <section className="flex h-full min-h-0 flex-col rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] shadow-[var(--dashboard-shadow-sm)]">
@@ -163,8 +186,11 @@ export function CanvasEditor(props: CanvasEditorProps) {
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto bg-[radial-gradient(circle_at_top,#f7f9ff_0%,#edf2fb_45%,#e9eef8_100%)] p-6">
-        <div className="flex min-h-full items-start justify-center">
+      <div
+        className="flex-1 overflow-auto bg-[radial-gradient(circle_at_top,#f7f9ff_0%,#edf2fb_45%,#e9eef8_100%)] p-6"
+        onPointerDown={handleWorkspacePointerDown}
+      >
+        <div className="flex min-h-full items-start justify-center" onPointerDown={handleWorkspacePointerDown}>
           <div
             ref={stageRef}
             className="relative"
@@ -172,7 +198,7 @@ export function CanvasEditor(props: CanvasEditorProps) {
               width: stageWidth,
               height: stageHeight,
             }}
-            onPointerDown={() => clearSelection()}
+            onPointerDown={handleStagePointerDown}
           >
             <div
               className="absolute left-0 top-0 overflow-hidden rounded-[24px] shadow-[0_40px_100px_rgba(15,23,42,0.25)]"
@@ -182,6 +208,7 @@ export function CanvasEditor(props: CanvasEditorProps) {
                 transform: `scale(${editorState.zoom})`,
                 transformOrigin: "top left",
               }}
+              onPointerDown={handleCanvasSurfacePointerDown}
             >
               {renderCanvasGuides(document, editorState)}
               {renderGuideLines(guides, document)}

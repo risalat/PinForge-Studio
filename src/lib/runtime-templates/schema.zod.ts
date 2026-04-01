@@ -362,6 +362,21 @@ export const runtimeTemplateEditorStateSchema = z.object({
   selectedElementId: z.string().trim().min(1).nullable().default(null),
   zoom: z.number().positive().max(4).default(1),
   visualPreset: z.string().trim().min(1).nullable().default(null),
+  previewContent: z
+    .object({
+      title: z.string().trim().min(1).max(180).default("24 Cozy Reading Room Ideas To Copy"),
+      subtitle: z.string().trim().max(160).default("Warm Layers And Better Lighting"),
+      itemNumber: z.number().int().min(0).max(999).default(24),
+      domain: z.string().trim().min(1).max(160).default("mightypaint.com"),
+      ctaText: z.string().trim().max(80).default("Read more"),
+    })
+    .default({
+      title: "24 Cozy Reading Room Ideas To Copy",
+      subtitle: "Warm Layers And Better Lighting",
+      itemNumber: 24,
+      domain: "mightypaint.com",
+      ctaText: "Read more",
+    }),
   showSafeArea: z.boolean().default(true),
   showGuides: z.boolean().default(true),
   collapsedPanels: z.array(z.string().trim().min(1)).default([]),

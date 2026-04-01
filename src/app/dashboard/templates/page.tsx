@@ -253,6 +253,8 @@ function TemplateSection(input: {
                     elementCount?: number;
                     supportedBindings?: string[];
                     allowedPresetCategories?: string[];
+                    category?: string | null;
+                    templateCategories?: string[];
                   })
                 : null;
             const validation =
@@ -314,6 +316,14 @@ function TemplateSection(input: {
                       {summary.allowedPresetCategories.length} preset families
                     </span>
                   ) : null}
+                  {summary?.templateCategories?.slice(0, 3).map((category) => (
+                    <span
+                      key={category}
+                      className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-1"
+                    >
+                      {category.replace(/[-_]/g, " ")}
+                    </span>
+                  ))}
                   {validation ? (
                     <span className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-1">
                       {validation.blockingErrorCount

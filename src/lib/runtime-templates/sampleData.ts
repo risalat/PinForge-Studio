@@ -5,6 +5,7 @@ export const sampleRuntimeTemplateRenderProps: TemplateRenderProps = {
   subtitle: "Warm Layers And Better Lighting",
   itemNumber: 24,
   domain: "mightypaint.com",
+  ctaText: "Read more",
   images: [
     "/sample-images/7.jpg",
     "/sample-images/8.jpg",
@@ -14,9 +15,13 @@ export const sampleRuntimeTemplateRenderProps: TemplateRenderProps = {
   visualPreset: "teal-flare",
 };
 
-export function getSampleRuntimeTemplateRenderProps(): TemplateRenderProps {
+export function getSampleRuntimeTemplateRenderProps(
+  overrides?: Partial<TemplateRenderProps>,
+): TemplateRenderProps {
   return {
     ...sampleRuntimeTemplateRenderProps,
+    ...overrides,
     images: [...sampleRuntimeTemplateRenderProps.images],
+    ...(overrides?.images ? { images: [...overrides.images] } : {}),
   };
 }

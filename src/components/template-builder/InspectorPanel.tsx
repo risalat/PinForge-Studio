@@ -883,7 +883,7 @@ function renderTextElementControls(
       <div className="grid grid-cols-2 gap-3">
         <SelectInput label="Text token" value={selectedElement.styleTokens.textToken} options={runtimeTemplateTextTokenValues} onChange={(value) => updateText((element) => ({ ...element, styleTokens: { ...element.styleTokens, textToken: value as typeof selectedElement.styleTokens.textToken } }))} />
         <ColorPickerInput label="Text color override" value={getPresetScopedElementColorValue(document, currentPreset, selectedElement, "customTextColor")} pickerValue={textPickerValue} onChange={(value) => updatePresetScopedElementColor(onUpdateDocument, currentPreset, selectedElement.id, "customTextColor", value)} />
-        <SelectInput label="Font token" value={selectedElement.styleTokens.fontToken} options={runtimeTemplateFontTokenValues} onChange={(value) => updateText((element) => ({ ...element, styleTokens: { ...element.styleTokens, fontToken: value as typeof selectedElement.styleTokens.fontToken } }))} />
+        <SelectInput label="Font token" value={selectedElement.styleTokens.fontToken} options={runtimeTemplateFontTokenValues} getOptionLabel={formatRuntimeFontTokenLabel} onChange={(value) => updateText((element) => ({ ...element, styleTokens: { ...element.styleTokens, fontToken: value as typeof selectedElement.styleTokens.fontToken } }))} />
         <SelectInput label="Text align" value={selectedElement.styleTokens.textAlign} options={runtimeTemplateTextAlignValues} onChange={(value) => updateText((element) => ({ ...element, styleTokens: { ...element.styleTokens, textAlign: value as typeof selectedElement.styleTokens.textAlign } }))} />
         <SelectInput label="Transform" value={selectedElement.styleTokens.textTransform} options={runtimeTemplateTextTransformValues} onChange={(value) => updateText((element) => ({ ...element, styleTokens: { ...element.styleTokens, textTransform: value as typeof selectedElement.styleTokens.textTransform } }))} />
         <ToggleInput label="Auto-fit" checked={selectedElement.styleTokens.autoFit} onChange={(checked) => updateText((element) => ({ ...element, styleTokens: { ...element.styleTokens, autoFit: checked } }))} />
@@ -1121,14 +1121,20 @@ function NumberInput(props: { label: string; value: number; minimum?: number; ma
   );
 }
 
-function SelectInput(props: { label: string; value: string; options: readonly string[]; onChange: (value: string) => void }) {
+function SelectInput(props: {
+  label: string;
+  value: string;
+  options: readonly string[];
+  getOptionLabel?: (value: string) => string;
+  onChange: (value: string) => void;
+}) {
   return (
     <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
       {props.label}
       <select value={props.value} onChange={(event) => props.onChange(event.target.value)} className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-white px-3 py-2 text-[var(--dashboard-text)] outline-none focus:border-[var(--dashboard-accent)]">
         {props.options.map((option) => (
           <option key={option || "empty"} value={option}>
-            {option || "None"}
+            {props.getOptionLabel?.(option) ?? (option || "None")}
           </option>
         ))}
       </select>
@@ -1253,6 +1259,30 @@ function formatPresetLabel(
     .split("-")
     .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
     .join(" ");
+}
+
+function formatRuntimeFontTokenLabel(value: string) {
+  const labels: Record<string, string> = {
+    "font.title": "Preset Title",
+    "font.subtitle": "Preset Subtitle",
+    "font.meta": "Preset Meta",
+    "font.number": "Preset Number",
+    "font.cta": "CTA Sans",
+    "font.editorial-serif": "Editorial Serif",
+    "font.display-serif": "Display Serif",
+    "font.classic-serif": "Classic Serif",
+    "font.book-serif": "Book Serif",
+    "font.modern-sans": "Modern Sans",
+    "font.grotesk": "Grotesk",
+    "font.clean-sans": "Clean Sans",
+    "font.condensed-sans": "Condensed Sans",
+    "font.bold-sans": "Bold Sans",
+    "font.rounded-sans": "Rounded Sans",
+    "font.script": "Script",
+    "font.signature": "Signature",
+  };
+
+  return labels[value] ?? (value || "None");
 }
 
 type InspectorQuickColorTarget = {

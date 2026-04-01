@@ -4,7 +4,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { BusyActionLabel } from "@/components/ui/BusyActionLabel";
 import { useAppFeedback } from "@/components/ui/AppFeedbackProvider";
 import type { AiCredentialSummary } from "@/lib/types";
@@ -42,6 +42,7 @@ type TemplateOption = {
   supportsDomain: boolean;
   supportedBindings: string[];
   allowedPresetCategories: string[];
+  templateCategories: string[];
   previewPath: string;
 };
 
@@ -176,6 +177,8 @@ type PresetRecommendationProgressState = {
   failedPlanCount: number;
 };
 
+type AssistedTemplateSourceMode = "built_in" | "custom" | "all";
+
 type PlanDraft = {
   planId: string;
   title: string;
@@ -237,8 +240,12 @@ export function JobReviewManager({
         : templates.map((item) => item.selectionKey);
     })(),
   );
+  const [assistedTemplateSourceMode, setAssistedTemplateSourceMode] =
+    useState<AssistedTemplateSourceMode>("built_in");
+  const [selectedTemplateCategoryIds, setSelectedTemplateCategoryIds] = useState<string[]>([]);
   const [selectedPresetCategoryIds, setSelectedPresetCategoryIds] = useState<string[]>([]);
   const [templateSearchQuery, setTemplateSearchQuery] = useState("");
+  const [templateCategorySearchQuery, setTemplateCategorySearchQuery] = useState("");
   const [presetCategorySearchQuery, setPresetCategorySearchQuery] = useState("");
   const [allowAnyPresetOverride, setAllowAnyPresetOverride] = useState(false);
   const [assistedPresetStrategy, setAssistedPresetStrategy] = useState<
@@ -317,8 +324,59 @@ export function JobReviewManager({
   const selectedImages = images.filter((image) => image.isSelected);
   const manualTemplate =
     templates.find((item) => item.selectionKey === manualTemplateId) ?? null;
-  const filteredTemplates = templates.filter((template) =>
+  const templateCategoryOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          templates.flatMap((template) =>
+            template.templateCategories
+              .map((category) => category.trim())
+              .filter(Boolean),
+          ),
+        ),
+      )
+        .sort((left, right) => left.localeCompare(right))
+        .map((category) => ({
+          id: category,
+          label: formatTemplateCategoryLabel(category),
+        })),
+    [templates],
+  );
+  const templatesInSourceScope = useMemo(
+    () =>
+      templates.filter((template) =>
+        assistedTemplateSourceMode === "all"
+          ? true
+          : assistedTemplateSourceMode === "custom"
+            ? template.sourceKind === "CUSTOM"
+            : template.sourceKind === "BUILTIN",
+      ),
+    [assistedTemplateSourceMode, templates],
+  );
+  const templatesInCategoryScope = useMemo(
+    () =>
+      selectedTemplateCategoryIds.length === 0
+        ? templatesInSourceScope
+        : templatesInSourceScope.filter((template) =>
+            template.templateCategories.some((category) =>
+              selectedTemplateCategoryIds.includes(category),
+            ),
+          ),
+    [selectedTemplateCategoryIds, templatesInSourceScope],
+  );
+  const filteredTemplates = templatesInCategoryScope.filter((template) =>
     template.name.toLowerCase().includes(templateSearchQuery.trim().toLowerCase()),
+  );
+  const filteredTemplateCategories = templateCategoryOptions.filter((category) => {
+    const query = templateCategorySearchQuery.trim().toLowerCase();
+    if (!query) {
+      return true;
+    }
+
+    return category.label.toLowerCase().includes(query);
+  });
+  const activeSelectedTemplates = templatesInCategoryScope.filter((template) =>
+    selectedTemplateIds.includes(template.selectionKey),
   );
   const filteredPresetCategories = visualPresetCategories.filter((category) => {
     const query = presetCategorySearchQuery.trim().toLowerCase();
@@ -412,6 +470,24 @@ export function JobReviewManager({
       ? generatedPins[previewPinIndex]
       : null;
 
+  useEffect(() => {
+    if (templatesInCategoryScope.length === 0) {
+      return;
+    }
+
+    const hasSelectionInScope = templatesInCategoryScope.some((template) =>
+      selectedTemplateIds.includes(template.selectionKey),
+    );
+
+    if (!hasSelectionInScope) {
+      setSelectedTemplateIds((current) =>
+        Array.from(
+          new Set([...current, ...templatesInCategoryScope.map((template) => template.selectionKey)]),
+        ),
+      );
+    }
+  }, [selectedTemplateIds, templatesInCategoryScope]);
+
   function getButtonClass(options: {
     tone: "accent" | "danger" | "neutral";
     busy?: boolean;
@@ -447,6 +523,14 @@ export function JobReviewManager({
     );
   }
 
+  function toggleTemplateCategory(categoryId: string) {
+    setSelectedTemplateCategoryIds((current) =>
+      current.includes(categoryId)
+        ? current.filter((item) => item !== categoryId)
+        : [...current, categoryId],
+    );
+  }
+
   function togglePresetCategory(categoryId: string) {
     setSelectedPresetCategoryIds((current) =>
       current.includes(categoryId)
@@ -456,11 +540,28 @@ export function JobReviewManager({
   }
 
   function selectAllTemplates() {
-    setSelectedTemplateIds(templates.map((item) => item.selectionKey));
+    setSelectedTemplateIds((current) =>
+      Array.from(
+        new Set([...current, ...filteredTemplates.map((item) => item.selectionKey)]),
+      ),
+    );
   }
 
   function clearTemplateSelection() {
-    setSelectedTemplateIds([]);
+    setSelectedTemplateIds((current) =>
+      current.filter(
+        (item) =>
+          !templatesInCategoryScope.some((template) => template.selectionKey === item),
+      ),
+    );
+  }
+
+  function clearTemplateCategorySelection() {
+    setSelectedTemplateCategoryIds([]);
+  }
+
+  function selectAllTemplateCategories() {
+    setSelectedTemplateCategoryIds(templateCategoryOptions.map((item) => item.id));
   }
 
   function clearPresetCategorySelection() {
@@ -877,7 +978,7 @@ export function JobReviewManager({
     setActiveAction({ kind: "assisted" });
     try {
       setPlansFeedback(null);
-      const selectedTemplates = templates.filter((template) =>
+      const selectedTemplates = templatesInCategoryScope.filter((template) =>
         selectedTemplateIds.includes(template.selectionKey),
       );
       const result = await runAction(`/api/dashboard/jobs/${jobId}/plans`, {
@@ -1593,7 +1694,7 @@ export function JobReviewManager({
                 disabled={
                   Boolean(activeAction) ||
                   isRenderingPlans ||
-                  selectedTemplateIds.length === 0 ||
+                  activeSelectedTemplates.length === 0 ||
                   selectedImages.length === 0
                 }
                 aria-busy={activeAction?.kind === "assisted"}
@@ -1651,11 +1752,12 @@ export function JobReviewManager({
                   <div>
                     <p className="text-sm font-semibold text-[var(--dashboard-subtle)]">Eligible templates</p>
                     <p className="mt-1 text-sm font-bold text-[var(--dashboard-text)]">
-                      {selectedTemplateIds.length === templates.length
-                        ? `All ${templates.length} templates`
-                        : selectedTemplateIds.length === 0
+                      {activeSelectedTemplates.length === templatesInCategoryScope.length &&
+                      templatesInCategoryScope.length > 0
+                        ? `All ${templatesInCategoryScope.length} matching templates`
+                        : activeSelectedTemplates.length === 0
                           ? "No templates selected"
-                          : `${selectedTemplateIds.length} selected`}
+                          : `${activeSelectedTemplates.length} selected`}
                     </p>
                   </div>
                   <span className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-muted)]">
@@ -1663,6 +1765,32 @@ export function JobReviewManager({
                   </span>
                 </summary>
                 <div className="border-t border-[var(--dashboard-line)] px-4 py-4">
+                  <div className="flex flex-wrap gap-2">
+                    {([
+                      ["built_in", "Built-in only"],
+                      ["custom", "Custom only"],
+                      ["all", "All templates"],
+                    ] as const).map(([mode, label]) => {
+                      const active = assistedTemplateSourceMode === mode;
+                      return (
+                        <button
+                          key={mode}
+                          type="button"
+                          onClick={() => setAssistedTemplateSourceMode(mode)}
+                          className={`rounded-full border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] ${
+                            active
+                              ? "border-[var(--dashboard-accent)] bg-[var(--dashboard-accent-soft)] text-[var(--dashboard-accent-strong)]"
+                              : "border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] text-[var(--dashboard-muted)]"
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="mt-3 rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-muted)]">
+                    Scope: {templatesInSourceScope.length} available · {templatesInCategoryScope.length} after bundle filters
+                  </div>
                   <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
                     Search templates
                     <input
@@ -1678,14 +1806,14 @@ export function JobReviewManager({
                       onClick={selectAllTemplates}
                       className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-muted)]"
                     >
-                      Select all
+                      Select matching
                     </button>
                     <button
                       type="button"
                       onClick={clearTemplateSelection}
                       className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-muted)]"
                     >
-                      Clear
+                      Clear matching
                     </button>
                   </div>
                   <div className="mt-3 max-h-72 space-y-2 overflow-y-auto pr-1">
@@ -1726,6 +1854,81 @@ export function JobReviewManager({
                 </div>
               </details>
             </div>
+
+            <details className="mt-4 rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)]">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3">
+                <div>
+                  <p className="text-sm font-bold text-[var(--dashboard-text)]">Template bundles</p>
+                  <p className="mt-1 text-sm text-[var(--dashboard-subtle)]">
+                    {selectedTemplateCategoryIds.length === 0
+                      ? "All template bundles available"
+                      : `${selectedTemplateCategoryIds.length} bundle${selectedTemplateCategoryIds.length === 1 ? "" : "s"} selected`}
+                  </p>
+                </div>
+                <span className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-muted)]">
+                  Manage
+                </span>
+              </summary>
+              <div className="border-t border-[var(--dashboard-line)] px-4 py-4">
+                <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
+                  Search bundles
+                  <input
+                    value={templateCategorySearchQuery}
+                    onChange={(event) => setTemplateCategorySearchQuery(event.target.value)}
+                    placeholder="Bundle name"
+                    className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-2"
+                  />
+                </label>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={selectAllTemplateCategories}
+                    className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-muted)]"
+                  >
+                    Select all
+                  </button>
+                  <button
+                    type="button"
+                    onClick={clearTemplateCategorySelection}
+                    className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-muted)]"
+                  >
+                    Use all bundles
+                  </button>
+                </div>
+                <div className="mt-3 max-h-72 space-y-2 overflow-y-auto pr-1">
+                  {filteredTemplateCategories.length === 0 ? (
+                    <p className="text-sm text-[var(--dashboard-subtle)]">No template bundles match this search.</p>
+                  ) : (
+                    filteredTemplateCategories.map((category) => {
+                      const active = selectedTemplateCategoryIds.includes(category.id);
+                      return (
+                        <label
+                          key={category.id}
+                          className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-3 ${
+                            active
+                              ? "border-[var(--dashboard-accent)] bg-[var(--dashboard-accent-soft)]"
+                              : "border-[var(--dashboard-line)] bg-[var(--dashboard-panel)]"
+                          }`}
+                        >
+                          <span className="flex min-w-0 items-center gap-3">
+                            <input
+                              type="checkbox"
+                              checked={active}
+                              onChange={() => toggleTemplateCategory(category.id)}
+                            />
+                            <span className="min-w-0">
+                              <span className="block text-sm font-semibold text-[var(--dashboard-text)]">
+                                {category.label}
+                              </span>
+                            </span>
+                          </span>
+                        </label>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            </details>
 
             <label className="mt-4 flex items-center gap-3 rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-4 py-3 text-sm text-[var(--dashboard-subtle)]">
               <input
@@ -3680,6 +3883,14 @@ function persistReviewGridFilter(jobId: string, value: ReviewGridFilter) {
   } catch {
     // Ignore session storage failures and keep the current review flow usable.
   }
+}
+
+function formatTemplateCategoryLabel(value: string) {
+  return value
+    .split(/[-_]/g)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 function extractTaskPlanIds(task: RenderTaskState) {

@@ -57,6 +57,7 @@ export type SelectableTemplateCandidate = {
   supportedBindings: string[];
   allowedPresetIds: TemplateVisualPresetId[];
   allowedPresetCategories: TemplateVisualPresetCategoryId[];
+  templateCategories: string[];
   numberTreatment: TemplateNumberTreatment;
   previewPath: string;
   renderPath: string;
@@ -102,6 +103,7 @@ export function getBuiltInSelectableTemplateCandidates(): SelectableTemplateCand
     const allowedPresetCategories = Array.from(
       new Set(allowedPresetIds.map((presetId) => getTemplateVisualPresetCategory(presetId))),
     );
+    const templateCategories = getBuiltInTemplateCategories(template);
 
     return {
       id: template.id,
@@ -125,6 +127,7 @@ export function getBuiltInSelectableTemplateCandidates(): SelectableTemplateCand
       supportedBindings: buildBuiltInSupportedBindings(template),
       allowedPresetIds,
       allowedPresetCategories,
+      templateCategories,
       numberTreatment: template.features.numberTreatment,
       previewPath: template.previewPath ?? `/preview/${template.id}`,
       renderPath: `/render/${template.id}`,
@@ -269,6 +272,39 @@ function getBuiltInTemplateCopyHints(
   };
 }
 
+export function getBuiltInTemplateCategories(
+  template: ReturnType<typeof getBuiltInTemplateLibraryEntries>[number],
+) {
+  const categories = new Set<string>();
+
+  if (template.features.numberTreatment !== "none") {
+    categories.add("listicle");
+    categories.add("roundup");
+  } else {
+    categories.add("feature");
+  }
+
+  if (template.textFields.includes("subtitle")) {
+    categories.add("guide");
+    categories.add("editorial");
+  }
+
+  if (template.imageSlotCount >= 4) {
+    categories.add("gallery");
+    categories.add("ideas");
+  }
+
+  if (template.imageSlotCount === 1) {
+    categories.add("feature");
+  }
+
+  if (template.textFields.includes("domain") && template.features.footer) {
+    categories.add("blog");
+  }
+
+  return Array.from(categories);
+}
+
 function getBuiltInArtworkRule(templateId: string) {
   switch (templateId) {
     case "nine-image-grid-overlay-number-footer":
@@ -385,6 +421,7 @@ function toRuntimeSelectableTemplateCandidate(template: RuntimeTemplateListRecor
     supportedBindings: summary.supportedBindings,
     allowedPresetIds,
     allowedPresetCategories,
+    templateCategories: summary.templateCategories ?? [],
     numberTreatment: summary.supportsItemNumber ? "hero" : "none",
     previewPath: `/dashboard/templates/${template.id}/preview?versionId=${activeVersion.id}`,
     renderPath: `/render/${template.id}?versionId=${activeVersion.id}`,
@@ -433,6 +470,13 @@ function parseRuntimeTemplateSummary(
               (value): value is string => typeof value === "string",
             )
           : summarizeRuntimeTemplateDocument(document).supportedBindings,
+        templateCategories: Array.isArray(record.templateCategories)
+          ? record.templateCategories.filter((value): value is string => typeof value === "string")
+          : summarizeRuntimeTemplateDocument(document).templateCategories,
+        category:
+          typeof record.category === "string" && record.category.trim().length > 0
+            ? record.category.trim()
+            : summarizeRuntimeTemplateDocument(document).category,
         toneTags: Array.isArray(record.toneTags)
           ? record.toneTags.filter((value): value is string => typeof value === "string")
           : summarizeRuntimeTemplateDocument(document).toneTags,

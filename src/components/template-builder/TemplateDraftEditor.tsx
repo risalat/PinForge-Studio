@@ -96,6 +96,7 @@ export function TemplateDraftEditor(props: TemplateDraftEditorProps) {
   const [editorState, setEditorState] = useState<RuntimeTemplateEditorState>(initialEditorState);
   const [visualPreset, setVisualPreset] = useState<TemplateVisualPresetId>(initialPreset);
   const [leftPanel, setLeftPanel] = useState<"elements" | "layers" | "template">("elements");
+  const [isRenamingTemplate, setIsRenamingTemplate] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>({
     state: "saved",
     message: "All changes saved.",
@@ -120,6 +121,18 @@ export function TemplateDraftEditor(props: TemplateDraftEditorProps) {
         presetIds: [visualPreset],
       }),
     [document, visualPreset],
+  );
+  const previewPayload = useMemo(
+    () =>
+      getSampleRuntimeTemplateRenderProps({
+        visualPreset,
+        title: editorState.previewContent.title,
+        subtitle: editorState.previewContent.subtitle || undefined,
+        itemNumber: editorState.previewContent.itemNumber,
+        domain: editorState.previewContent.domain,
+        ctaText: editorState.previewContent.ctaText || undefined,
+      }),
+    [editorState.previewContent, visualPreset],
   );
 
   const snapshot = useMemo(
@@ -676,6 +689,17 @@ export function TemplateDraftEditor(props: TemplateDraftEditorProps) {
         return;
       }
 
+      if (event.key === "Escape" && !isEditableTarget) {
+        if (selectedElement) {
+          event.preventDefault();
+          setEditorState((current) => ({
+            ...current,
+            selectedElementId: null,
+          }));
+        }
+        return;
+      }
+
       if (
         !selectedElement ||
         isEditableTarget
@@ -729,7 +753,42 @@ export function TemplateDraftEditor(props: TemplateDraftEditorProps) {
             </Link>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="truncate text-[1.7rem] font-black tracking-[-0.05em]">{templateName}</h1>
+                {isRenamingTemplate ? (
+                  <input
+                    type="text"
+                    value={templateName}
+                    onChange={(event) => updateTemplateName(event.target.value)}
+                    onBlur={() => setIsRenamingTemplate(false)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        setIsRenamingTemplate(false);
+                      }
+                      if (event.key === "Escape") {
+                        event.preventDefault();
+                        setIsRenamingTemplate(false);
+                      }
+                    }}
+                    autoFocus
+                    className="min-w-[240px] max-w-[420px] rounded-xl border border-[var(--dashboard-accent-border)] bg-white px-3 py-1.5 text-[1.35rem] font-black tracking-[-0.05em] text-[var(--dashboard-text)] outline-none focus:border-[var(--dashboard-accent)]"
+                  />
+                ) : (
+                  <>
+                    <h1 className="truncate text-[1.7rem] font-black tracking-[-0.05em]">
+                      {templateName}
+                    </h1>
+                    <button
+                      type="button"
+                      onClick={() => setIsRenamingTemplate(true)}
+                      className="inline-flex items-center gap-2 rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] transition hover:text-[var(--dashboard-text)]"
+                      aria-label="Rename template"
+                      title="Rename template"
+                    >
+                      <EditIcon />
+                      <span>Rename</span>
+                    </button>
+                  </>
+                )}
                 <MetaChip>{`v${versionNumber}`}</MetaChip>
                 <MetaChip>{versionLifecycleStatus}</MetaChip>
                 <MetaChip>{versionLocked ? "Locked" : "Editable"}</MetaChip>
@@ -841,6 +900,12 @@ export function TemplateDraftEditor(props: TemplateDraftEditorProps) {
           </nav>
 
           <div className="min-w-0 overflow-y-auto">
+            <TemplateMetadataSummary
+              category={document.metadata.category}
+              tags={document.metadata.tags}
+              onEdit={() => setLeftPanel("template")}
+              isEditing={leftPanel === "template"}
+            />
             {leftPanel === "elements" ? (
               <ElementCatalog onAddElement={handleAddElement} />
             ) : null}
@@ -865,6 +930,39 @@ export function TemplateDraftEditor(props: TemplateDraftEditorProps) {
                 templateDescription={templateDescription}
                 onChangeTemplateName={updateTemplateName}
                 onChangeTemplateDescription={updateTemplateDescription}
+                templateCategory={document.metadata.category}
+                templateTags={document.metadata.tags}
+                onChangeTemplateCategory={(value) =>
+                  applyDocumentUpdate((current) => ({
+                    ...current,
+                    metadata: {
+                      ...current.metadata,
+                      category: value,
+                    },
+                  }))
+                }
+                onChangeTemplateTags={(value) =>
+                  applyDocumentUpdate((current) => ({
+                    ...current,
+                    metadata: {
+                      ...current.metadata,
+                      tags: value
+                        .split(",")
+                        .map((item) => item.trim())
+                        .filter(Boolean),
+                    },
+                  }))
+                }
+                previewContent={editorState.previewContent}
+                onChangePreviewContent={(field, value) =>
+                  updateEditorState((current) => ({
+                    ...current,
+                    previewContent: {
+                      ...current.previewContent,
+                      [field]: value,
+                    },
+                  }))
+                }
               />
             ) : null}
           </div>
@@ -873,10 +971,7 @@ export function TemplateDraftEditor(props: TemplateDraftEditorProps) {
         <div className="sticky top-[7.5rem] h-[calc(100vh-8.25rem)] min-h-0">
           <CanvasEditor
             document={document}
-            payload={{
-              ...getSampleRuntimeTemplateRenderProps(),
-              visualPreset,
-            }}
+            payload={previewPayload}
             editorState={editorState}
             selectedElementId={editorState.selectedElementId}
             onSelectElement={(elementId) =>
@@ -916,6 +1011,15 @@ function TemplateMetaPanel(props: {
   templateDescription: string;
   onChangeTemplateName: (value: string) => void;
   onChangeTemplateDescription: (value: string) => void;
+  templateCategory: string;
+  templateTags: string[];
+  onChangeTemplateCategory: (value: string) => void;
+  onChangeTemplateTags: (value: string) => void;
+  previewContent: RuntimeTemplateEditorState["previewContent"];
+  onChangePreviewContent: (
+    field: keyof RuntimeTemplateEditorState["previewContent"],
+    value: string | number,
+  ) => void;
 }) {
   return (
     <section className="space-y-3 rounded-[24px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-4 shadow-[var(--dashboard-shadow-sm)]">
@@ -934,12 +1038,156 @@ function TemplateMetaPanel(props: {
       <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
         Description
         <textarea
-          rows={4}
+          rows={3}
           value={props.templateDescription}
           onChange={(event) => props.onChangeTemplateDescription(event.target.value)}
           className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-2 text-[var(--dashboard-text)] outline-none focus:border-[var(--dashboard-accent)]"
         />
       </label>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
+          Category
+          <input
+            type="text"
+            value={props.templateCategory}
+            onChange={(event) => props.onChangeTemplateCategory(event.target.value)}
+            placeholder="e.g. roundup"
+            className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-2 text-[var(--dashboard-text)] outline-none focus:border-[var(--dashboard-accent)]"
+          />
+        </label>
+        <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
+          Tags
+          <input
+            type="text"
+            value={props.templateTags.join(", ")}
+            onChange={(event) => props.onChangeTemplateTags(event.target.value)}
+            placeholder="ideas, guide, editorial"
+            className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-2 text-[var(--dashboard-text)] outline-none focus:border-[var(--dashboard-accent)]"
+          />
+        </label>
+      </div>
+
+      <div className="rounded-[20px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-3">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
+          Preview content
+        </p>
+        <div className="mt-3 space-y-3">
+          <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
+            Title
+            <textarea
+              rows={3}
+              value={props.previewContent.title}
+              onChange={(event) => props.onChangePreviewContent("title", event.target.value)}
+              className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-white px-3 py-2 text-[var(--dashboard-text)] outline-none focus:border-[var(--dashboard-accent)]"
+            />
+          </label>
+          <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
+            Subtitle
+            <input
+              type="text"
+              value={props.previewContent.subtitle}
+              onChange={(event) => props.onChangePreviewContent("subtitle", event.target.value)}
+              className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-white px-3 py-2 text-[var(--dashboard-text)] outline-none focus:border-[var(--dashboard-accent)]"
+            />
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
+              Number
+              <input
+                type="number"
+                min={0}
+                max={999}
+                value={props.previewContent.itemNumber}
+                onChange={(event) =>
+                  props.onChangePreviewContent("itemNumber", Number(event.target.value) || 0)
+                }
+                className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-white px-3 py-2 text-[var(--dashboard-text)] outline-none focus:border-[var(--dashboard-accent)]"
+              />
+            </label>
+            <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
+              CTA
+              <input
+                type="text"
+                value={props.previewContent.ctaText}
+                onChange={(event) => props.onChangePreviewContent("ctaText", event.target.value)}
+                className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-white px-3 py-2 text-[var(--dashboard-text)] outline-none focus:border-[var(--dashboard-accent)]"
+              />
+            </label>
+          </div>
+          <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
+            Domain
+            <input
+              type="text"
+              value={props.previewContent.domain}
+              onChange={(event) => props.onChangePreviewContent("domain", event.target.value)}
+              className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-white px-3 py-2 text-[var(--dashboard-text)] outline-none focus:border-[var(--dashboard-accent)]"
+            />
+          </label>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function TemplateMetadataSummary(props: {
+  category: string;
+  tags: string[];
+  onEdit: () => void;
+  isEditing: boolean;
+}) {
+  const hasCategory = props.category.trim().length > 0;
+  const tags = props.tags.filter((tag) => tag.trim().length > 0);
+
+  return (
+    <section className="mb-3 rounded-[20px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-3 shadow-[var(--dashboard-shadow-sm)]">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
+            Template metadata
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {hasCategory ? (
+              <span className="inline-flex items-center rounded-full border border-[var(--dashboard-accent-border)] bg-[var(--dashboard-accent-soft)] px-2.5 py-1 text-xs font-semibold text-[var(--dashboard-accent-strong)]">
+                {props.category.trim()}
+              </span>
+            ) : (
+              <span className="inline-flex items-center rounded-full border border-dashed border-[var(--dashboard-line)] px-2.5 py-1 text-xs font-medium text-[var(--dashboard-muted)]">
+                No category
+              </span>
+            )}
+            {tags.length > 0 ? (
+              tags.slice(0, 3).map((tag) => (
+                <span
+                  key={tag}
+                  className="inline-flex items-center rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-2.5 py-1 text-xs font-medium text-[var(--dashboard-subtle)]"
+                >
+                  {tag}
+                </span>
+              ))
+            ) : (
+              <span className="inline-flex items-center rounded-full border border-dashed border-[var(--dashboard-line)] px-2.5 py-1 text-xs font-medium text-[var(--dashboard-muted)]">
+                No tags
+              </span>
+            )}
+            {tags.length > 3 ? (
+              <span className="inline-flex items-center rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-2.5 py-1 text-xs font-medium text-[var(--dashboard-muted)]">
+                +{tags.length - 3}
+              </span>
+            ) : null}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={props.onEdit}
+          className={`inline-flex shrink-0 items-center rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+            props.isEditing
+              ? "border-[var(--dashboard-accent-border)] bg-[var(--dashboard-accent-soft)] text-[var(--dashboard-accent-strong)]"
+              : "border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] text-[var(--dashboard-subtle)] hover:text-[var(--dashboard-text)]"
+          }`}
+        >
+          {props.isEditing ? "Editing details" : "Edit details"}
+        </button>
+      </div>
     </section>
   );
 }
@@ -1248,6 +1496,7 @@ function renderQuickBindingFields(
           label="Font"
           value={selectedElement.styleTokens.fontToken}
           options={runtimeTemplateFontTokenValues}
+          getOptionLabel={formatRuntimeFontTokenLabel}
           onChange={(value) =>
             onUpdateElement(selectedElement.id, (element) => ({
               ...(element as Extract<
@@ -1628,6 +1877,15 @@ function DuplicateIcon() {
   );
 }
 
+function EditIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current stroke-[1.8]">
+      <path d="M4 20h4l10-10-4-4L4 16v4Z" />
+      <path d="m12 6 4 4" />
+    </svg>
+  );
+}
+
 function BringForwardIcon() {
   return (
     <svg viewBox="0 0 24 24" className="h-full w-full fill-none stroke-current stroke-[1.8]">
@@ -1719,6 +1977,7 @@ function CompactSelectField(props: {
   label: string;
   value: string;
   options: readonly string[];
+  getOptionLabel?: (value: string) => string;
   onChange: (value: string) => void;
 }) {
   return (
@@ -1733,12 +1992,36 @@ function CompactSelectField(props: {
       >
         {props.options.map((option) => (
           <option key={option || "empty"} value={option}>
-            {option || "None"}
+            {props.getOptionLabel?.(option) ?? (option || "None")}
           </option>
         ))}
       </select>
     </label>
   );
+}
+
+function formatRuntimeFontTokenLabel(value: string) {
+  const labels: Record<string, string> = {
+    "font.title": "Preset Title",
+    "font.subtitle": "Preset Subtitle",
+    "font.meta": "Preset Meta",
+    "font.number": "Preset Number",
+    "font.cta": "CTA Sans",
+    "font.editorial-serif": "Editorial Serif",
+    "font.display-serif": "Display Serif",
+    "font.classic-serif": "Classic Serif",
+    "font.book-serif": "Book Serif",
+    "font.modern-sans": "Modern Sans",
+    "font.grotesk": "Grotesk",
+    "font.clean-sans": "Clean Sans",
+    "font.condensed-sans": "Condensed Sans",
+    "font.bold-sans": "Bold Sans",
+    "font.rounded-sans": "Rounded Sans",
+    "font.script": "Script",
+    "font.signature": "Signature",
+  };
+
+  return labels[value] ?? (value || "None");
 }
 
 function getSaveStatusClassName(saveStatus: SaveStatus) {

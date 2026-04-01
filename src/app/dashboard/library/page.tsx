@@ -6,6 +6,7 @@ import { renderRuntimeTemplate } from "@/lib/runtime-templates/renderRuntimeTemp
 import { listCustomTemplatesForUser } from "@/lib/runtime-templates/db";
 import { renderTemplate } from "@/lib/templates/registry";
 import {
+  getBuiltInTemplateCategories,
   getBuiltInTemplateLibraryEntries,
   listFinalizedCustomTemplateCandidatesForUser,
 } from "@/lib/templates/selectableTemplates";
@@ -71,11 +72,16 @@ export default async function DashboardLibraryPage() {
 
                 <div className="flex min-w-0 flex-col justify-between gap-6">
                   <div className="space-y-4">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Tag label="Built-in" tone="accent" />
-                      <Tag label={`${template.imageSlotCount} image slots`} />
-                      <Tag label={template.features.overlay ? "Overlay" : "Editorial"} />
-                    </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Tag label="Built-in" tone="accent" />
+                        <Tag label={`${template.imageSlotCount} image slots`} />
+                        <Tag label={template.features.overlay ? "Overlay" : "Editorial"} />
+                        {getBuiltInTemplateCategories(template)
+                          .slice(0, 2)
+                          .map((category) => (
+                            <Tag key={category} label={category.replace(/[-_]/g, " ")} />
+                          ))}
+                      </div>
 
                     <div>
                       <h2 className="text-3xl font-black tracking-[-0.04em]">{template.name}</h2>
@@ -163,6 +169,9 @@ export default async function DashboardLibraryPage() {
                         <Tag label="Finalized" />
                         <Tag label={`v${template.versionNumber ?? 1}`} />
                         <Tag label={`${template.imageSlotCount} image slots`} />
+                        {template.templateCategories.slice(0, 2).map((category) => (
+                          <Tag key={category} label={category.replace(/[-_]/g, " ")} />
+                        ))}
                       </div>
 
                       <div>

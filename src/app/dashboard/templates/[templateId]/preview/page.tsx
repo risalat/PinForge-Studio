@@ -42,9 +42,28 @@ export default async function RuntimeTemplatePreviewPage({
   const activePreset = templateVisualPresets.includes(preset as TemplateVisualPresetId)
     ? (preset as TemplateVisualPresetId)
     : getSampleRuntimeTemplateRenderProps().visualPreset;
+  const editorState =
+    template.selectedVersion.editorStateJson &&
+    typeof template.selectedVersion.editorStateJson === "object"
+      ? (template.selectedVersion.editorStateJson as {
+          previewContent?: {
+            title?: string;
+            subtitle?: string;
+            itemNumber?: number;
+            domain?: string;
+            ctaText?: string;
+          };
+        })
+      : null;
   const payload = {
-    ...getSampleRuntimeTemplateRenderProps(),
-    visualPreset: activePreset,
+    ...getSampleRuntimeTemplateRenderProps({
+      visualPreset: activePreset,
+      title: editorState?.previewContent?.title,
+      subtitle: editorState?.previewContent?.subtitle,
+      itemNumber: editorState?.previewContent?.itemNumber,
+      domain: editorState?.previewContent?.domain,
+      ctaText: editorState?.previewContent?.ctaText,
+    }),
   };
 
   const version = template.selectedVersion;

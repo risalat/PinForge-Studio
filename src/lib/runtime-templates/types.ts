@@ -40,6 +40,18 @@ export const runtimeTemplateFontTokenValues = [
   "font.meta",
   "font.number",
   "font.cta",
+  "font.editorial-serif",
+  "font.display-serif",
+  "font.classic-serif",
+  "font.book-serif",
+  "font.modern-sans",
+  "font.grotesk",
+  "font.clean-sans",
+  "font.condensed-sans",
+  "font.bold-sans",
+  "font.rounded-sans",
+  "font.script",
+  "font.signature",
 ] as const;
 
 export const runtimeTemplateShapeKindValues = [
@@ -171,6 +183,8 @@ export type RuntimeTemplateSummary = {
   elementTypes: RuntimeTemplateElementType[];
   allowedPresetIds: string[];
   allowedPresetCategories: string[];
+  category: string | null;
+  templateCategories: string[];
   headlineStyle: string | null;
   preferredWordCount: number | null;
   preferredMaxChars: number | null;

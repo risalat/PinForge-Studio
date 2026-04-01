@@ -250,6 +250,13 @@ export function createDefaultRuntimeTemplateEditorState(): RuntimeTemplateEditor
     selectedElementId: null,
     zoom: 0.42,
     visualPreset: null,
+    previewContent: {
+      title: "24 Cozy Reading Room Ideas To Copy",
+      subtitle: "Warm Layers And Better Lighting",
+      itemNumber: 24,
+      domain: "mightypaint.com",
+      ctaText: "Read more",
+    },
     showSafeArea: true,
     showGuides: true,
     collapsedPanels: [],

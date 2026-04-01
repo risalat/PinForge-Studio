@@ -136,6 +136,14 @@ export function summarizeRuntimeTemplateDocument(
     titleElement?.styleTokens.maxLines && titleElement.styleTokens.maxLines > 0
       ? titleElement.styleTokens.maxLines
       : null;
+  const category = document.metadata.category.trim() || null;
+  const templateCategories = Array.from(
+    new Set(
+      [category, ...document.metadata.tags]
+        .filter((value): value is string => Boolean(value?.trim()))
+        .map((value) => value.trim()),
+    ),
+  );
 
   return {
     imageSlotCount: document.capabilities.imageSlotCount,
@@ -149,6 +157,8 @@ export function summarizeRuntimeTemplateDocument(
     elementTypes: Array.from(new Set(document.elements.map((element) => element.type))) as RuntimeTemplateElementType[],
     allowedPresetIds: [...document.presetPolicy.allowedPresetIds],
     allowedPresetCategories: [...document.presetPolicy.allowedPresetCategories],
+    category,
+    templateCategories,
     headlineStyle: document.capabilities.supportsItemNumber
       ? "number-led"
       : document.capabilities.supportsSubtitle

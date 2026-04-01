@@ -23,19 +23,27 @@ export function resolveRuntimeTextBinding(input: {
 
   switch (element.semanticRole) {
     case "title":
-      return payload.title.trim();
+      return normalizeRuntimeBoundText(payload.title) || normalizeRuntimeElementText(element);
     case "subtitle":
-      return payload.subtitle?.trim() ?? "";
+      return normalizeRuntimeBoundText(payload.subtitle) || normalizeRuntimeElementText(element);
     case "domain":
-      return sanitizeDomainText(payload.domain, "sanitizeDomain" in element ? element.sanitizeDomain : true);
+      return sanitizeDomainText(
+        payload.domain || normalizeRuntimeElementText(element),
+        "sanitizeDomain" in element ? element.sanitizeDomain : true,
+      );
     case "itemNumber":
-      return typeof payload.itemNumber === "number" && Number.isFinite(payload.itemNumber)
-        ? String(payload.itemNumber)
-        : "";
+      if (typeof payload.itemNumber === "number" && Number.isFinite(payload.itemNumber)) {
+        return String(payload.itemNumber);
+      }
+      return normalizeRuntimeElementText(element);
     case "cta":
-      return "text" in element && element.text.trim() ? element.text.trim() : "Read more";
+      return (
+        normalizeRuntimeBoundText(payload.ctaText) ||
+        ("text" in element ? normalizeRuntimeBoundText(element.text) : "") ||
+        "Read more"
+      );
     case "decorative":
-      return "text" in element ? element.text.trim() : "";
+      return "text" in element ? normalizeRuntimeBoundText(element.text) : "";
     default:
       return "";
   }
@@ -47,7 +55,9 @@ export function resolveRuntimeImage(input: {
   slotIndex: number;
 }) {
   const { document, payload, slotIndex } = input;
-  const images = payload.images.filter((value) => value.trim() !== "");
+  const images = (Array.isArray(payload.images) ? payload.images : []).filter(
+    (value): value is string => typeof value === "string" && value.trim() !== "",
+  );
   const exact = images[slotIndex];
 
   if (exact) {
@@ -102,11 +112,19 @@ export function getRuntimeTemplateUsedImageSlots(document: RuntimeTemplateDocume
   return Array.from(slots).sort((left, right) => left - right);
 }
 
-function sanitizeDomainText(value: string, sanitize = true) {
-  const trimmed = value.trim();
+function sanitizeDomainText(value: string | null | undefined, sanitize = true) {
+  const trimmed = normalizeRuntimeBoundText(value);
   if (!sanitize) {
     return trimmed;
   }
 
   return trimmed.replace(/^https?:\/\//, "").replace(/^www\./, "");
+}
+
+function normalizeRuntimeBoundText(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function normalizeRuntimeElementText(element: RuntimeTextElement) {
+  return "text" in element ? normalizeRuntimeBoundText(element.text) : "";
 }
