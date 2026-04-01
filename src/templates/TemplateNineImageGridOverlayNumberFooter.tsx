@@ -57,6 +57,8 @@ export function TemplateNineImageGridOverlayNumberFooter({
   const titleBandTop = 598;
   const titleBandHeight = 402;
   const titleBandWidth = 958;
+  const titleAreaHeight = 138;
+  const subtitleAreaHeight = 56;
   const numberCircleSize = Math.round(cellWidth);
   const numberCircleTop = 358;
   const domainPillWidth = 292;
@@ -153,12 +155,15 @@ export function TemplateNineImageGridOverlayNumberFooter({
             backgroundColor: bandBackground,
           }}
         >
-          <div className="absolute inset-x-[42px] top-[132px]">
+          <div
+            className="absolute inset-x-[42px] top-[132px] flex items-center"
+            style={{ height: titleAreaHeight }}
+          >
             <AutoFitText
               as="p"
               text={compactTitle}
               minFontSize={46}
-              maxFontSize={168}
+              maxFontSize={196}
               maxLines={1}
               lineHeight={TEMPLATE_TYPOGRAPHY.title.lineHeight}
               className="mx-auto w-full text-center"
@@ -175,7 +180,10 @@ export function TemplateNineImageGridOverlayNumberFooter({
             style={{ backgroundColor: dividerColor }}
           />
 
-          <div className="absolute inset-x-[32px] top-[298px]">
+          <div
+            className="absolute inset-x-[32px] top-[298px] flex items-center"
+            style={{ height: subtitleAreaHeight }}
+          >
             <AutoFitText
               as="p"
               text={subtitle?.trim() || "That Totally Transform Your Front Yard"}

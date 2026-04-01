@@ -81,11 +81,11 @@ export function AutoFitText({
       const parent = element.parentElement;
       const availableWidth = Math.max(
         1,
-        Math.round(parent?.clientWidth || element.clientWidth || 0),
+        Math.round(element.clientWidth || parent?.clientWidth || 0),
       );
       const availableHeight = Math.max(
         1,
-        Math.round(parent?.clientHeight || element.clientHeight || 0),
+        Math.round(element.clientHeight || parent?.clientHeight || 0),
       );
 
       if (!content) {
@@ -105,8 +105,6 @@ export function AutoFitText({
       measureRoot.style.pointerEvents = "none";
       measureRoot.style.margin = "0";
       measureRoot.style.padding = "0";
-      measureRoot.style.width = `${availableWidth}px`;
-      measureRoot.style.maxWidth = `${availableWidth}px`;
       measureRoot.style.display = "block";
       measureRoot.style.overflow = "hidden";
 
@@ -127,10 +125,14 @@ export function AutoFitText({
         measureText.style.fontSize = `${size}px`;
         measureText.style.lineHeight = String(lineHeight);
         if (maxLines === 1) {
+          measureRoot.style.width = "auto";
+          measureRoot.style.maxWidth = "none";
           measureText.style.display = "inline-block";
           measureText.style.whiteSpace = "nowrap";
           measureText.style.overflowWrap = "normal";
         } else {
+          measureRoot.style.width = `${availableWidth}px`;
+          measureRoot.style.maxWidth = `${availableWidth}px`;
           measureText.style.display = "inline";
           measureText.style.whiteSpace = "pre-wrap";
           measureText.style.overflowWrap = "break-word";
@@ -142,9 +144,11 @@ export function AutoFitText({
         applySize(size);
 
         const textWidth = Math.ceil(measureText.getBoundingClientRect().width);
-        const textHeight = Math.ceil(measureRoot.scrollHeight);
-        const lineCount =
-          maxLines === 1 ? 1 : countRenderedLines(measureText);
+        const textHeight =
+          maxLines === 1
+            ? Math.ceil(measureText.getBoundingClientRect().height)
+            : Math.ceil(measureRoot.scrollHeight);
+        const lineCount = maxLines === 1 ? 1 : countRenderedLines(measureText);
 
         const widthFits = maxLines === 1 ? textWidth <= availableWidth + 2 : true;
         const heightFits = textHeight <= availableHeight + 2;
