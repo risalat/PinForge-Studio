@@ -158,7 +158,7 @@ export function TemplateNineImageGridOverlayNumberFooter({
               as="p"
               text={compactTitle}
               minFontSize={46}
-              maxFontSize={132}
+              maxFontSize={168}
               maxLines={1}
               lineHeight={TEMPLATE_TYPOGRAPHY.title.lineHeight}
               className="mx-auto w-full text-center"
