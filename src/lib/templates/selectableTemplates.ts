@@ -11,6 +11,13 @@ import { summarizeRuntimeTemplateDocument } from "@/lib/runtime-templates/valida
 import { getSampleRuntimeTemplateRenderProps } from "@/lib/runtime-templates/sampleData";
 import { getSampleTemplateProps, TEMPLATE_CONFIGS } from "@/lib/templates/registry";
 import {
+  buildTemplateGroupingMetadata,
+  getTemplateUserGroupsForTemplateForUser,
+  listTemplateUserGroupsByTemplateIdForUser,
+  resolveTemplateUserGroupsFromAssignments,
+  type TemplateUserGroupSummary,
+} from "@/lib/templates/templateGroupMetadata";
+import {
   getPresetIdsForCategories,
   getPresetIdsForTemplate,
   getTemplateVisualPresetCategory,
@@ -58,6 +65,9 @@ export type SelectableTemplateCandidate = {
   allowedPresetIds: TemplateVisualPresetId[];
   allowedPresetCategories: TemplateVisualPresetCategoryId[];
   templateCategories: string[];
+  systemCategories: string[];
+  userGroups: TemplateUserGroupSummary[];
+  userGroupIds: string[];
   numberTreatment: TemplateNumberTreatment;
   previewPath: string;
   renderPath: string;
@@ -97,13 +107,19 @@ export function getTemplateLibraryEntries() {
   return getBuiltInTemplateLibraryEntries();
 }
 
-export function getBuiltInSelectableTemplateCandidates(): SelectableTemplateCandidate[] {
+export function getBuiltInSelectableTemplateCandidates(input?: {
+  userGroupsByTemplateId?: Map<string, TemplateUserGroupSummary[]>;
+}): SelectableTemplateCandidate[] {
   return getBuiltInTemplateLibraryEntries().map((template) => {
     const allowedPresetIds = getPresetIdsForTemplate(template.id);
     const allowedPresetCategories = Array.from(
       new Set(allowedPresetIds.map((presetId) => getTemplateVisualPresetCategory(presetId))),
     );
     const templateCategories = getBuiltInTemplateCategories(template);
+    const groupingMetadata = buildTemplateGroupingMetadata({
+      systemCategories: templateCategories,
+      userGroups: input?.userGroupsByTemplateId?.get(template.id) ?? [],
+    });
 
     return {
       id: template.id,
@@ -128,6 +144,7 @@ export function getBuiltInSelectableTemplateCandidates(): SelectableTemplateCand
       allowedPresetIds,
       allowedPresetCategories,
       templateCategories,
+      ...groupingMetadata,
       numberTreatment: template.features.numberTreatment,
       previewPath: template.previewPath ?? `/preview/${template.id}`,
       renderPath: `/render/${template.id}`,
@@ -137,6 +154,13 @@ export function getBuiltInSelectableTemplateCandidates(): SelectableTemplateCand
       sampleProps: template.sampleProps,
       copyHints: getBuiltInTemplateCopyHints(template.id, template.features.numberTreatment),
     };
+  });
+}
+
+export async function getBuiltInSelectableTemplateCandidatesForUser(userId: string) {
+  const userGroupsByTemplateId = await listTemplateUserGroupsByTemplateIdForUser(userId);
+  return getBuiltInSelectableTemplateCandidates({
+    userGroupsByTemplateId,
   });
 }
 
@@ -159,7 +183,7 @@ export async function listFinalizedCustomTemplateCandidatesForUser(userId: strin
 
 export async function listSelectableTemplateCandidatesForUser(userId: string) {
   const [builtIns, customFinalized] = await Promise.all([
-    Promise.resolve(getBuiltInSelectableTemplateCandidates()),
+    getBuiltInSelectableTemplateCandidatesForUser(userId),
     listFinalizedCustomTemplateCandidatesForUser(userId),
   ]);
 
@@ -182,7 +206,18 @@ export async function resolveSelectableTemplateCandidateForUser(
       candidate.templateVersionId === null,
   );
   if (builtIn) {
-    return builtIn;
+    const userGroups = await getTemplateUserGroupsForTemplateForUser({
+      userId,
+      templateId: input.templateId,
+    });
+
+    return {
+      ...builtIn,
+      ...buildTemplateGroupingMetadata({
+        systemCategories: builtIn.templateCategories,
+        userGroups,
+      }),
+    };
   }
 
   const runtimeTemplate = await prisma.template.findFirst({
@@ -198,6 +233,18 @@ export async function resolveSelectableTemplateCandidateForUser(
     },
     include: {
       activeVersion: true,
+      templateGroupAssignments: {
+        select: {
+          group: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              sortOrder: true,
+            },
+          },
+        },
+      },
       versions: input.templateVersionId?.trim()
         ? {
             where: {
@@ -360,6 +407,18 @@ async function listRuntimeTemplatesForUser(userId: string) {
           updatedAt: true,
         },
       },
+      templateGroupAssignments: {
+        select: {
+          group: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              sortOrder: true,
+            },
+          },
+        },
+      },
       versions: {
         select: {
           id: true,
@@ -392,6 +451,10 @@ function toRuntimeSelectableTemplateCandidate(template: RuntimeTemplateListRecor
   const summary = parseRuntimeTemplateSummary(activeVersion.summaryJson, document);
   const allowedPresetIds = resolveRuntimeAllowedPresetIds(document);
   const allowedPresetCategories = resolveRuntimeAllowedPresetCategories(document, allowedPresetIds);
+  const groupingMetadata = buildTemplateGroupingMetadata({
+    systemCategories: summary.templateCategories ?? [],
+    userGroups: resolveTemplateUserGroupsFromAssignments(template.templateGroupAssignments),
+  });
 
   return {
     id: template.id,
@@ -422,6 +485,7 @@ function toRuntimeSelectableTemplateCandidate(template: RuntimeTemplateListRecor
     allowedPresetIds,
     allowedPresetCategories,
     templateCategories: summary.templateCategories ?? [],
+    ...groupingMetadata,
     numberTreatment: summary.supportsItemNumber ? "hero" : "none",
     previewPath: `/dashboard/templates/${template.id}/preview?versionId=${activeVersion.id}`,
     renderPath: `/render/${template.id}?versionId=${activeVersion.id}`,

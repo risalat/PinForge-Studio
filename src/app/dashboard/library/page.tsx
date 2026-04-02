@@ -1,13 +1,13 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { TemplateGroupingSummary } from "@/components/dashboard/TemplateGroupingSummary";
 import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
 import { requireAuthenticatedDashboardUser } from "@/lib/auth/dashboardSession";
 import { renderRuntimeTemplate } from "@/lib/runtime-templates/renderRuntimeTemplate";
 import { listCustomTemplatesForUser } from "@/lib/runtime-templates/db";
 import { renderTemplate } from "@/lib/templates/registry";
 import {
-  getBuiltInTemplateCategories,
-  getBuiltInTemplateLibraryEntries,
+  getBuiltInSelectableTemplateCandidatesForUser,
   listFinalizedCustomTemplateCandidatesForUser,
 } from "@/lib/templates/selectableTemplates";
 
@@ -19,7 +19,7 @@ export default async function DashboardLibraryPage() {
   await requireAuthenticatedDashboardUser();
   const user = await getOrCreateDashboardUser();
   const [builtIns, customFinalized, customTemplates] = await Promise.all([
-    Promise.resolve(getBuiltInTemplateLibraryEntries()),
+    getBuiltInSelectableTemplateCandidatesForUser(user.id),
     listFinalizedCustomTemplateCandidatesForUser(user.id),
     listCustomTemplatesForUser(user.id),
   ]);
@@ -75,12 +75,7 @@ export default async function DashboardLibraryPage() {
                       <div className="flex flex-wrap items-center gap-2">
                         <Tag label="Built-in" tone="accent" />
                         <Tag label={`${template.imageSlotCount} image slots`} />
-                        <Tag label={template.features.overlay ? "Overlay" : "Editorial"} />
-                        {getBuiltInTemplateCategories(template)
-                          .slice(0, 2)
-                          .map((category) => (
-                            <Tag key={category} label={category.replace(/[-_]/g, " ")} />
-                          ))}
+                        <Tag label={template.supportsSubtitle ? "Editorial" : "Overlay"} />
                       </div>
 
                     <div>
@@ -90,13 +85,18 @@ export default async function DashboardLibraryPage() {
                       </p>
                     </div>
 
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <DetailCard label="Text fields" value={template.textFields.join(", ")} />
+                      <div className="grid gap-3 sm:grid-cols-2">
+                      <DetailCard label="Bindings" value={template.supportedBindings.join(", ")} />
                       <DetailCard
                         label="Status"
                         value={template.locked ? "Locked production template" : "Draft"}
                       />
                     </div>
+
+                    <TemplateGroupingSummary
+                      systemCategories={template.systemCategories}
+                      userGroups={template.userGroups}
+                    />
                   </div>
 
                   <div className="flex flex-wrap gap-3">
@@ -117,6 +117,12 @@ export default async function DashboardLibraryPage() {
                       className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-5 py-3 text-sm font-semibold text-[var(--dashboard-subtle)]"
                     >
                       Use in jobs
+                    </Link>
+                    <Link
+                      href={`/dashboard/templates?view=groups&templateSearch=${encodeURIComponent(template.name)}`}
+                      className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-5 py-3 text-sm font-semibold text-[var(--dashboard-subtle)]"
+                    >
+                      Manage My groups
                     </Link>
                   </div>
                 </div>
@@ -169,9 +175,6 @@ export default async function DashboardLibraryPage() {
                         <Tag label="Finalized" />
                         <Tag label={`v${template.versionNumber ?? 1}`} />
                         <Tag label={`${template.imageSlotCount} image slots`} />
-                        {template.templateCategories.slice(0, 2).map((category) => (
-                          <Tag key={category} label={category.replace(/[-_]/g, " ")} />
-                        ))}
                       </div>
 
                       <div>
@@ -210,6 +213,11 @@ export default async function DashboardLibraryPage() {
                             .join(" | ") || "Default runtime hints"}
                         />
                       </div>
+
+                      <TemplateGroupingSummary
+                        systemCategories={template.systemCategories}
+                        userGroups={template.userGroups}
+                      />
                     </div>
 
                     <div className="flex flex-wrap gap-3">
@@ -236,6 +244,12 @@ export default async function DashboardLibraryPage() {
                         className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-5 py-3 text-sm font-semibold text-[var(--dashboard-subtle)]"
                       >
                         Manage lifecycle
+                      </Link>
+                      <Link
+                        href={`/dashboard/templates?view=groups&templateSearch=${encodeURIComponent(template.name)}`}
+                        className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-5 py-3 text-sm font-semibold text-[var(--dashboard-subtle)]"
+                      >
+                        Manage My groups
                       </Link>
                     </div>
                   </div>

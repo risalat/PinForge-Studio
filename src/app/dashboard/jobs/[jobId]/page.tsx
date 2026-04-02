@@ -10,6 +10,7 @@ import { matchesAllowedDomain } from "@/lib/dashboard/domainScope";
 import { getDashboardWorkspaceScope } from "@/lib/dashboard/workspaceScope";
 import { isDatabaseConfigured } from "@/lib/env";
 import { getJobForUser, listJobCyclesForPost } from "@/lib/jobs/generatePins";
+import { listTemplateGroupsForUser } from "@/lib/template-groups/db";
 import {
   getIntegrationSettingsSummary,
   getWorkspaceAllowedDomainsForUserId,
@@ -73,9 +74,12 @@ export default async function DashboardJobDetailsPage({ params }: PageProps) {
     );
   }
 
-  const templates = (await listSelectableTemplateCandidatesForUser(user.id)).filter(
-    (template): template is SelectableTemplateCandidate => Boolean(template),
-  );
+  const [templates, templateGroups] = await Promise.all([
+    listSelectableTemplateCandidatesForUser(user.id).then((items) =>
+      items.filter((template): template is SelectableTemplateCandidate => Boolean(template)),
+    ),
+    listTemplateGroupsForUser(user.id),
+  ]);
 
   const statusLabel = formatLabel(job.status);
   const milestoneCount = job.milestones.length;
@@ -144,6 +148,13 @@ export default async function DashboardJobDetailsPage({ params }: PageProps) {
             isPreferred: image.isPreferred,
           }))}
           templates={templates}
+          templateGroups={templateGroups.map((group) => ({
+            id: group.id,
+            name: group.name,
+            slug: group.slug,
+            description: group.description,
+            assignedTemplateCount: group._count.assignments,
+          }))}
           visualPresetOptions={templateVisualPresets.map((presetId) => ({
             id: presetId,
             label: SPLIT_VERTICAL_VISUAL_PRESETS[presetId].label,

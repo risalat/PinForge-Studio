@@ -20,6 +20,10 @@ import {
 } from "@/lib/runtime-templates/validate";
 import type { RuntimeTemplateValidationResult } from "@/lib/runtime-templates/types";
 import { getSampleRuntimeTemplateRenderProps } from "@/lib/runtime-templates/sampleData";
+import {
+  buildTemplateGroupingMetadata,
+  resolveTemplateUserGroupsFromAssignments,
+} from "@/lib/templates/templateGroupMetadata";
 import { getPresetIdsForCategories } from "@/lib/templates/visualPresets";
 
 const runtimeTemplateTransactionOptions = {
@@ -112,7 +116,7 @@ export async function createStarterCustomTemplateDraft(input: {
 }
 
 export async function listCustomTemplatesForUser(userId: string) {
-  return prisma.template.findMany({
+  const templates = await prisma.template.findMany({
     where: {
       sourceKind: TemplateSourceKind.CUSTOM,
       createdByUserId: userId,
@@ -121,6 +125,12 @@ export async function listCustomTemplatesForUser(userId: string) {
       updatedAt: "desc",
     },
     include: {
+      _count: {
+        select: {
+          generationPlans: true,
+          generatedPins: true,
+        },
+      },
       activeVersion: {
         select: {
           id: true,
@@ -132,6 +142,18 @@ export async function listCustomTemplatesForUser(userId: string) {
           validationJson: true,
           createdAt: true,
           updatedAt: true,
+        },
+      },
+      templateGroupAssignments: {
+        select: {
+          group: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              sortOrder: true,
+            },
+          },
         },
       },
       versions: {
@@ -150,6 +172,21 @@ export async function listCustomTemplatesForUser(userId: string) {
         },
       },
     },
+  });
+
+  return templates.map((template) => {
+    const groupingMetadata = buildTemplateGroupingMetadata({
+      systemCategories: extractTemplateCategoriesFromSummaryJson(
+        template.activeVersion?.summaryJson ?? null,
+      ),
+      userGroups: resolveTemplateUserGroupsFromAssignments(template.templateGroupAssignments),
+    });
+
+    return {
+      ...template,
+      ...groupingMetadata,
+      templateCategories: groupingMetadata.systemCategories,
+    };
   });
 }
 
@@ -210,6 +247,18 @@ export async function getEditableRuntimeTemplateDraftForUser(input: {
     },
     include: {
       activeVersion: true,
+      templateGroupAssignments: {
+        select: {
+          group: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              sortOrder: true,
+            },
+          },
+        },
+      },
       versions: {
         orderBy: {
           versionNumber: "desc",
@@ -232,6 +281,18 @@ export async function getTemplateWithVersionsForUser(input: {
     },
     include: {
       activeVersion: true,
+      templateGroupAssignments: {
+        select: {
+          group: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              sortOrder: true,
+            },
+          },
+        },
+      },
       versions: {
         orderBy: {
           versionNumber: "desc",
@@ -248,8 +309,17 @@ export async function getTemplateWithVersionsForUser(input: {
     ? template.versions.find((version) => version.id === input.versionId) ?? template.activeVersion
     : template.activeVersion;
 
+  const groupingMetadata = buildTemplateGroupingMetadata({
+    systemCategories: extractTemplateCategoriesFromSummaryJson(
+      selectedVersion?.summaryJson ?? template.activeVersion?.summaryJson ?? null,
+    ),
+    userGroups: resolveTemplateUserGroupsFromAssignments(template.templateGroupAssignments),
+  });
+
   return {
     ...template,
+    ...groupingMetadata,
+    templateCategories: groupingMetadata.systemCategories,
     selectedVersion,
   };
 }
@@ -670,6 +740,60 @@ export async function archiveRuntimeTemplateForUser(input: {
   });
 }
 
+export async function deleteRuntimeTemplateForUser(input: {
+  userId: string;
+  templateId: string;
+}) {
+  const template = await prisma.template.findFirst({
+    where: {
+      id: input.templateId,
+      createdByUserId: input.userId,
+      sourceKind: TemplateSourceKind.CUSTOM,
+      rendererKind: TemplateRendererKind.RUNTIME_SCHEMA,
+    },
+    include: {
+      versions: {
+        select: {
+          lifecycleStatus: true,
+        },
+      },
+      _count: {
+        select: {
+          generationPlans: true,
+          generatedPins: true,
+        },
+      },
+    },
+  });
+
+  if (!template) {
+    throw new Error("Runtime template not found.");
+  }
+
+  const hasFinalizedVersion = template.versions.some(
+    (version) => version.lifecycleStatus === TemplateLifecycleStatus.FINALIZED,
+  );
+
+  if (hasFinalizedVersion) {
+    throw new Error("Finalized custom templates cannot be deleted. Archive them instead.");
+  }
+
+  if (template._count.generationPlans > 0 || template._count.generatedPins > 0) {
+    throw new Error("Templates already used in plans or generated pins cannot be deleted.");
+  }
+
+  await prisma.template.delete({
+    where: {
+      id: template.id,
+    },
+  });
+
+  return {
+    deleted: true,
+    templateId: template.id,
+  };
+}
+
 export function createRuntimeTemplateVersionSnapshot(input: {
   document: RuntimeTemplateDocument;
 }) {
@@ -833,4 +957,17 @@ function slugifyTemplateName(input: string) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
   return normalized || "custom-template";
+}
+
+function extractTemplateCategoriesFromSummaryJson(summaryJson: Prisma.JsonValue | null) {
+  if (!summaryJson || typeof summaryJson !== "object" || Array.isArray(summaryJson)) {
+    return [];
+  }
+
+  const templateCategories = (summaryJson as Record<string, unknown>).templateCategories;
+  if (!Array.isArray(templateCategories)) {
+    return [];
+  }
+
+  return templateCategories.filter((value): value is string => typeof value === "string");
 }

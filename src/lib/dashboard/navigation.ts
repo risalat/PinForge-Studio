@@ -135,7 +135,7 @@ export function getDashboardPageTitle(pathname: string) {
     return {
       eyebrow: "Library",
       title: "Template and preset library",
-      description: "Browse templates, slot counts, and visual presets.",
+      description: "Browse templates, My groups, System tags, and visual presets.",
       primaryActionLabel: "Open jobs board",
       primaryActionHref: "/dashboard/jobs",
       secondaryActionLabel: "Publishing queue",
@@ -146,8 +146,8 @@ export function getDashboardPageTitle(pathname: string) {
   if (pathname === "/dashboard/templates") {
     return {
       eyebrow: "Templates",
-      title: "Custom runtime templates",
-      description: "Create starter drafts and inspect versioned runtime-template records.",
+      title: "Templates and template groups",
+      description: "Manage custom templates, My groups, and library-ready template organization from one place.",
       primaryActionLabel: "Library",
       primaryActionHref: "/dashboard/library",
       secondaryActionLabel: "Jobs board",

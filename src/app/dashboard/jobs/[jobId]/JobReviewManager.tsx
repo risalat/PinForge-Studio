@@ -43,7 +43,22 @@ type TemplateOption = {
   supportedBindings: string[];
   allowedPresetCategories: string[];
   templateCategories: string[];
+  systemCategories: string[];
+  userGroups: Array<{
+    id: string;
+    name: string;
+    slug: string;
+  }>;
+  userGroupIds: string[];
   previewPath: string;
+};
+
+type TemplateGroupOption = {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  assignedTemplateCount: number;
 };
 
 type VisualPresetOption = {
@@ -201,6 +216,7 @@ type JobReviewManagerProps = {
   defaultAiCredentialId: string;
   images: SourceImageItem[];
   templates: TemplateOption[];
+  templateGroups: TemplateGroupOption[];
   visualPresetOptions: VisualPresetOption[];
   visualPresetCategories: VisualPresetCategoryOption[];
   plans: PlanItem[];
@@ -218,6 +234,7 @@ export function JobReviewManager({
   defaultAiCredentialId,
   images: initialImages,
   templates,
+  templateGroups,
   visualPresetOptions,
   visualPresetCategories,
   plans,
@@ -230,22 +247,14 @@ export function JobReviewManager({
   const [images, setImages] = useState(initialImages);
   const [pinCount, setPinCount] = useState(3);
   const [selectedTemplateIds, setSelectedTemplateIds] = useState(
-    (() => {
-      const builtInSelectionKeys = templates
-        .filter((item) => item.sourceKind === "BUILTIN")
-        .map((item) => item.selectionKey);
-
-      return builtInSelectionKeys.length > 0
-        ? builtInSelectionKeys
-        : templates.map((item) => item.selectionKey);
-    })(),
+    templates.map((item) => item.selectionKey),
   );
   const [assistedTemplateSourceMode, setAssistedTemplateSourceMode] =
     useState<AssistedTemplateSourceMode>("built_in");
-  const [selectedTemplateCategoryIds, setSelectedTemplateCategoryIds] = useState<string[]>([]);
+  const [selectedTemplateGroupIds, setSelectedTemplateGroupIds] = useState<string[]>([]);
   const [selectedPresetCategoryIds, setSelectedPresetCategoryIds] = useState<string[]>([]);
   const [templateSearchQuery, setTemplateSearchQuery] = useState("");
-  const [templateCategorySearchQuery, setTemplateCategorySearchQuery] = useState("");
+  const [templateGroupSearchQuery, setTemplateGroupSearchQuery] = useState("");
   const [presetCategorySearchQuery, setPresetCategorySearchQuery] = useState("");
   const [allowAnyPresetOverride, setAllowAnyPresetOverride] = useState(false);
   const [assistedPresetStrategy, setAssistedPresetStrategy] = useState<
@@ -324,24 +333,6 @@ export function JobReviewManager({
   const selectedImages = images.filter((image) => image.isSelected);
   const manualTemplate =
     templates.find((item) => item.selectionKey === manualTemplateId) ?? null;
-  const templateCategoryOptions = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          templates.flatMap((template) =>
-            template.templateCategories
-              .map((category) => category.trim())
-              .filter(Boolean),
-          ),
-        ),
-      )
-        .sort((left, right) => left.localeCompare(right))
-        .map((category) => ({
-          id: category,
-          label: formatTemplateCategoryLabel(category),
-        })),
-    [templates],
-  );
   const templatesInSourceScope = useMemo(
     () =>
       templates.filter((template) =>
@@ -353,30 +344,66 @@ export function JobReviewManager({
       ),
     [assistedTemplateSourceMode, templates],
   );
-  const templatesInCategoryScope = useMemo(
+  const templateGroupsInScope = useMemo(
     () =>
-      selectedTemplateCategoryIds.length === 0
+      templateGroups.map((group) => ({
+        ...group,
+        eligibleTemplateCount: templatesInSourceScope.filter((template) =>
+          template.userGroupIds.includes(group.id),
+        ).length,
+      })),
+    [templateGroups, templatesInSourceScope],
+  );
+  const templatesInGroupScope = useMemo(
+    () =>
+      selectedTemplateGroupIds.length === 0
         ? templatesInSourceScope
         : templatesInSourceScope.filter((template) =>
-            template.templateCategories.some((category) =>
-              selectedTemplateCategoryIds.includes(category),
+            template.userGroupIds.some((groupId) =>
+              selectedTemplateGroupIds.includes(groupId),
             ),
           ),
-    [selectedTemplateCategoryIds, templatesInSourceScope],
+    [selectedTemplateGroupIds, templatesInSourceScope],
   );
-  const filteredTemplates = templatesInCategoryScope.filter((template) =>
-    template.name.toLowerCase().includes(templateSearchQuery.trim().toLowerCase()),
+  const selectedTemplateGroups = useMemo(
+    () =>
+      templateGroupsInScope.filter((group) => selectedTemplateGroupIds.includes(group.id)),
+    [selectedTemplateGroupIds, templateGroupsInScope],
   );
-  const filteredTemplateCategories = templateCategoryOptions.filter((category) => {
-    const query = templateCategorySearchQuery.trim().toLowerCase();
+  const filteredTemplates = templatesInGroupScope.filter((template) => {
+    const query = templateSearchQuery.trim().toLowerCase();
     if (!query) {
       return true;
     }
 
-    return category.label.toLowerCase().includes(query);
+    return [
+      template.name,
+      ...template.systemCategories,
+      ...template.userGroups.map((group) => group.name),
+    ].some((value) => value.toLowerCase().includes(query));
   });
-  const activeSelectedTemplates = templatesInCategoryScope.filter((template) =>
+  const filteredTemplateGroups = templateGroupsInScope.filter((group) => {
+    const query = templateGroupSearchQuery.trim().toLowerCase();
+    if (!query) {
+      return true;
+    }
+
+    return [group.name, group.slug, group.description ?? ""].some((value) =>
+      value.toLowerCase().includes(query),
+    );
+  });
+  const activeSelectedTemplates = templatesInGroupScope.filter((template) =>
     selectedTemplateIds.includes(template.selectionKey),
+  );
+  const noTemplatesInSourceScope = templatesInSourceScope.length === 0;
+  const hasGroupedTemplatesExcludedFromPlanning = selectedTemplateGroups.some(
+    (group) => group.assignedTemplateCount > group.eligibleTemplateCount,
+  );
+  const hasSelectedGroupWithOnlyIneligibleTemplates = selectedTemplateGroups.some(
+    (group) => group.assignedTemplateCount > 0 && group.eligibleTemplateCount === 0,
+  );
+  const hasSelectedEmptyTemplateGroup = selectedTemplateGroups.some(
+    (group) => group.assignedTemplateCount === 0,
   );
   const filteredPresetCategories = visualPresetCategories.filter((category) => {
     const query = presetCategorySearchQuery.trim().toLowerCase();
@@ -470,24 +497,6 @@ export function JobReviewManager({
       ? generatedPins[previewPinIndex]
       : null;
 
-  useEffect(() => {
-    if (templatesInCategoryScope.length === 0) {
-      return;
-    }
-
-    const hasSelectionInScope = templatesInCategoryScope.some((template) =>
-      selectedTemplateIds.includes(template.selectionKey),
-    );
-
-    if (!hasSelectionInScope) {
-      setSelectedTemplateIds((current) =>
-        Array.from(
-          new Set([...current, ...templatesInCategoryScope.map((template) => template.selectionKey)]),
-        ),
-      );
-    }
-  }, [selectedTemplateIds, templatesInCategoryScope]);
-
   function getButtonClass(options: {
     tone: "accent" | "danger" | "neutral";
     busy?: boolean;
@@ -523,11 +532,11 @@ export function JobReviewManager({
     );
   }
 
-  function toggleTemplateCategory(categoryId: string) {
-    setSelectedTemplateCategoryIds((current) =>
-      current.includes(categoryId)
-        ? current.filter((item) => item !== categoryId)
-        : [...current, categoryId],
+  function toggleTemplateGroup(groupId: string) {
+    setSelectedTemplateGroupIds((current) =>
+      current.includes(groupId)
+        ? current.filter((item) => item !== groupId)
+        : [...current, groupId],
     );
   }
 
@@ -551,17 +560,17 @@ export function JobReviewManager({
     setSelectedTemplateIds((current) =>
       current.filter(
         (item) =>
-          !templatesInCategoryScope.some((template) => template.selectionKey === item),
+          !templatesInGroupScope.some((template) => template.selectionKey === item),
       ),
     );
   }
 
-  function clearTemplateCategorySelection() {
-    setSelectedTemplateCategoryIds([]);
+  function clearTemplateGroupSelection() {
+    setSelectedTemplateGroupIds([]);
   }
 
-  function selectAllTemplateCategories() {
-    setSelectedTemplateCategoryIds(templateCategoryOptions.map((item) => item.id));
+  function selectAllTemplateGroups() {
+    setSelectedTemplateGroupIds(templateGroupsInScope.map((item) => item.id));
   }
 
   function clearPresetCategorySelection() {
@@ -978,9 +987,16 @@ export function JobReviewManager({
     setActiveAction({ kind: "assisted" });
     try {
       setPlansFeedback(null);
-      const selectedTemplates = templatesInCategoryScope.filter((template) =>
+      const selectedTemplates = templatesInGroupScope.filter((template) =>
         selectedTemplateIds.includes(template.selectionKey),
       );
+      if (selectedTemplates.length === 0) {
+        throw new Error(
+          selectedTemplateGroupIds.length > 0
+            ? "The selected template groups do not currently expose any eligible templates for assisted planning."
+            : "Select at least one eligible template for assisted planning.",
+        );
+      }
       const result = await runAction(`/api/dashboard/jobs/${jobId}/plans`, {
         mode: "assisted_auto",
         pinCount: Math.max(1, Number.isFinite(pinCount) ? pinCount : 1),
@@ -1747,14 +1763,194 @@ export function JobReviewManager({
                 </label>
               </div>
 
+              <div className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-4">
+                <div className="flex flex-wrap gap-2">
+                  {([
+                    ["built_in", "Built-in only"],
+                    ["custom", "Custom only"],
+                    ["all", "All templates"],
+                  ] as const).map(([mode, label]) => {
+                    const active = assistedTemplateSourceMode === mode;
+                    return (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => setAssistedTemplateSourceMode(mode)}
+                        className={`rounded-full border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] ${
+                          active
+                            ? "border-[var(--dashboard-accent)] bg-[var(--dashboard-accent-soft)] text-[var(--dashboard-accent-strong)]"
+                            : "border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] text-[var(--dashboard-muted)]"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="mt-4 grid gap-3 md:grid-cols-3">
+                  <PlannerSummaryCard
+                    label="Templates in scope"
+                    value={String(templatesInSourceScope.length)}
+                    detail="Current source filter"
+                  />
+                  <PlannerSummaryCard
+                    label="Eligible after groups"
+                    value={String(templatesInGroupScope.length)}
+                    detail={
+                      selectedTemplateGroupIds.length === 0
+                        ? "No group selected"
+                        : "Union of selected groups"
+                    }
+                  />
+                  <PlannerSummaryCard
+                    label="Selected for planning"
+                    value={String(activeSelectedTemplates.length)}
+                    detail="Advanced template filter"
+                  />
+                </div>
+                {noTemplatesInSourceScope ? (
+                  <div className="mt-3 rounded-xl border border-[var(--dashboard-warning-border)] bg-[var(--dashboard-warning-soft)] px-4 py-3 text-sm text-[var(--dashboard-warning-ink)]">
+                    No eligible templates are available in the current source scope.
+                  </div>
+                ) : selectedTemplateGroupIds.length === 0 ? (
+                  <p className="mt-3 text-sm text-[var(--dashboard-subtle)]">
+                    No template groups selected. Assisted planning will use all eligible templates in the current source scope.
+                  </p>
+                ) : templatesInGroupScope.length === 0 ? (
+                  <div className="mt-3 rounded-xl border border-[var(--dashboard-warning-border)] bg-[var(--dashboard-warning-soft)] px-4 py-3 text-sm text-[var(--dashboard-warning-ink)]">
+                    {hasSelectedGroupWithOnlyIneligibleTemplates
+                      ? "The selected template groups currently contain only ineligible templates for assisted planning. Draft and archived custom templates stay excluded here."
+                      : "No eligible templates remain after the current source scope and template group filters."}
+                  </div>
+                ) : hasGroupedTemplatesExcludedFromPlanning ? (
+                  <div className="mt-3 rounded-xl border border-[var(--dashboard-warning-border)] bg-[var(--dashboard-warning-soft)] px-4 py-3 text-sm text-[var(--dashboard-warning-ink)]">
+                    Some grouped templates are not currently eligible for assisted planning and were excluded.
+                  </div>
+                ) : (
+                  <p className="mt-3 text-sm text-[var(--dashboard-subtle)]">
+                    Template groups are the primary organizer here. Direct template selection below is an optional extra filter.
+                  </p>
+                )}
+              </div>
+
               <details className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)]">
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3">
                   <div>
-                    <p className="text-sm font-semibold text-[var(--dashboard-subtle)]">Eligible templates</p>
+                    <p className="text-sm font-bold text-[var(--dashboard-text)]">Template groups</p>
+                    <p className="mt-1 text-sm text-[var(--dashboard-subtle)]">
+                      {selectedTemplateGroupIds.length === 0
+                        ? "No groups selected. All templates in scope remain eligible."
+                        : `${selectedTemplateGroupIds.length} group${selectedTemplateGroupIds.length === 1 ? "" : "s"} selected`}
+                    </p>
+                  </div>
+                  <span className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-muted)]">
+                    Manage
+                  </span>
+                </summary>
+                <div className="border-t border-[var(--dashboard-line)] px-4 py-4">
+                  <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
+                    Search groups
+                    <input
+                      value={templateGroupSearchQuery}
+                      onChange={(event) => setTemplateGroupSearchQuery(event.target.value)}
+                      placeholder="Group name"
+                      className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-2"
+                    />
+                  </label>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={selectAllTemplateGroups}
+                      className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-muted)]"
+                    >
+                      Select visible groups
+                    </button>
+                    <button
+                      type="button"
+                      onClick={clearTemplateGroupSelection}
+                      className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-muted)]"
+                    >
+                      Use all templates
+                    </button>
+                    <Link
+                      href="/dashboard/templates?view=groups"
+                      className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-muted)]"
+                    >
+                      Manage My groups
+                    </Link>
+                  </div>
+                  <p className="mt-3 text-sm text-[var(--dashboard-subtle)]">
+                    Only built-in templates and finalized custom templates are eligible in assisted planning. Group members outside that set stay excluded here.
+                  </p>
+                  <div className="mt-3 max-h-72 space-y-2 overflow-y-auto pr-1">
+                    {templateGroupsInScope.length === 0 ? (
+                      <div className="rounded-xl border border-dashed border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-5 text-sm text-[var(--dashboard-subtle)]">
+                        No template groups yet. Create template groups from the Templates page when you want reusable template selections.
+                      </div>
+                    ) : filteredTemplateGroups.length === 0 ? (
+                      <p className="text-sm text-[var(--dashboard-subtle)]">No template groups match this search.</p>
+                    ) : (
+                      filteredTemplateGroups.map((group) => {
+                        const active = selectedTemplateGroupIds.includes(group.id);
+                        return (
+                          <label
+                            key={group.id}
+                            className={`flex items-start justify-between gap-3 rounded-xl border px-3 py-3 ${
+                              active
+                                ? "border-[var(--dashboard-accent)] bg-[var(--dashboard-accent-soft)]"
+                                : "border-[var(--dashboard-line)] bg-[var(--dashboard-panel)]"
+                            }`}
+                          >
+                            <span className="flex min-w-0 items-start gap-3">
+                              <input
+                                type="checkbox"
+                                checked={active}
+                                onChange={() => toggleTemplateGroup(group.id)}
+                                className="mt-1"
+                              />
+                              <span className="min-w-0">
+                                <span className="block text-sm font-semibold text-[var(--dashboard-text)]">
+                                  {group.name}
+                                </span>
+                              <span className="mt-1 block text-xs text-[var(--dashboard-muted)]">
+                                  {group.assignedTemplateCount} assigned / {group.eligibleTemplateCount} eligible here
+                                </span>
+                                {group.assignedTemplateCount === 0 ? (
+                                  <span className="mt-1 block text-xs text-[var(--dashboard-muted)]">
+                                    This template group is empty.
+                                  </span>
+                                ) : group.eligibleTemplateCount === 0 ? (
+                                  <span className="mt-1 block text-xs text-[var(--dashboard-warning-ink)]">
+                                    No templates in this group are eligible in the current planner scope.
+                                  </span>
+                                ) : group.assignedTemplateCount > group.eligibleTemplateCount ? (
+                                  <span className="mt-1 block text-xs text-[var(--dashboard-warning-ink)]">
+                                    Some templates in this group are currently excluded from assisted planning.
+                                  </span>
+                                ) : null}
+                                {group.description ? (
+                                  <span className="mt-1 block text-sm leading-6 text-[var(--dashboard-subtle)]">
+                                    {group.description}
+                                  </span>
+                                ) : null}
+                              </span>
+                            </span>
+                          </label>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              </details>
+
+              <details className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)]">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3">
+                  <div>
+                    <p className="text-sm font-semibold text-[var(--dashboard-subtle)]">Advanced template selection</p>
                     <p className="mt-1 text-sm font-bold text-[var(--dashboard-text)]">
-                      {activeSelectedTemplates.length === templatesInCategoryScope.length &&
-                      templatesInCategoryScope.length > 0
-                        ? `All ${templatesInCategoryScope.length} matching templates`
+                      {activeSelectedTemplates.length === templatesInGroupScope.length &&
+                      templatesInGroupScope.length > 0
+                        ? `All ${templatesInGroupScope.length} eligible templates selected`
                         : activeSelectedTemplates.length === 0
                           ? "No templates selected"
                           : `${activeSelectedTemplates.length} selected`}
@@ -1765,38 +1961,15 @@ export function JobReviewManager({
                   </span>
                 </summary>
                 <div className="border-t border-[var(--dashboard-line)] px-4 py-4">
-                  <div className="flex flex-wrap gap-2">
-                    {([
-                      ["built_in", "Built-in only"],
-                      ["custom", "Custom only"],
-                      ["all", "All templates"],
-                    ] as const).map(([mode, label]) => {
-                      const active = assistedTemplateSourceMode === mode;
-                      return (
-                        <button
-                          key={mode}
-                          type="button"
-                          onClick={() => setAssistedTemplateSourceMode(mode)}
-                          className={`rounded-full border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] ${
-                            active
-                              ? "border-[var(--dashboard-accent)] bg-[var(--dashboard-accent-soft)] text-[var(--dashboard-accent-strong)]"
-                              : "border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] text-[var(--dashboard-muted)]"
-                          }`}
-                        >
-                          {label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <div className="mt-3 rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-muted)]">
-                    Scope: {templatesInSourceScope.length} available · {templatesInCategoryScope.length} after bundle filters
-                  </div>
+                  <p className="text-sm text-[var(--dashboard-subtle)]">
+                    Use this as an advanced narrowing step after source scope and template group filtering.
+                  </p>
                   <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
                     Search templates
                     <input
                       value={templateSearchQuery}
                       onChange={(event) => setTemplateSearchQuery(event.target.value)}
-                      placeholder="Template name"
+                      placeholder="Template name, My group, or system tag"
                       className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-2"
                     />
                   </label>
@@ -1818,7 +1991,15 @@ export function JobReviewManager({
                   </div>
                   <div className="mt-3 max-h-72 space-y-2 overflow-y-auto pr-1">
                     {filteredTemplates.length === 0 ? (
-                      <p className="text-sm text-[var(--dashboard-subtle)]">No templates match this search.</p>
+                      <p className="text-sm text-[var(--dashboard-subtle)]">
+                        {templatesInGroupScope.length === 0
+                          ? noTemplatesInSourceScope
+                            ? "No eligible templates are available in the current source scope."
+                            : hasSelectedEmptyTemplateGroup
+                            ? "The selected template groups are empty, so there are no eligible templates to narrow further."
+                            : "No eligible templates are available after the current source scope and template group filters."
+                          : "No eligible templates match this search."}
+                      </p>
                     ) : (
                       filteredTemplates.map((template) => {
                         const active = selectedTemplateIds.includes(template.selectionKey);
@@ -1842,7 +2023,7 @@ export function JobReviewManager({
                                   {template.name}
                                 </span>
                                 <span className="block text-xs text-[var(--dashboard-muted)]">
-                                  {template.imageSlotCount} slots · {template.sourceKind === "CUSTOM" ? "custom" : "built-in"} · min {template.minImageSlotsRequired}
+                                  {template.imageSlotCount} slots / {template.sourceKind === "CUSTOM" ? "custom" : "built-in"} / min {template.minImageSlotsRequired}
                                 </span>
                               </span>
                             </span>
@@ -1854,81 +2035,6 @@ export function JobReviewManager({
                 </div>
               </details>
             </div>
-
-            <details className="mt-4 rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)]">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3">
-                <div>
-                  <p className="text-sm font-bold text-[var(--dashboard-text)]">Template bundles</p>
-                  <p className="mt-1 text-sm text-[var(--dashboard-subtle)]">
-                    {selectedTemplateCategoryIds.length === 0
-                      ? "All template bundles available"
-                      : `${selectedTemplateCategoryIds.length} bundle${selectedTemplateCategoryIds.length === 1 ? "" : "s"} selected`}
-                  </p>
-                </div>
-                <span className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-muted)]">
-                  Manage
-                </span>
-              </summary>
-              <div className="border-t border-[var(--dashboard-line)] px-4 py-4">
-                <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
-                  Search bundles
-                  <input
-                    value={templateCategorySearchQuery}
-                    onChange={(event) => setTemplateCategorySearchQuery(event.target.value)}
-                    placeholder="Bundle name"
-                    className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-2"
-                  />
-                </label>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={selectAllTemplateCategories}
-                    className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-muted)]"
-                  >
-                    Select all
-                  </button>
-                  <button
-                    type="button"
-                    onClick={clearTemplateCategorySelection}
-                    className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-muted)]"
-                  >
-                    Use all bundles
-                  </button>
-                </div>
-                <div className="mt-3 max-h-72 space-y-2 overflow-y-auto pr-1">
-                  {filteredTemplateCategories.length === 0 ? (
-                    <p className="text-sm text-[var(--dashboard-subtle)]">No template bundles match this search.</p>
-                  ) : (
-                    filteredTemplateCategories.map((category) => {
-                      const active = selectedTemplateCategoryIds.includes(category.id);
-                      return (
-                        <label
-                          key={category.id}
-                          className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-3 ${
-                            active
-                              ? "border-[var(--dashboard-accent)] bg-[var(--dashboard-accent-soft)]"
-                              : "border-[var(--dashboard-line)] bg-[var(--dashboard-panel)]"
-                          }`}
-                        >
-                          <span className="flex min-w-0 items-center gap-3">
-                            <input
-                              type="checkbox"
-                              checked={active}
-                              onChange={() => toggleTemplateCategory(category.id)}
-                            />
-                            <span className="min-w-0">
-                              <span className="block text-sm font-semibold text-[var(--dashboard-text)]">
-                                {category.label}
-                              </span>
-                            </span>
-                          </span>
-                        </label>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-            </details>
 
             <label className="mt-4 flex items-center gap-3 rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-4 py-3 text-sm text-[var(--dashboard-subtle)]">
               <input
@@ -3665,6 +3771,26 @@ function SelectionChip({ label, onClick }: { label: string; onClick: () => void 
   );
 }
 
+function PlannerSummaryCard({
+  label,
+  value,
+  detail,
+}: {
+  label: string;
+  value: string;
+  detail: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--dashboard-muted)]">
+        {label}
+      </p>
+      <p className="mt-2 text-2xl font-black text-[var(--dashboard-text)]">{value}</p>
+      <p className="mt-1 text-sm text-[var(--dashboard-subtle)]">{detail}</p>
+    </div>
+  );
+}
+
 function toneForPlanStatus(status: string) {
   if (status === "GENERATED") {
     return "good" as const;
@@ -3883,14 +4009,6 @@ function persistReviewGridFilter(jobId: string, value: ReviewGridFilter) {
   } catch {
     // Ignore session storage failures and keep the current review flow usable.
   }
-}
-
-function formatTemplateCategoryLabel(value: string) {
-  return value
-    .split(/[-_]/g)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
 }
 
 function extractTaskPlanIds(task: RenderTaskState) {

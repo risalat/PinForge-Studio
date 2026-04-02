@@ -78,6 +78,7 @@ import {
   type PlanRenderContext,
 } from "@/lib/templates/planRenderContext";
 import { getTemplateConfig, TEMPLATE_CONFIGS } from "@/lib/templates/registry";
+import { ensureBuiltInTemplateRecord } from "@/lib/templates/templateRecords";
 import {
   buildTemplateSelectionKey,
   resolveSelectableTemplateCandidateForUser,
@@ -897,7 +898,7 @@ export async function createAssistedGenerationPlans(input: {
 
   await prisma.$transaction([
     ...templatesToUpsert.map((template) =>
-      upsertBuiltInTemplateRecord(template.templateId),
+      ensureBuiltInTemplateRecord(template.templateId),
     ),
     ...orderedPreparedPlans.map((preparedPlan) =>
       prisma.generationPlan.create({
@@ -1096,7 +1097,7 @@ export async function createManualGenerationPlan(input: {
   assertTemplateCanUseImageCount(template, chosenIds.length);
 
   if (template.sourceKind === "BUILTIN") {
-    await upsertBuiltInTemplateRecord(template.templateId);
+    await ensureBuiltInTemplateRecord(template.templateId);
   }
 
   const assignedSourceImageIds =
@@ -1181,30 +1182,6 @@ async function resolveGenerationTemplatesForSelections(
   }
 
   return resolvedTemplates;
-}
-
-function upsertBuiltInTemplateRecord(templateId: string) {
-  const templateConfig = getTemplateConfig(templateId);
-  if (!templateConfig) {
-    throw new Error(`Unknown built-in template: ${templateId}`);
-  }
-
-  return prisma.template.upsert({
-    where: { id: templateConfig.id },
-    update: {
-      name: templateConfig.name,
-      componentKey: templateConfig.componentKey,
-      configJson: templateConfig as unknown as Prisma.InputJsonValue,
-      isActive: true,
-    },
-    create: {
-      id: templateConfig.id,
-      name: templateConfig.name,
-      componentKey: templateConfig.componentKey,
-      configJson: templateConfig as unknown as Prisma.InputJsonValue,
-      isActive: true,
-    },
-  });
 }
 
 function assertTemplateCanUseImageCount(

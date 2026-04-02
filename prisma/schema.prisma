@@ -3,8 +3,8 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
 
@@ -150,60 +150,61 @@ enum TemplateRendererKind {
 }
 
 model User {
-  id                  String   @id @default(cuid())
-  authUserId          String?  @unique
-  email               String   @unique
-  createdAt           DateTime @default(now())
-  apiKeys             ApiKey[]
-  aiCredentials       AiCredential[]
-  generationJobs      GenerationJob[]
-  integrationSettings UserIntegrationSettings?
-  publicationRecords  PublicationRecord[]
-  publicationSyncStates PublicationSyncState[]
-  workspaceProfiles   WorkspaceProfile[]
-  freshTargetSnoozes  FreshTargetSnooze[]
-  backgroundTasks     BackgroundTask[]
-  publerMetadataCaches PublerMetadataCache[]
-  postPulseSnapshots  PostPulseSnapshot[]
-  createdTemplates    Template[]        @relation("UserCreatedTemplates")
-  createdTemplateVersions TemplateVersion[] @relation("UserCreatedTemplateVersions")
+  id                      String                   @id @default(cuid())
+  authUserId              String?                  @unique
+  email                   String                   @unique
+  createdAt               DateTime                 @default(now())
+  apiKeys                 ApiKey[]
+  aiCredentials           AiCredential[]
+  generationJobs          GenerationJob[]
+  integrationSettings     UserIntegrationSettings?
+  publicationRecords      PublicationRecord[]
+  publicationSyncStates   PublicationSyncState[]
+  workspaceProfiles       WorkspaceProfile[]
+  freshTargetSnoozes      FreshTargetSnooze[]
+  backgroundTasks         BackgroundTask[]
+  publerMetadataCaches    PublerMetadataCache[]
+  postPulseSnapshots      PostPulseSnapshot[]
+  createdTemplates        Template[]               @relation("UserCreatedTemplates")
+  createdTemplateVersions TemplateVersion[]        @relation("UserCreatedTemplateVersions")
+  templateGroups          TemplateGroup[]
 }
 
 model Post {
-  id        String          @id @default(cuid())
-  url       String          @unique
-  title     String
-  domain    String
-  createdAt DateTime        @default(now())
-  updatedAt DateTime        @updatedAt
-  jobs      GenerationJob[]
+  id                 String              @id @default(cuid())
+  url                String              @unique
+  title              String
+  domain             String
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  jobs               GenerationJob[]
   publicationRecords PublicationRecord[]
   freshTargetSnoozes FreshTargetSnooze[]
   postPulseSnapshots PostPulseSnapshot[]
 }
 
 model PostPulseSnapshot {
-  id                 String                   @id @default(cuid())
-  userId             String
-  postId             String
-  workspaceId        String                   @default("")
-  latestJobId        String?
-  totalJobs          Int                      @default(0)
-  totalGeneratedPins Int                      @default(0)
-  totalPublerRecords Int                      @default(0)
-  publishedCount     Int                      @default(0)
-  scheduledCount     Int                      @default(0)
-  lastGeneratedAt    DateTime?
-  lastPublishedAt    DateTime?
-  lastScheduledAt    DateTime?
-  lastSyncedAt       DateTime?
-  freshnessStatus    PostPulseFreshnessStatus @default(NO_PINS_YET)
-  freshnessAgeDays   Int?
+  id                     String                   @id @default(cuid())
+  userId                 String
+  postId                 String
+  workspaceId            String                   @default("")
+  latestJobId            String?
+  totalJobs              Int                      @default(0)
+  totalGeneratedPins     Int                      @default(0)
+  totalPublerRecords     Int                      @default(0)
+  publishedCount         Int                      @default(0)
+  scheduledCount         Int                      @default(0)
+  lastGeneratedAt        DateTime?
+  lastPublishedAt        DateTime?
+  lastScheduledAt        DateTime?
+  lastSyncedAt           DateTime?
+  freshnessStatus        PostPulseFreshnessStatus @default(NO_PINS_YET)
+  freshnessAgeDays       Int?
   recentActivityDotsJson Json?
-  createdAt          DateTime                 @default(now())
-  updatedAt          DateTime                 @updatedAt
-  user               User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  post               Post                     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime                 @updatedAt
+  user                   User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post                   Post                     @relation(fields: [postId], references: [id], onDelete: Cascade)
 
   @@unique([userId, postId, workspaceId])
   @@index([userId, workspaceId, freshnessStatus, updatedAt])
@@ -211,44 +212,44 @@ model PostPulseSnapshot {
 }
 
 model FreshTargetSnooze {
-  id          String   @id @default(cuid())
-  userId      String
-  postId      String
-  workspaceId String   @default("")
+  id           String   @id @default(cuid())
+  userId       String
+  postId       String
+  workspaceId  String   @default("")
   snoozedUntil DateTime
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  post        Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post         Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
 
   @@unique([userId, postId, workspaceId])
   @@index([userId, workspaceId, snoozedUntil])
 }
 
 model GenerationJob {
-  id                 String              @id @default(cuid())
-  userId             String
-  postId             String
-  postUrlSnapshot    String
+  id                   String              @id @default(cuid())
+  userId               String
+  postId               String
+  postUrlSnapshot      String
   articleTitleSnapshot String
-  domainSnapshot     String
-  status             GenerationJobStatus @default(RECEIVED)
-  globalKeywords     String[] @default([])
-  titleStyle         String?
-  toneHint           String?
-  listCountHint      Int?
-  titleVariationCount Int?
-  requestedPinCount  Int?
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
-  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  post               Post                @relation(fields: [postId], references: [id], onDelete: Cascade)
-  sourceImages       JobSourceImage[]
-  generationPlans    GenerationPlan[]
-  generatedPins      GeneratedPin[]
-  milestones         JobMilestone[]
-  scheduleRuns       ScheduleRun[]
-  backgroundTasks    BackgroundTask[]
+  domainSnapshot       String
+  status               GenerationJobStatus @default(RECEIVED)
+  globalKeywords       String[]            @default([])
+  titleStyle           String?
+  toneHint             String?
+  listCountHint        Int?
+  titleVariationCount  Int?
+  requestedPinCount    Int?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  user                 User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post                 Post                @relation(fields: [postId], references: [id], onDelete: Cascade)
+  sourceImages         JobSourceImage[]
+  generationPlans      GenerationPlan[]
+  generatedPins        GeneratedPin[]
+  milestones           JobMilestone[]
+  scheduleRuns         ScheduleRun[]
+  backgroundTasks      BackgroundTask[]
 
   @@index([userId, status, createdAt])
   @@index([postId, createdAt])
@@ -257,46 +258,46 @@ model GenerationJob {
 }
 
 model JobSourceImage {
-  id                     String   @id @default(cuid())
-  jobId                   String
+  id                     String                          @id @default(cuid())
+  jobId                  String
   url                    String
   alt                    String?
   caption                String?
   nearestHeading         String?
-  sectionHeadingPath     String[] @default([])
+  sectionHeadingPath     String[]                        @default([])
   surroundingTextSnippet String?
-  isSelected             Boolean  @default(true)
-  isPreferred            Boolean  @default(false)
-  sortOrder              Int      @default(0)
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
-  job                    GenerationJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  isSelected             Boolean                         @default(true)
+  isPreferred            Boolean                         @default(false)
+  sortOrder              Int                             @default(0)
+  createdAt              DateTime                        @default(now())
+  updatedAt              DateTime                        @updatedAt
+  job                    GenerationJob                   @relation(fields: [jobId], references: [id], onDelete: Cascade)
   planAssignments        GenerationPlanImageAssignment[]
 
   @@index([jobId, sortOrder])
 }
 
 model GenerationPlan {
-  id               String               @id @default(cuid())
-  jobId            String
-  mode             GenerationPlanMode
-  templateId       String
-  templateVersionId String?
-  sortOrder        Int                  @default(0)
-  status           GenerationPlanStatus @default(DRAFT)
-  artworkReviewState ArtworkReviewState @default(NORMAL)
-  artworkFlagReason String?
+  id                  String                          @id @default(cuid())
+  jobId               String
+  mode                GenerationPlanMode
+  templateId          String
+  templateVersionId   String?
+  sortOrder           Int                             @default(0)
+  status              GenerationPlanStatus            @default(DRAFT)
+  artworkReviewState  ArtworkReviewState              @default(NORMAL)
+  artworkFlagReason   String?
   rerenderRequestedAt DateTime?
-  rerenderError    String?
-  notes            String?
-  createdAt        DateTime             @default(now())
-  updatedAt        DateTime             @updatedAt
-  job              GenerationJob        @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  template         Template             @relation(fields: [templateId], references: [id], onDelete: Restrict)
-  templateVersion  TemplateVersion?     @relation(fields: [templateVersionId], references: [id], onDelete: SetNull)
-  imageAssignments GenerationPlanImageAssignment[]
-  generatedPins    GeneratedPin[]
-  backgroundTasks  BackgroundTask[]
+  rerenderError       String?
+  notes               String?
+  createdAt           DateTime                        @default(now())
+  updatedAt           DateTime                        @updatedAt
+  job                 GenerationJob                   @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  template            Template                        @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  templateVersion     TemplateVersion?                @relation(fields: [templateVersionId], references: [id], onDelete: SetNull)
+  imageAssignments    GenerationPlanImageAssignment[]
+  generatedPins       GeneratedPin[]
+  backgroundTasks     BackgroundTask[]
 
   @@index([jobId, status, sortOrder])
   @@index([jobId, artworkReviewState, sortOrder])
@@ -317,24 +318,24 @@ model GenerationPlanImageAssignment {
 }
 
 model GeneratedPin {
-  id               String            @id @default(cuid())
-  jobId             String
-  planId            String
-  templateId        String
-  templateVersionId String?
-  exportPath        String
-  storageKey        String?
-  createdAt         DateTime         @default(now())
-  updatedAt         DateTime         @updatedAt
-  job               GenerationJob    @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  plan              GenerationPlan   @relation(fields: [planId], references: [id], onDelete: Cascade)
-  template          Template         @relation(fields: [templateId], references: [id], onDelete: Restrict)
-  templateVersion   TemplateVersion? @relation(fields: [templateVersionId], references: [id], onDelete: SetNull)
-  pinCopy           PinCopy?
-  publerMedia       PublerMedia?
-  scheduleRunItems  ScheduleRunItem[]
+  id                 String              @id @default(cuid())
+  jobId              String
+  planId             String
+  templateId         String
+  templateVersionId  String?
+  exportPath         String
+  storageKey         String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  job                GenerationJob       @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  plan               GenerationPlan      @relation(fields: [planId], references: [id], onDelete: Cascade)
+  template           Template            @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  templateVersion    TemplateVersion?    @relation(fields: [templateVersionId], references: [id], onDelete: SetNull)
+  pinCopy            PinCopy?
+  publerMedia        PublerMedia?
+  scheduleRunItems   ScheduleRunItem[]
   publicationRecords PublicationRecord[]
-  backgroundTasks   BackgroundTask[]
+  backgroundTasks    BackgroundTask[]
 
   @@index([jobId, createdAt])
   @@index([planId])
@@ -342,27 +343,27 @@ model GeneratedPin {
 }
 
 model PublicationRecord {
-  id               String                 @id @default(cuid())
-  userId           String
-  postId           String
-  generatedPinId   String?
-  providerPostId   String
+  id                  String                 @id @default(cuid())
+  userId              String
+  postId              String
+  generatedPinId      String?
+  providerPostId      String
   providerWorkspaceId String?
-  providerPostLink String?
-  providerAccountId String?
-  providerBoardId  String?
-  state            PublicationRecordState
-  rawState         String
-  postUrl          String
-  scheduledAt      DateTime?
-  publishedAt      DateTime?
-  rawPayload       Json?
-  syncedAt         DateTime               @default(now())
-  createdAt        DateTime               @default(now())
-  updatedAt        DateTime               @updatedAt
-  user             User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  post             Post                   @relation(fields: [postId], references: [id], onDelete: Cascade)
-  generatedPin     GeneratedPin?          @relation(fields: [generatedPinId], references: [id], onDelete: SetNull)
+  providerPostLink    String?
+  providerAccountId   String?
+  providerBoardId     String?
+  state               PublicationRecordState
+  rawState            String
+  postUrl             String
+  scheduledAt         DateTime?
+  publishedAt         DateTime?
+  rawPayload          Json?
+  syncedAt            DateTime               @default(now())
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+  user                User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post                Post                   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  generatedPin        GeneratedPin?          @relation(fields: [generatedPinId], references: [id], onDelete: SetNull)
 
   @@unique([userId, providerPostId])
   @@index([postId, state, publishedAt])
@@ -374,88 +375,119 @@ model PublicationRecord {
 }
 
 model PublicationSyncState {
-  id                String              @id @default(cuid())
-  userId            String
-  workspaceId       String
-  mode              PublicationSyncMode @default(BACKFILL)
-  nextPage          Int                 @default(0)
-  lastCompletedAt   DateTime?
-  lastRunAt         DateTime?
-  lastError         String?
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-  user              User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id              String              @id @default(cuid())
+  userId          String
+  workspaceId     String
+  mode            PublicationSyncMode @default(BACKFILL)
+  nextPage        Int                 @default(0)
+  lastCompletedAt DateTime?
+  lastRunAt       DateTime?
+  lastError       String?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  user            User                @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, workspaceId])
   @@index([userId, mode, updatedAt])
 }
 
 model Template {
-  id              String                 @id @default(cuid())
-  name            String
-  componentKey    String                 @unique
-  configJson      Json
-  isActive        Boolean                @default(true)
-  sourceKind      TemplateSourceKind     @default(BUILTIN)
-  rendererKind    TemplateRendererKind   @default(BUILTIN_COMPONENT)
-  lifecycleStatus TemplateLifecycleStatus @default(FINALIZED)
-  slug            String?                @unique
-  description     String?
-  createdByUserId String?
-  activeVersionId String?                @unique
-  thumbnailPath   String?
-  previewImagePath String?
-  canvasWidth     Int                    @default(1080)
-  canvasHeight    Int                    @default(1920)
-  createdAt       DateTime               @default(now())
-  updatedAt       DateTime               @updatedAt
-  createdByUser   User?                  @relation("UserCreatedTemplates", fields: [createdByUserId], references: [id], onDelete: SetNull)
-  activeVersion   TemplateVersion?       @relation("ActiveTemplateVersion", fields: [activeVersionId], references: [id], onDelete: SetNull)
-  versions        TemplateVersion[]      @relation("TemplateVersions")
-  generatedPins   GeneratedPin[]
-  generationPlans GenerationPlan[]
+  id                       String                    @id @default(cuid())
+  name                     String
+  componentKey             String                    @unique
+  configJson               Json
+  isActive                 Boolean                   @default(true)
+  sourceKind               TemplateSourceKind        @default(BUILTIN)
+  rendererKind             TemplateRendererKind      @default(BUILTIN_COMPONENT)
+  lifecycleStatus          TemplateLifecycleStatus   @default(FINALIZED)
+  slug                     String?                   @unique
+  description              String?
+  createdByUserId          String?
+  activeVersionId          String?                   @unique
+  thumbnailPath            String?
+  previewImagePath         String?
+  canvasWidth              Int                       @default(1080)
+  canvasHeight             Int                       @default(1920)
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+  createdByUser            User?                     @relation("UserCreatedTemplates", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  activeVersion            TemplateVersion?          @relation("ActiveTemplateVersion", fields: [activeVersionId], references: [id], onDelete: SetNull)
+  versions                 TemplateVersion[]         @relation("TemplateVersions")
+  generatedPins            GeneratedPin[]
+  generationPlans          GenerationPlan[]
+  templateGroupAssignments TemplateGroupAssignment[]
 
   @@index([sourceKind, lifecycleStatus, updatedAt])
   @@index([createdByUserId, updatedAt])
 }
 
 model TemplateVersion {
-  id               String                  @id @default(cuid())
-  templateId       String
-  versionNumber    Int
-  lifecycleStatus  TemplateLifecycleStatus @default(DRAFT)
-  schemaJson       Json
-  editorStateJson  Json?
-  summaryJson      Json?
-  validationJson   Json?
-  isActive         Boolean                 @default(false)
-  isLocked         Boolean                 @default(false)
-  createdByUserId  String?
-  createdAt        DateTime                @default(now())
-  updatedAt        DateTime                @updatedAt
-  template         Template                @relation("TemplateVersions", fields: [templateId], references: [id], onDelete: Cascade)
-  activeForTemplate Template?              @relation("ActiveTemplateVersion")
-  createdByUser    User?                   @relation("UserCreatedTemplateVersions", fields: [createdByUserId], references: [id], onDelete: SetNull)
-  generationPlans  GenerationPlan[]
-  generatedPins    GeneratedPin[]
+  id                String                  @id @default(cuid())
+  templateId        String
+  versionNumber     Int
+  lifecycleStatus   TemplateLifecycleStatus @default(DRAFT)
+  schemaJson        Json
+  editorStateJson   Json?
+  summaryJson       Json?
+  validationJson    Json?
+  isActive          Boolean                 @default(false)
+  isLocked          Boolean                 @default(false)
+  createdByUserId   String?
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+  template          Template                @relation("TemplateVersions", fields: [templateId], references: [id], onDelete: Cascade)
+  activeForTemplate Template?               @relation("ActiveTemplateVersion")
+  createdByUser     User?                   @relation("UserCreatedTemplateVersions", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  generationPlans   GenerationPlan[]
+  generatedPins     GeneratedPin[]
 
   @@unique([templateId, versionNumber])
   @@index([templateId, lifecycleStatus, createdAt])
   @@index([createdByUserId, createdAt])
 }
 
+model TemplateGroup {
+  id          String                    @id @default(cuid())
+  userId      String
+  name        String
+  slug        String
+  description String?
+  sortOrder   Int                       @default(0)
+  createdAt   DateTime                  @default(now())
+  updatedAt   DateTime                  @updatedAt
+  user        User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assignments TemplateGroupAssignment[]
+
+  @@unique([userId, slug])
+  @@unique([userId, name])
+  @@index([userId, sortOrder, name])
+}
+
+model TemplateGroupAssignment {
+  id         String        @id @default(cuid())
+  groupId    String
+  templateId String
+  createdAt  DateTime      @default(now())
+  group      TemplateGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  template   Template      @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, templateId])
+  @@index([groupId, createdAt])
+  @@index([templateId])
+}
+
 model PublerMedia {
-  id            String            @id @default(cuid())
-  generatedPinId String           @unique
-  status        MediaUploadStatus @default(PENDING)
-  uploadJobId   String?
-  mediaId       String?
-  sourceUrl     String?
-  errorMessage  String?
-  rawResponse   Json?
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
-  generatedPin  GeneratedPin      @relation(fields: [generatedPinId], references: [id], onDelete: Cascade)
+  id             String            @id @default(cuid())
+  generatedPinId String            @unique
+  status         MediaUploadStatus @default(PENDING)
+  uploadJobId    String?
+  mediaId        String?
+  sourceUrl      String?
+  errorMessage   String?
+  rawResponse    Json?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  generatedPin   GeneratedPin      @relation(fields: [generatedPinId], references: [id], onDelete: Cascade)
 
   @@index([status, createdAt])
 }
@@ -474,40 +506,40 @@ model PinCopy {
 }
 
 model ScheduleRun {
-  id             String            @id @default(cuid())
-  jobId          String
-  status         ScheduleRunStatus @default(DRAFT)
-  workspaceId    String?
-  accountId      String?
-  boardId        String?
-  firstPublishAt DateTime?
+  id              String            @id @default(cuid())
+  jobId           String
+  status          ScheduleRunStatus @default(DRAFT)
+  workspaceId     String?
+  accountId       String?
+  boardId         String?
+  firstPublishAt  DateTime?
   intervalMinutes Int?
-  jitterMinutes  Int?
-  errorMessage   String?
-  rawResponse    Json?
-  submittedAt    DateTime?
-  completedAt    DateTime?
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
-  job            GenerationJob     @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  items          ScheduleRunItem[]
+  jitterMinutes   Int?
+  errorMessage    String?
+  rawResponse     Json?
+  submittedAt     DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  job             GenerationJob     @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  items           ScheduleRunItem[]
 
   @@index([jobId, status, createdAt])
 }
 
 model ScheduleRunItem {
-  id            String                @id @default(cuid())
-  scheduleRunId String
+  id             String                @id @default(cuid())
+  scheduleRunId  String
   generatedPinId String
-  publerJobId   String?
-  publerPostId  String?
-  scheduledFor  DateTime?
-  status        ScheduleRunItemStatus @default(PENDING)
-  errorMessage  String?
-  createdAt     DateTime              @default(now())
-  updatedAt     DateTime              @updatedAt
-  scheduleRun   ScheduleRun           @relation(fields: [scheduleRunId], references: [id], onDelete: Cascade)
-  generatedPin  GeneratedPin          @relation(fields: [generatedPinId], references: [id], onDelete: Cascade)
+  publerJobId    String?
+  publerPostId   String?
+  scheduledFor   DateTime?
+  status         ScheduleRunItemStatus @default(PENDING)
+  errorMessage   String?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  scheduleRun    ScheduleRun           @relation(fields: [scheduleRunId], references: [id], onDelete: Cascade)
+  generatedPin   GeneratedPin          @relation(fields: [generatedPinId], references: [id], onDelete: Cascade)
 
   @@unique([scheduleRunId, generatedPinId])
   @@index([status, scheduledFor])
@@ -599,18 +631,18 @@ model WorkspaceOperationLock {
 }
 
 model PublerMetadataCache {
-  id         String                 @id @default(cuid())
-  userId     String
-  workspaceId String                @default("")
-  cacheKind  PublerMetadataCacheKind
-  cacheKey   String
-  label      String?
-  rawJson    Json
-  fetchedAt  DateTime               @default(now())
-  expiresAt  DateTime
-  createdAt  DateTime               @default(now())
-  updatedAt  DateTime               @updatedAt
-  user       User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id          String                  @id @default(cuid())
+  userId      String
+  workspaceId String                  @default("")
+  cacheKind   PublerMetadataCacheKind
+  cacheKey    String
+  label       String?
+  rawJson     Json
+  fetchedAt   DateTime                @default(now())
+  expiresAt   DateTime
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
+  user        User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, workspaceId, cacheKind, cacheKey])
   @@index([userId, cacheKind, expiresAt])
@@ -619,7 +651,7 @@ model PublerMetadataCache {
 
 model JobMilestone {
   id        String              @id @default(cuid())
-  jobId      String
+  jobId     String
   status    GenerationJobStatus
   details   String?
   createdAt DateTime            @default(now())
@@ -645,53 +677,53 @@ model ApiKey {
 }
 
 model UserIntegrationSettings {
-  id                String   @id @default(cuid())
-  userId            String   @unique
-  publerApiKeyEnc   String?
-  publerWorkspaceId String?
+  id                   String   @id @default(cuid())
+  userId               String   @unique
+  publerApiKeyEnc      String?
+  publerWorkspaceId    String?
   publerAllowedDomains String[] @default([])
-  publerAccountId   String?
-  publerBoardId     String?
-  aiProvider        String?
-  aiApiKeyEnc       String?
-  aiModel           String?
-  aiCustomEndpoint  String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  publerAccountId      String?
+  publerBoardId        String?
+  aiProvider           String?
+  aiApiKeyEnc          String?
+  aiModel              String?
+  aiCustomEndpoint     String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model WorkspaceProfile {
-  id               String   @id @default(cuid())
-  userId           String
-  workspaceId      String
-  workspaceName    String
-  allowedDomains   String[] @default([])
-  sitemapUrls      String[] @default([])
+  id                 String   @id @default(cuid())
+  userId             String
+  workspaceId        String
+  workspaceName      String
+  allowedDomains     String[] @default([])
+  sitemapUrls        String[] @default([])
   dailyPublishTarget Int?
-  defaultAccountId String?
-  defaultBoardId   String?
-  isDefault        Boolean  @default(false)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  defaultAccountId   String?
+  defaultBoardId     String?
+  isDefault          Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, workspaceId])
   @@index([userId, isDefault])
 }
 
 model AiCredential {
-  id               String   @id @default(cuid())
-  userId           String
-  label            String
-  provider         String
-  apiKeyEnc        String?
-  model            String?
-  customEndpoint   String?
-  isDefault        Boolean  @default(false)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id             String   @id @default(cuid())
+  userId         String
+  label          String
+  provider       String
+  apiKeyEnc      String?
+  model          String?
+  customEndpoint String?
+  isDefault      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, isDefault])
 }
