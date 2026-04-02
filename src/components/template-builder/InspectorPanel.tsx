@@ -39,6 +39,12 @@ import {
   type RuntimeTemplateValidationResult,
 } from "@/lib/runtime-templates/types";
 import {
+  addValidationIgnoreRule,
+  buildValidationIgnoreRuleFromIssue,
+  describeValidationIgnoreRule,
+  removeValidationIgnoreRule,
+} from "@/lib/runtime-templates/validationIgnores";
+import {
   templateVisualPresetCategories,
   templateVisualPresets,
   type TemplateVisualPresetCategoryId,
@@ -159,9 +165,11 @@ export function InspectorPanel(props: InspectorPanelProps) {
 }
 
 export function ValidationSidebar(props: {
+  document: RuntimeTemplateDocument;
   validationResult: RuntimeTemplateValidationResult<RuntimeTemplateDocument>;
   persistedValidationResult?: RuntimeTemplateValidationResult<RuntimeTemplateDocument> | null;
   currentPreset: TemplateVisualPresetId;
+  onUpdateDocument: (updater: (document: RuntimeTemplateDocument) => RuntimeTemplateDocument) => void;
 }) {
   return (
     <section className="flex h-full min-h-0 flex-col rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] shadow-[var(--dashboard-shadow-sm)]">
@@ -899,11 +907,20 @@ function renderTextElementControls(
 }
 
 function ValidationPanel(props: {
+  document: RuntimeTemplateDocument;
   validationResult: RuntimeTemplateValidationResult<RuntimeTemplateDocument>;
   persistedValidationResult?: RuntimeTemplateValidationResult<RuntimeTemplateDocument> | null;
   currentPreset: TemplateVisualPresetId;
+  onUpdateDocument: (updater: (document: RuntimeTemplateDocument) => RuntimeTemplateDocument) => void;
 }) {
-  const { validationResult, persistedValidationResult, currentPreset } = props;
+  const {
+    document,
+    validationResult,
+    persistedValidationResult,
+    currentPreset,
+    onUpdateDocument,
+  } = props;
+  const ignoredIssues = document.validationRules.ignoredIssues;
   const persistedStressCaseCount = Array.isArray(persistedValidationResult?.stress?.cases)
     ? persistedValidationResult.stress.cases.length
     : 0;
@@ -918,6 +935,27 @@ function ValidationPanel(props: {
   const persistedWarnings = persistedValidationResult?.warnings ?? [];
   const hasLiveIssues =
     validationResult.errors.length > 0 || validationResult.warnings.length > 0;
+  const ignoreIssue = (issue: RuntimeTemplateValidationResult<RuntimeTemplateDocument>["errors"][number]) => {
+    const nextRule = buildValidationIgnoreRuleFromIssue(issue);
+    onUpdateDocument((current) => ({
+      ...current,
+      validationRules: {
+        ...current.validationRules,
+        ignoredIssues: addValidationIgnoreRule(current.validationRules.ignoredIssues, nextRule),
+      },
+    }));
+  };
+  const restoreIgnoredIssue = (
+    rule: RuntimeTemplateDocument["validationRules"]["ignoredIssues"][number],
+  ) => {
+    onUpdateDocument((current) => ({
+      ...current,
+      validationRules: {
+        ...current.validationRules,
+        ignoredIssues: removeValidationIgnoreRule(current.validationRules.ignoredIssues, rule),
+      },
+    }));
+  };
 
   return (
     <SectionCard title="Validation">
@@ -930,7 +968,46 @@ function ValidationPanel(props: {
             ? `${validationResult.blockingErrorCount} blocking issue(s) and ${validationResult.warnings.length} warning(s) for preset '${currentPreset}'.`
             : `No live blocking issues for preset '${currentPreset}'.`}
         </p>
+        {ignoredIssues.length > 0 ? (
+          <p className="mt-1">{ignoredIssues.length} validation ignore(s) active for this template.</p>
+        ) : null}
       </div>
+      {ignoredIssues.length > 0 ? (
+        <details className="mb-4 group rounded-xl border border-[var(--dashboard-line)] bg-white">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-sm font-semibold text-[var(--dashboard-text)]">
+            <span>Ignored checks</span>
+            <span className="text-xs uppercase tracking-[0.14em] text-[var(--dashboard-muted)] group-open:hidden">
+              Expand
+            </span>
+            <span className="hidden text-xs uppercase tracking-[0.14em] text-[var(--dashboard-muted)] group-open:inline">
+              Collapse
+            </span>
+          </summary>
+          <div className="space-y-2 border-t border-[var(--dashboard-line)] px-3 py-3">
+            {ignoredIssues.map((rule) => (
+              <div
+                key={`ignored-${rule.code}-${rule.path ?? "root"}-${rule.presetId ?? "any"}-${rule.stressCaseId ?? "any"}`}
+                className="rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-alt)] px-3 py-2"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 text-sm text-[var(--dashboard-subtle)]">
+                    <p className="font-semibold text-[var(--dashboard-text)]">
+                      {describeValidationIgnoreRule(rule)}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => restoreIgnoredIssue(rule)}
+                    className="shrink-0 rounded-full border border-[var(--dashboard-line)] bg-white px-3 py-1 text-xs font-semibold text-[var(--dashboard-text)]"
+                  >
+                    Restore
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </details>
+      ) : null}
       {persistedValidationResult ? (
         <details className="mb-4 group rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-alt)]">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-xs text-[var(--dashboard-subtle)]">
@@ -1012,7 +1089,12 @@ function ValidationPanel(props: {
                 Errors
               </p>
               {validationResult.errors.map((issue) => (
-                <IssueRow key={`${issue.code}-${issue.path ?? "root"}-${issue.message}`} issue={issue} />
+                <IssueRow
+                  key={`${issue.code}-${issue.path ?? "root"}-${issue.message}`}
+                  issue={issue}
+                  actionLabel="Ignore"
+                  onAction={() => ignoreIssue(issue)}
+                />
               ))}
             </div>
           ) : null}
@@ -1022,7 +1104,12 @@ function ValidationPanel(props: {
                 Warnings
               </p>
               {validationResult.warnings.map((issue) => (
-                <IssueRow key={`${issue.code}-${issue.path ?? "root"}-${issue.message}`} issue={issue} />
+                <IssueRow
+                  key={`${issue.code}-${issue.path ?? "root"}-${issue.message}`}
+                  issue={issue}
+                  actionLabel="Ignore"
+                  onAction={() => ignoreIssue(issue)}
+                />
               ))}
             </div>
           ) : null}
@@ -1034,14 +1121,29 @@ function ValidationPanel(props: {
 
 function IssueRow(props: {
   issue: RuntimeTemplateValidationResult["errors"][number];
+  actionLabel?: string;
+  onAction?: () => void;
 }) {
-  const { issue } = props;
+  const { issue, actionLabel, onAction } = props;
   const isError = issue.level === "error";
 
   return (
     <div className={`rounded-xl border px-3 py-2 text-sm ${isError ? "border-[var(--dashboard-danger-border)] bg-[var(--dashboard-danger-soft)] text-[var(--dashboard-danger-ink)]" : "border-[var(--dashboard-line)] bg-white text-[var(--dashboard-subtle)]"}`}>
-      <p className="font-semibold">{issue.message}</p>
-      {issue.path ? <p className="mt-1 text-xs uppercase tracking-[0.12em]">{issue.path}</p> : null}
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="font-semibold">{issue.message}</p>
+          {issue.path ? <p className="mt-1 text-xs uppercase tracking-[0.12em]">{issue.path}</p> : null}
+        </div>
+        {actionLabel && onAction ? (
+          <button
+            type="button"
+            onClick={onAction}
+            className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${isError ? "border border-[var(--dashboard-danger-border)] bg-white/80 text-[var(--dashboard-danger-ink)]" : "border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-alt)] text-[var(--dashboard-text)]"}`}
+          >
+            {actionLabel}
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }

@@ -140,6 +140,10 @@ function evaluateStressCase(
           "stress_text_missing",
           `${getTextRoleLabel(element)} resolved empty in the "${label}" stress case.`,
           `elements.${element.id}`,
+          {
+            stressCaseId: id,
+            stressCaseLabel: label,
+          },
         ),
       );
       return;
@@ -157,6 +161,10 @@ function evaluateStressCase(
           "stress_text_overflow",
           `${getTextRoleLabel(element)} is likely to overflow in the "${label}" stress case.`,
           `elements.${element.id}`,
+          {
+            stressCaseId: id,
+            stressCaseLabel: label,
+          },
         ),
       );
     } else if (fitResult === "warning") {
@@ -166,6 +174,10 @@ function evaluateStressCase(
           "stress_text_tight",
           `${getTextRoleLabel(element)} is tight in the "${label}" stress case and may autofit aggressively.`,
           `elements.${element.id}`,
+          {
+            stressCaseId: id,
+            stressCaseLabel: label,
+          },
         ),
       );
     }
@@ -183,6 +195,10 @@ function evaluateStressCase(
           "title_number_collision",
           "Title already includes a number while the template also binds a separate item number.",
           `elements.${element.id}`,
+          {
+            stressCaseId: id,
+            stressCaseLabel: label,
+          },
         ),
       );
     }
@@ -204,6 +220,10 @@ function evaluateStressCase(
           "stress_image_slot_unresolved",
           `Image slot ${element.slotIndex + 1} cannot be satisfied in the "${label}" stress case.`,
           `elements.${element.id}`,
+          {
+            stressCaseId: id,
+            stressCaseLabel: label,
+          },
         );
         (issue.level === "error" ? errors : warnings).push(issue);
       }
@@ -222,6 +242,10 @@ function evaluateStressCase(
         "stress_image_grid_unresolved",
         `${missingCount} image grid slots cannot be satisfied in the "${label}" stress case.`,
         `elements.${element.id}`,
+        {
+          stressCaseId: id,
+          stressCaseLabel: label,
+        },
       );
       (issue.level === "error" ? errors : warnings).push(issue);
     }
@@ -309,6 +333,7 @@ function makeIssue(
   code: string,
   message: string,
   path?: string,
+  context?: RuntimeTemplateValidationIssue["context"],
 ): RuntimeTemplateValidationIssue {
   return {
     level,
@@ -317,5 +342,6 @@ function makeIssue(
     path,
     bucket: "stress",
     blocking: level === "error",
+    context,
   };
 }

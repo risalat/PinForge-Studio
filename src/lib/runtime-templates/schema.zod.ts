@@ -242,6 +242,15 @@ const runtimeTemplatePresetOverrideSchema = z.object({
   elements: z.record(z.string().trim().min(1), runtimeTemplatePresetElementOverrideSchema).default({}),
 });
 
+const runtimeTemplateValidationIgnoreRuleSchema = z.object({
+  code: z.string().trim().min(1),
+  path: z.string().trim().min(1).optional(),
+  bucket: z.enum(["structural", "layout", "preset", "stress"]).optional(),
+  presetId: z.string().trim().min(1).optional(),
+  stressCaseId: z.string().trim().min(1).optional(),
+  message: z.string().trim().min(1).max(500).optional(),
+});
+
 export const runtimeTemplateElementSchema = z.discriminatedUnion("type", [
   imageFrameElementSchema,
   imageGridElementSchema,
@@ -295,6 +304,7 @@ const runtimeTemplateDocumentObjectSchema = z.object({
         minSlotsRequired: z.number().int().min(1).max(24),
         mode: z.enum(runtimeTemplateImagePolicyModeValues).default("REQUIRE_EXACT"),
       }),
+      ignoredIssues: z.array(runtimeTemplateValidationIgnoreRuleSchema).max(100).default([]),
     }),
   });
 

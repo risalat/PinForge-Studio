@@ -241,6 +241,7 @@ export function createStarterRuntimeTemplateDocument(input?: {
         minSlotsRequired: 1,
         mode: "ALLOW_FEWER_DUPLICATE_LAST",
       },
+      ignoredIssues: [],
     },
   };
 }

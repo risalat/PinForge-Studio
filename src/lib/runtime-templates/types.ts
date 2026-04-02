@@ -200,6 +200,11 @@ export type RuntimeTemplateValidationIssue = {
   path?: string;
   bucket?: RuntimeTemplateValidationBucket;
   blocking?: boolean;
+  context?: {
+    presetId?: string;
+    stressCaseId?: string;
+    stressCaseLabel?: string;
+  };
 };
 
 export type RuntimeTemplateValidationBucket =
@@ -207,6 +212,15 @@ export type RuntimeTemplateValidationBucket =
   | "layout"
   | "preset"
   | "stress";
+
+export type RuntimeTemplateValidationIgnoreRule = {
+  code: string;
+  path?: string;
+  bucket?: RuntimeTemplateValidationBucket;
+  presetId?: string;
+  stressCaseId?: string;
+  message?: string;
+};
 
 export type RuntimeTemplateContrastCheck = {
   presetId: string;

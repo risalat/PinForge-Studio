@@ -996,9 +996,11 @@ export function TemplateDraftEditor(props: TemplateDraftEditorProps) {
 
         <div className="sticky top-[7.5rem] h-[calc(100vh-8.25rem)] min-h-0">
           <ValidationSidebar
+            document={document}
             validationResult={validationResult}
             persistedValidationResult={savedValidationResult}
             currentPreset={visualPreset}
+            onUpdateDocument={applyDocumentUpdate}
           />
         </div>
       </div>

@@ -18,6 +18,7 @@ import {
 } from "@/lib/runtime-templates/schema.zod";
 import { getRuntimeTemplateGridSlotCount } from "@/lib/runtime-templates/imageGridPresets";
 import { buildRuntimeTemplateStressCases } from "@/lib/runtime-templates/stressTest";
+import { doesValidationIgnoreRuleMatchIssue } from "@/lib/runtime-templates/validationIgnores";
 import type {
   RuntimeTemplateContrastCheck,
   RuntimeTemplateElementType,
@@ -89,8 +90,11 @@ export function validateRuntimeTemplateDocument(
     errors: [] as RuntimeTemplateValidationIssue[],
     warnings: [] as RuntimeTemplateValidationIssue[],
   };
-  const layout = buildLayoutValidation(document);
-  const preset =
+  const layout = applyValidationIgnoresToBucket(
+    buildLayoutValidation(document),
+    document.validationRules.ignoredIssues,
+  );
+  const presetBase =
     mode === "full"
       ? buildPresetValidation(document, options?.presetIds)
       : {
@@ -98,13 +102,25 @@ export function validateRuntimeTemplateDocument(
           contrastChecks: [] as RuntimeTemplateContrastCheck[],
           presetIdsChecked: [] as string[],
         };
-  const stress =
+  const preset = {
+    ...applyValidationIgnoresToBucket(presetBase, document.validationRules.ignoredIssues),
+    contrastChecks: presetBase.contrastChecks,
+    presetIdsChecked: presetBase.presetIdsChecked,
+  };
+  const stressBase =
     mode === "full"
       ? buildStressValidation(document)
       : {
           ...emptyBucket(),
           cases: [],
         };
+  const stress = {
+    ...applyValidationIgnoresToBucket(stressBase, document.validationRules.ignoredIssues),
+    cases: applyValidationIgnoresToStressCases(
+      stressBase.cases,
+      document.validationRules.ignoredIssues,
+    ),
+  };
 
   return createValidationResult({
     ok:
@@ -452,6 +468,9 @@ function buildPresetValidation(
             `${getRoleLabel(element)} sits directly over image content for preset '${presetId}', so contrast cannot be guaranteed.`,
             `elements.${element.id}`,
             "preset",
+            {
+              presetId,
+            },
           ),
         );
         return;
@@ -465,6 +484,9 @@ function buildPresetValidation(
             `${getRoleLabel(element)} fails contrast for preset '${presetId}' (${ratio.toFixed(2)} < ${minimumRatio.toFixed(1)}).`,
             `elements.${element.id}`,
             "preset",
+            {
+              presetId,
+            },
           ),
         );
       }
@@ -687,6 +709,7 @@ function issue(
   message: string,
   path: string | undefined,
   bucket: RuntimeTemplateValidationIssue["bucket"],
+  context?: RuntimeTemplateValidationIssue["context"],
 ): RuntimeTemplateValidationIssue {
   return {
     level,
@@ -695,7 +718,57 @@ function issue(
     path,
     bucket,
     blocking: level === "error",
+    context,
   };
+}
+
+function applyValidationIgnoresToBucket<TBucket extends RuntimeTemplateValidationBucketResult>(
+  bucket: TBucket,
+  ignoredIssues: RuntimeTemplateDocument["validationRules"]["ignoredIssues"],
+): TBucket {
+  return {
+    ...bucket,
+    errors: bucket.errors.filter(
+      (issue) =>
+        !ignoredIssues.some((ignoredIssue) =>
+          doesValidationIgnoreRuleMatchIssue(ignoredIssue, issue),
+        ),
+    ),
+    warnings: bucket.warnings.filter(
+      (issue) =>
+        !ignoredIssues.some((ignoredIssue) =>
+          doesValidationIgnoreRuleMatchIssue(ignoredIssue, issue),
+        ),
+    ),
+  };
+}
+
+function applyValidationIgnoresToStressCases(
+  cases: ReturnType<typeof buildRuntimeTemplateStressCases>,
+  ignoredIssues: RuntimeTemplateDocument["validationRules"]["ignoredIssues"],
+) {
+  return cases.map((testCase) => {
+    const errors = testCase.errors.filter(
+      (issue) =>
+        !ignoredIssues.some((ignoredIssue) =>
+          doesValidationIgnoreRuleMatchIssue(ignoredIssue, issue),
+        ),
+    );
+    const warnings = testCase.warnings.filter(
+      (issue) =>
+        !ignoredIssues.some((ignoredIssue) =>
+          doesValidationIgnoreRuleMatchIssue(ignoredIssue, issue),
+        ),
+    );
+
+    return {
+      ...testCase,
+      errors,
+      warnings,
+      passed: errors.length === 0,
+      blocking: errors.length > 0,
+    };
+  });
 }
 
 function emptyBucket(): RuntimeTemplateValidationBucketResult {
