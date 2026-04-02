@@ -1,3 +1,14 @@
+import {
+  addDateKeyDays,
+  DEFAULT_PUBLISH_TIMEZONE,
+  DEFAULT_PUBLISH_WINDOW_END_MINUTE,
+  DEFAULT_PUBLISH_WINDOW_START_MINUTE,
+  getTimeZoneMinuteOfDay,
+  mergeTimeZoneDateKeyWithMinuteOffset,
+  MIN_URL_SPACING_MINUTES,
+  toTimeZoneDateKey,
+} from "@/lib/jobs/publishTiming";
+
 export type SchedulePreviewItem = {
   pinId: string;
   index: number;
@@ -6,8 +17,8 @@ export type SchedulePreviewItem = {
 };
 
 const MIN_INTRADAY_GAP_MINUTES = 45;
-const SPREAD_WINDOW_MINUTES = 12 * 60;
 const MIN_SLOT_CONFLICT_MINUTES = 30;
+const MAX_DAY_SCAN = 365;
 
 export function buildSchedulePreview(input: {
   pinIds: string[];
@@ -16,12 +27,20 @@ export function buildSchedulePreview(input: {
   jitterMinutes: number;
 }) {
   const firstPublishAt = toDate(input.firstPublishAt);
+  const effectiveIntervalMinutes = Math.max(
+    MIN_URL_SPACING_MINUTES,
+    Math.round(input.intervalMinutes),
+  );
+  const effectiveJitterMinutes = Math.max(0, Math.round(input.jitterMinutes));
 
   return input.pinIds.map((pinId, index) => {
-    const base = new Date(firstPublishAt.getTime() + index * input.intervalMinutes * 60 * 1000);
+    const base =
+      index === 0
+        ? firstPublishAt
+        : new Date(firstPublishAt.getTime() + index * effectiveIntervalMinutes * 60 * 1000);
     const jitterOffsetMinutes = computeDeterministicJitterMinutes(
       `${pinId}:${index}:${firstPublishAt.toISOString()}`,
-      input.jitterMinutes,
+      effectiveJitterMinutes,
     );
 
     return {
@@ -36,13 +55,22 @@ export function buildSchedulePreview(input: {
 export function buildCapacityAwareSchedulePreview(input: {
   pinIds: string[];
   firstPublishAt: Date | string;
+  minimumFirstPublishAt?: Date | string | null;
   intervalMinutes: number;
   jitterMinutes: number;
   targetPerDay: number;
   existingScheduledCountsByDate: Record<string, number>;
   existingScheduledMinutesByDate?: Record<string, number[]>;
 }) {
-  const naivePreview = buildSchedulePreview(input);
+  const firstPublishAt = toDate(input.firstPublishAt);
+  const minimumFirstPublishAt = input.minimumFirstPublishAt
+    ? toDate(input.minimumFirstPublishAt)
+    : null;
+  const effectiveIntervalMinutes = Math.max(
+    MIN_URL_SPACING_MINUTES,
+    Math.round(input.intervalMinutes),
+  );
+  const effectiveJitterMinutes = Math.max(0, Math.round(input.jitterMinutes));
   const countsByDate = new Map<string, number>(
     Object.entries(input.existingScheduledCountsByDate).map(([date, count]) => [date, count]),
   );
@@ -52,42 +80,205 @@ export function buildCapacityAwareSchedulePreview(input: {
       normalizeMinuteOffsets(minutes),
     ]),
   );
-  const preferredMinuteOfDay = getUtcMinuteOfDay(toDate(input.firstPublishAt));
-  const slotGapMinutes = computeIntradayGapMinutes(input.targetPerDay);
+  const targetPerDay = Math.max(input.targetPerDay, 1);
+  let previousScheduledFor: Date | null = null;
 
-  return naivePreview.map((item) => {
-    let targetDate = startOfUtcDay(item.scheduledFor);
-    let dateKey = toUtcDateKey(targetDate);
+  return input.pinIds.map((pinId, index) => {
+    const baseAt =
+      index === 0
+        ? maxDate(firstPublishAt, minimumFirstPublishAt)
+        : new Date(
+            (previousScheduledFor ?? firstPublishAt).getTime() +
+              effectiveIntervalMinutes * 60 * 1000,
+          );
+    const earliestAllowedAt = baseAt;
+    const baseMinuteOfDay = clampMinuteToPublishWindow(
+      getTimeZoneMinuteOfDay(baseAt, DEFAULT_PUBLISH_TIMEZONE),
+    );
+    const jitterOffsetMinutes = computeDeterministicJitterMinutes(
+      `${pinId}:${index}:${baseAt.toISOString()}`,
+      effectiveJitterMinutes,
+    );
+    const candidateTimes = buildCandidateTimes({
+      baseAt,
+      earliestAllowedAt,
+      jitterOffsetMinutes,
+    });
 
-    while (true) {
-      const existingCount = countsByDate.get(dateKey) ?? 0;
-      const occupiedMinutes = occupiedMinutesByDate.get(dateKey) ?? [];
-      const rotatedSlotIndex =
-        existingCount > 0 ? existingCount : item.index % Math.max(input.targetPerDay, 1);
-      const scheduledMinuteOfDay = findAvailableMinuteOfDay({
-        targetPerDay: input.targetPerDay,
-        preferredMinuteOfDay,
-        slotGapMinutes,
-        startSlotIndex: rotatedSlotIndex,
-        occupiedMinutes,
-        jitterOffsetMinutes: item.jitterOffsetMinutes,
+    let scheduledFor: Date | null = null;
+    let latestTriedDateKey = toTimeZoneDateKey(baseAt, DEFAULT_PUBLISH_TIMEZONE);
+
+    for (const candidateAt of candidateTimes) {
+      const candidateDateKey = toTimeZoneDateKey(candidateAt, DEFAULT_PUBLISH_TIMEZONE);
+      latestTriedDateKey =
+        candidateDateKey > latestTriedDateKey ? candidateDateKey : latestTriedDateKey;
+      scheduledFor = tryScheduleOnDate({
+        dateKey: candidateDateKey,
+        targetMinuteOfDay: clampMinuteToPublishWindow(
+          getTimeZoneMinuteOfDay(candidateAt, DEFAULT_PUBLISH_TIMEZONE),
+        ),
+        earliestAllowedAt,
+        targetPerDay,
+        countsByDate,
+        occupiedMinutesByDate,
       });
-
-      if (scheduledMinuteOfDay !== null && existingCount < Math.max(input.targetPerDay, 1)) {
-        countsByDate.set(dateKey, existingCount + 1);
-        const nextOccupiedMinutes = [...occupiedMinutes, scheduledMinuteOfDay];
-        occupiedMinutesByDate.set(dateKey, normalizeMinuteOffsets(nextOccupiedMinutes));
-
-        return {
-          ...item,
-          scheduledFor: mergeUtcDateWithMinuteOffset(targetDate, scheduledMinuteOfDay),
-        } satisfies SchedulePreviewItem;
+      if (scheduledFor) {
+        break;
       }
-
-      targetDate = addUtcDays(targetDate, 1);
-      dateKey = toUtcDateKey(targetDate);
     }
+
+    if (!scheduledFor) {
+      let currentDateKey = addDateKeyDays(latestTriedDateKey, 1);
+      for (let offset = 0; offset < MAX_DAY_SCAN; offset += 1) {
+        scheduledFor = tryScheduleOnDate({
+          dateKey: currentDateKey,
+          targetMinuteOfDay: baseMinuteOfDay,
+          earliestAllowedAt,
+          targetPerDay,
+          countsByDate,
+          occupiedMinutesByDate,
+        });
+        if (scheduledFor) {
+          break;
+        }
+        currentDateKey = addDateKeyDays(currentDateKey, 1);
+      }
+    }
+
+    if (!scheduledFor) {
+      throw new Error("Unable to find a publish slot inside the allowed window.");
+    }
+
+    previousScheduledFor = scheduledFor;
+
+    return {
+      pinId,
+      index,
+      scheduledFor,
+      jitterOffsetMinutes,
+    } satisfies SchedulePreviewItem;
   });
+}
+
+function buildCandidateTimes(input: {
+  baseAt: Date;
+  earliestAllowedAt: Date;
+  jitterOffsetMinutes: number;
+}) {
+  const candidates = [input.baseAt];
+  const jitterMagnitudeMinutes = Math.abs(input.jitterOffsetMinutes);
+
+  if (jitterMagnitudeMinutes > 0) {
+    candidates.push(
+      new Date(input.baseAt.getTime() + jitterMagnitudeMinutes * 60 * 1000),
+      new Date(input.baseAt.getTime() - jitterMagnitudeMinutes * 60 * 1000),
+    );
+  }
+
+  const seen = new Set<string>();
+  return candidates.filter((candidateAt) => {
+    if (candidateAt < input.earliestAllowedAt) {
+      return false;
+    }
+
+    const key = candidateAt.toISOString();
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
+function tryScheduleOnDate(input: {
+  dateKey: string;
+  targetMinuteOfDay: number;
+  earliestAllowedAt: Date;
+  targetPerDay: number;
+  countsByDate: Map<string, number>;
+  occupiedMinutesByDate: Map<string, number[]>;
+}) {
+  const existingCount = input.countsByDate.get(input.dateKey) ?? 0;
+  if (existingCount >= input.targetPerDay) {
+    return null;
+  }
+
+  const occupiedMinutes = input.occupiedMinutesByDate.get(input.dateKey) ?? [];
+  const slotMinutes = buildDailySlotMinutes(input.targetPerDay);
+  const earliestDateKey = toTimeZoneDateKey(input.earliestAllowedAt, DEFAULT_PUBLISH_TIMEZONE);
+  const rawEarliestMinuteOfDay =
+    input.dateKey === earliestDateKey
+      ? getTimeZoneMinuteOfDay(input.earliestAllowedAt, DEFAULT_PUBLISH_TIMEZONE)
+      : DEFAULT_PUBLISH_WINDOW_START_MINUTE;
+  if (rawEarliestMinuteOfDay > DEFAULT_PUBLISH_WINDOW_END_MINUTE) {
+    return null;
+  }
+  const earliestMinuteOfDay = Math.max(
+    DEFAULT_PUBLISH_WINDOW_START_MINUTE,
+    rawEarliestMinuteOfDay,
+  );
+
+  const availableSlots = slotMinutes
+    .filter((minute) => minute >= earliestMinuteOfDay)
+    .sort((left, right) => {
+      const leftDistance = Math.abs(left - input.targetMinuteOfDay);
+      const rightDistance = Math.abs(right - input.targetMinuteOfDay);
+      if (leftDistance !== rightDistance) {
+        return leftDistance - rightDistance;
+      }
+      return left - right;
+    });
+
+  if (availableSlots.length === 0) {
+    return null;
+  }
+
+  const slotGapMinutes = computeIntradayGapMinutes(input.targetPerDay);
+  const conflictWindowMinutes = Math.max(
+    MIN_SLOT_CONFLICT_MINUTES,
+    Math.floor(slotGapMinutes / 2),
+  );
+
+  for (const slotMinute of availableSlots) {
+    const conflicts = occupiedMinutes.some(
+      (occupiedMinute) => Math.abs(occupiedMinute - slotMinute) < conflictWindowMinutes,
+    );
+    if (conflicts) {
+      continue;
+    }
+
+    input.countsByDate.set(input.dateKey, existingCount + 1);
+    const nextOccupiedMinutes = [...occupiedMinutes, slotMinute];
+    input.occupiedMinutesByDate.set(
+      input.dateKey,
+      normalizeMinuteOffsets(nextOccupiedMinutes),
+    );
+
+    return mergeTimeZoneDateKeyWithMinuteOffset(
+      input.dateKey,
+      slotMinute,
+      DEFAULT_PUBLISH_TIMEZONE,
+    );
+  }
+
+  return null;
+}
+
+function buildDailySlotMinutes(targetPerDay: number) {
+  const effectiveTarget = Math.max(targetPerDay, 1);
+  if (effectiveTarget === 1) {
+    return [DEFAULT_PUBLISH_WINDOW_START_MINUTE];
+  }
+
+  const windowSpanMinutes =
+    DEFAULT_PUBLISH_WINDOW_END_MINUTE - DEFAULT_PUBLISH_WINDOW_START_MINUTE;
+
+  return Array.from({ length: effectiveTarget }, (_, index) =>
+    Math.round(
+      DEFAULT_PUBLISH_WINDOW_START_MINUTE +
+        (windowSpanMinutes * index) / Math.max(effectiveTarget - 1, 1),
+    ),
+  );
 }
 
 function computeDeterministicJitterMinutes(seed: string, maxMinutes: number) {
@@ -100,21 +291,22 @@ function computeDeterministicJitterMinutes(seed: string, maxMinutes: number) {
     hash = (hash * 31 + seed.charCodeAt(index)) >>> 0;
   }
 
-  return hash % (maxMinutes + 1);
-}
-
-function toDate(value: Date | string) {
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.valueOf())) {
-    throw new Error("Provide a valid first publish datetime.");
-  }
-
-  return date;
+  return (hash % (maxMinutes * 2 + 1)) - maxMinutes;
 }
 
 function computeIntradayGapMinutes(targetPerDay: number) {
   const effectiveTarget = Math.max(targetPerDay, 1);
-  return Math.max(MIN_INTRADAY_GAP_MINUTES, Math.floor(SPREAD_WINDOW_MINUTES / effectiveTarget));
+  if (effectiveTarget === 1) {
+    return DEFAULT_PUBLISH_WINDOW_END_MINUTE - DEFAULT_PUBLISH_WINDOW_START_MINUTE;
+  }
+
+  return Math.max(
+    MIN_INTRADAY_GAP_MINUTES,
+    Math.floor(
+      (DEFAULT_PUBLISH_WINDOW_END_MINUTE - DEFAULT_PUBLISH_WINDOW_START_MINUTE) /
+        Math.max(effectiveTarget - 1, 1),
+    ),
+  );
 }
 
 function normalizeMinuteOffsets(minutes: number[]) {
@@ -127,72 +319,25 @@ function normalizeMinuteOffsets(minutes: number[]) {
   ).sort((left, right) => left - right);
 }
 
-function findAvailableMinuteOfDay(input: {
-  targetPerDay: number;
-  preferredMinuteOfDay: number;
-  slotGapMinutes: number;
-  startSlotIndex: number;
-  occupiedMinutes: number[];
-  jitterOffsetMinutes: number;
-}) {
-  const targetPerDay = Math.max(input.targetPerDay, 1);
-  const slotIndices = [
-    ...Array.from({ length: targetPerDay }, (_, index) => (input.startSlotIndex + index) % targetPerDay),
-  ];
-  const conflictWindowMinutes = Math.max(
-    MIN_SLOT_CONFLICT_MINUTES,
-    Math.floor(input.slotGapMinutes / 2),
+function clampMinuteToPublishWindow(minute: number) {
+  return Math.max(
+    DEFAULT_PUBLISH_WINDOW_START_MINUTE,
+    Math.min(DEFAULT_PUBLISH_WINDOW_END_MINUTE, Math.round(minute)),
   );
+}
 
-  for (const slotIndex of slotIndices) {
-    const baseMinute = input.preferredMinuteOfDay + slotIndex * input.slotGapMinutes;
-    const finalMinute = Math.max(
-      0,
-      Math.min(23 * 60 + 59, baseMinute + input.jitterOffsetMinutes),
-    );
-
-    const conflicts = input.occupiedMinutes.some(
-      (occupiedMinute) => Math.abs(occupiedMinute - finalMinute) < conflictWindowMinutes,
-    );
-
-    if (!conflicts) {
-      return finalMinute;
-    }
+function toDate(value: Date | string) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.valueOf())) {
+    throw new Error("Provide a valid first publish datetime.");
   }
 
-  return null;
+  return date;
 }
 
-function getUtcMinuteOfDay(value: Date) {
-  return value.getUTCHours() * 60 + value.getUTCMinutes();
-}
-
-function startOfUtcDay(value: Date) {
-  return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
-}
-
-function addUtcDays(value: Date, days: number) {
-  return new Date(value.getTime() + days * 24 * 60 * 60 * 1000);
-}
-
-function toUtcDateKey(value: Date) {
-  return value.toISOString().slice(0, 10);
-}
-
-function mergeUtcDateWithMinuteOffset(date: Date, minuteOffset: number) {
-  const safeMinuteOffset = Math.max(0, Math.min(23 * 60 + 59, minuteOffset));
-  const hours = Math.floor(safeMinuteOffset / 60);
-  const minutes = safeMinuteOffset % 60;
-
-  return new Date(
-    Date.UTC(
-      date.getUTCFullYear(),
-      date.getUTCMonth(),
-      date.getUTCDate(),
-      hours,
-      minutes,
-      0,
-      0,
-    ),
-  );
+function maxDate(primary: Date, secondary: Date | null) {
+  if (!secondary) {
+    return primary;
+  }
+  return primary > secondary ? primary : secondary;
 }

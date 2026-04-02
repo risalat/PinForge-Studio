@@ -13,6 +13,12 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import { useAppFeedback } from "@/components/ui/AppFeedbackProvider";
+import {
+  DEFAULT_PUBLISH_TIMEZONE,
+  formatDateTimeInputInTimeZone,
+  parseDateTimeInputInTimeZone,
+  toTimeZoneDateKey,
+} from "@/lib/jobs/publishTiming";
 import { buildCapacityAwareSchedulePreview } from "@/lib/jobs/schedulePreview";
 import { buildTemplateDiverseOrder } from "@/lib/jobs/templateDiversity";
 import type {
@@ -216,8 +222,8 @@ export function JobPublishManager({
   );
   const [selectedPinIds, setSelectedPinIds] = useState<string[]>(() => getDefaultSelectedPinIds(pins));
   const [firstPublishAt, setFirstPublishAt] = useState("");
-  const [intervalDays, setIntervalDays] = useState(25);
-  const [jitterDays, setJitterDays] = useState(5);
+  const [intervalDays, setIntervalDays] = useState(15);
+  const [jitterDays, setJitterDays] = useState(1);
   const [workspaceId, setWorkspaceId] = useState(defaults.workspaceId);
   const [accountId, setAccountId] = useState(defaults.accountId);
   const [selectedBoardIds, setSelectedBoardIds] = useState<string[]>(
@@ -516,20 +522,26 @@ export function JobPublishManager({
     () => boards.find((board) => board.id === profileDefaultBoardId) ?? null,
     [boards, profileDefaultBoardId],
   );
+  const firstPublishAtDate = useMemo(
+    () =>
+      firstPublishAt
+        ? parseDateTimeInputInTimeZone(firstPublishAt, DEFAULT_PUBLISH_TIMEZONE)
+        : null,
+    [firstPublishAt],
+  );
   const isScheduleInsideSpacingGap = useMemo(() => {
-    if (!scheduleContext.spacingRecommendedFirstPublishAt || !firstPublishAt) {
+    if (!scheduleContext.spacingRecommendedFirstPublishAt || !firstPublishAtDate) {
       return false;
     }
 
-    const selectedDate = new Date(firstPublishAt);
     const recommendedDate = new Date(scheduleContext.spacingRecommendedFirstPublishAt);
 
-    if (Number.isNaN(selectedDate.getTime()) || Number.isNaN(recommendedDate.getTime())) {
+    if (Number.isNaN(recommendedDate.getTime())) {
       return false;
     }
 
-    return selectedDate < recommendedDate;
-  }, [firstPublishAt, scheduleContext.spacingRecommendedFirstPublishAt]);
+    return firstPublishAtDate < recommendedDate;
+  }, [firstPublishAtDate, scheduleContext.spacingRecommendedFirstPublishAt]);
   const filteredBoards = useMemo(() => {
     const query = boardSearchQuery.trim().toLowerCase();
     if (!query) {
@@ -592,7 +604,12 @@ export function JobPublishManager({
       }),
     [copyByPinId, selectedPins],
   );
-  const selectedScheduleDayKey = firstPublishAt ? firstPublishAt.slice(0, 10) : "";
+  const selectedScheduleDayKey = useMemo(() => {
+    if (!firstPublishAtDate) {
+      return "";
+    }
+    return toTimeZoneDateKey(firstPublishAtDate, DEFAULT_PUBLISH_TIMEZONE);
+  }, [firstPublishAtDate]);
   const selectedScheduleDay = useMemo(
     () =>
       selectedScheduleDayKey
@@ -603,16 +620,17 @@ export function JobPublishManager({
   const isSelectedScheduleDayFull = Boolean(selectedScheduleDay?.isFull);
 
   const schedulePreview = useMemo(() => {
-    if (selectedPins.length === 0 || !firstPublishAt) {
+    if (selectedPins.length === 0 || !firstPublishAtDate) {
       return [];
     }
 
     try {
       return buildCapacityAwareSchedulePreview({
         pinIds: selectedPins.map((pin) => pin.id),
-        firstPublishAt,
+        firstPublishAt: firstPublishAtDate,
+        minimumFirstPublishAt: scheduleContext.spacingRecommendedFirstPublishAt,
         intervalMinutes: intervalDays * 24 * 60,
-        jitterMinutes: jitterDays * 24 * 60,
+        jitterMinutes: Math.round(jitterDays * 24 * 60),
         targetPerDay: scheduleContext.dailyPublishTarget,
         existingScheduledCountsByDate: scheduleContext.scheduledCountsByDate,
         existingScheduledMinutesByDate: scheduleContext.occupiedMinutesByDate,
@@ -621,10 +639,11 @@ export function JobPublishManager({
       return [];
     }
   }, [
-    firstPublishAt,
+    firstPublishAtDate,
     intervalDays,
     jitterDays,
     scheduleContext.dailyPublishTarget,
+    scheduleContext.spacingRecommendedFirstPublishAt,
     scheduleContext.scheduledCountsByDate,
     scheduleContext.occupiedMinutesByDate,
     selectedPins,
@@ -1194,7 +1213,9 @@ export function JobPublishManager({
       return;
     }
 
-    setFirstPublishAt(formatDateTimeLocalValue(scheduleContext.recommendedFirstPublishAt));
+    setFirstPublishAt(
+      formatDateTimeInputInTimeZone(scheduleContext.recommendedFirstPublishAt),
+    );
   }, [hasEditedFirstPublishAt, scheduleContext.recommendedFirstPublishAt]);
 
   async function runAction(payload: unknown) {
@@ -1474,7 +1495,9 @@ export function JobPublishManager({
               setHasEditedFirstPublishAt(false);
               if (nextScheduleContext?.recommendedFirstPublishAt) {
                 setFirstPublishAt(
-                  formatDateTimeLocalValue(nextScheduleContext.recommendedFirstPublishAt),
+                  formatDateTimeInputInTimeZone(
+                    nextScheduleContext.recommendedFirstPublishAt,
+                  ),
                 );
               }
             }
@@ -1619,7 +1642,15 @@ export function JobPublishManager({
   }
 
 function formatPreviewDate(value: Date) {
-  return value.toLocaleString();
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: DEFAULT_PUBLISH_TIMEZONE,
+    timeZoneName: "short",
+  }).format(value);
 }
 
 function formatDateLabel(value: string) {
@@ -1628,7 +1659,15 @@ function formatDateLabel(value: string) {
     return value;
   }
 
-  return date.toLocaleString();
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: DEFAULT_PUBLISH_TIMEZONE,
+    timeZoneName: "short",
+  }).format(date);
 }
 
   function triggerUploadSelected() {
@@ -1888,6 +1927,10 @@ function formatDateLabel(value: string) {
   }
 
   function triggerQueueSchedule() {
+    if (!firstPublishAtDate) {
+      return;
+    }
+
     startTransition(async () => {
       try {
         setSectionFeedback((current) => ({
@@ -1898,9 +1941,9 @@ function formatDateLabel(value: string) {
 
         const result = await queueScheduleAction({
           generatedPinIds: selectedPinIds,
-          firstPublishAt,
+          firstPublishAt: firstPublishAtDate.toISOString(),
           intervalMinutes: intervalDays * 24 * 60,
-          jitterMinutes: jitterDays * 24 * 60,
+          jitterMinutes: Math.round(jitterDays * 24 * 60),
           schedulePlan: schedulePreview.map((item) => ({
             pinId: item.pinId,
             scheduledFor: item.scheduledFor.toISOString(),
@@ -1945,13 +1988,17 @@ function formatDateLabel(value: string) {
   }
 
   function triggerScheduleSelected() {
+    if (!firstPublishAtDate) {
+      return;
+    }
+
     handleAction(
       {
         action: "schedule",
         generatedPinIds: selectedPinIds,
-        firstPublishAt,
+        firstPublishAt: firstPublishAtDate.toISOString(),
         intervalMinutes: intervalDays * 24 * 60,
-        jitterMinutes: jitterDays * 24 * 60,
+        jitterMinutes: Math.round(jitterDays * 24 * 60),
         schedulePlan: schedulePreview.map((item) => ({
           pinId: item.pinId,
           scheduledFor: item.scheduledFor.toISOString(),
@@ -2026,7 +2073,7 @@ function formatDateLabel(value: string) {
               disabled={
                 isPending ||
                 Boolean(activeAction) ||
-                !firstPublishAt ||
+                !firstPublishAtDate ||
                 !canScheduleSelected ||
                 selectedPins.length === 0 ||
                 !workspaceId ||
@@ -3227,15 +3274,20 @@ function formatDateLabel(value: string) {
                   }}
                   className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-2"
                 />
+                <span className="mt-2 block text-xs font-medium text-[var(--dashboard-muted)]">
+                  Times in America/New_York.
+                </span>
               </label>
               <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
                 Interval days
                 <input
                   type="number"
-                  min={1}
+                  min={15}
                   step="1"
                   value={intervalDays}
-                  onChange={(event) => setIntervalDays(Number(event.target.value) || 1)}
+                  onChange={(event) =>
+                    setIntervalDays(Math.max(15, Number(event.target.value) || 15))
+                  }
                   className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-2"
                 />
               </label>
@@ -3244,7 +3296,7 @@ function formatDateLabel(value: string) {
                 <input
                   type="number"
                   min={0}
-                  step="1"
+                  step="0.1"
                   value={jitterDays}
                   onChange={(event) => setJitterDays(Number(event.target.value) || 0)}
                   className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-2"
@@ -3310,7 +3362,7 @@ function formatDateLabel(value: string) {
                 </div>
                 {isScheduleInsideSpacingGap ? (
                   <p className="mt-3 text-[var(--dashboard-warning-ink)]">
-                    Selected time is inside the recommended spacing gap.
+                    Selected time is inside the 15-day minimum spacing gap.
                   </p>
                 ) : null}
                 {selectedScheduleDay ? (
@@ -3324,7 +3376,11 @@ function formatDateLabel(value: string) {
                     type="button"
                     onClick={() => {
                       setHasEditedFirstPublishAt(true);
-                      setFirstPublishAt(formatDateTimeLocalValue(scheduleContext.queueAwareSuggestedFirstPublishAt as string));
+                      setFirstPublishAt(
+                        formatDateTimeInputInTimeZone(
+                          scheduleContext.queueAwareSuggestedFirstPublishAt as string,
+                        ),
+                      );
                     }}
                     className="mt-3 rounded-full border border-[var(--dashboard-warning-border)] bg-[var(--dashboard-warning-soft)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-warning-ink)]"
                   >
@@ -3365,7 +3421,7 @@ function formatDateLabel(value: string) {
                 onClick={triggerQueueSchedule}
                 disabled={
                   isPending ||
-                  !firstPublishAt ||
+                  !firstPublishAtDate ||
                   !canScheduleSelected ||
                   selectedPins.length === 0 ||
                   !workspaceId ||
@@ -4279,16 +4335,6 @@ function buildUploadProgressMessage(input: ReturnType<typeof buildUploadProgress
 
   const remaining = input.total - input.completed;
   return `${remaining} pin${remaining === 1 ? "" : "s"} waiting to upload.`;
-}
-
-function formatDateTimeLocalValue(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "";
-  }
-
-  const offsetMs = date.getTimezoneOffset() * 60 * 1000;
-  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
 }
 
 function formatQueueDayLabel(value: string) {

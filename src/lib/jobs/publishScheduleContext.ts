@@ -1,11 +1,17 @@
 import { ScheduleRunItemStatus } from "@prisma/client";
+import {
+  addDays,
+  createUtcDateForTimeZone,
+  DEFAULT_PUBLISH_TIMEZONE,
+  getTimeZoneDateParts,
+  MIN_URL_SPACING_DAYS,
+  toTimeZoneDateKey,
+} from "@/lib/jobs/publishTiming";
 import { findNextPublishSlotWithCapacity, getPublishQueueCapacitySummary } from "@/lib/jobs/publishQueueCapacity";
 import { prisma } from "@/lib/prisma";
 import type { PublishScheduleContext } from "@/lib/types";
 
-const MIN_SPACING_DAYS = 25;
 const MAX_SPACING_DAYS = 30;
-const DEFAULT_PUBLISH_TIMEZONE = "America/New_York";
 const DEFAULT_PUBLISH_HOUR = 9;
 const DEFAULT_PUBLISH_MINUTE = 0;
 const PUBLICATION_RECORD_STATE = {
@@ -83,7 +89,9 @@ export async function getPublishScheduleContextForPost(input: {
     : latestPublishedAt
       ? "published"
       : "none";
-  const spacingRecommendedFirstPublishAt = anchorAt ? addDays(anchorAt, MIN_SPACING_DAYS) : null;
+  const spacingRecommendedFirstPublishAt = anchorAt
+    ? addDays(anchorAt, MIN_URL_SPACING_DAYS)
+    : null;
   const spacingAnchor =
     spacingRecommendedFirstPublishAt && spacingRecommendedFirstPublishAt > now
       ? spacingRecommendedFirstPublishAt
@@ -108,7 +116,7 @@ export async function getPublishScheduleContextForPost(input: {
   const queueSuggestionReason =
     nextAvailableDateKey &&
     nextAvailableDateKey !== recommendationBaseDateKey
-      ? `${formatDateKey(recommendationBaseDateKey)} is already at the daily target.`
+      ? `${formatDateKey(recommendationBaseDateKey)} has no safe publish slot in the current window.`
       : null;
 
   return {
@@ -145,17 +153,11 @@ function maxDate(values: Date[]) {
   );
 }
 
-function addDays(value: Date, days: number) {
-  return new Date(value.getTime() + days * 24 * 60 * 60 * 1000);
-}
-
 function toIsoString(value: Date | null) {
   return value ? value.toISOString() : null;
 }
 
-function toUtcDateKey(value: Date) {
-  return value.toISOString().slice(0, 10);
-}
+const toUtcDateKey = toTimeZoneDateKey;
 
 function formatDateKey(value: string) {
   return new Intl.DateTimeFormat("en-US", {
@@ -193,65 +195,3 @@ function resolvePreferredPublishAnchor(fromDate: Date) {
   });
 }
 
-function getTimeZoneDateParts(value: Date, timeZone: string) {
-  const formatter = new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
-  const parts = formatter.formatToParts(value);
-
-  return {
-    year: Number(parts.find((part) => part.type === "year")?.value ?? 0),
-    month: Number(parts.find((part) => part.type === "month")?.value ?? 0),
-    day: Number(parts.find((part) => part.type === "day")?.value ?? 0),
-  };
-}
-
-function createUtcDateForTimeZone(input: {
-  year: number;
-  month: number;
-  day: number;
-  hour: number;
-  minute: number;
-  second: number;
-  millisecond: number;
-  timeZone: string;
-}) {
-  const utcGuess = new Date(
-    Date.UTC(
-      input.year,
-      input.month - 1,
-      input.day,
-      input.hour,
-      input.minute,
-      input.second,
-      input.millisecond,
-    ),
-  );
-  const offset = getTimeZoneOffset(utcGuess, input.timeZone);
-  return new Date(utcGuess.getTime() - offset);
-}
-
-function getTimeZoneOffset(value: Date, timeZone: string) {
-  const formatter = new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    hour12: false,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
-  const parts = formatter.formatToParts(value);
-  const year = Number(parts.find((part) => part.type === "year")?.value ?? 0);
-  const month = Number(parts.find((part) => part.type === "month")?.value ?? 1);
-  const day = Number(parts.find((part) => part.type === "day")?.value ?? 1);
-  const hour = Number(parts.find((part) => part.type === "hour")?.value ?? 0);
-  const minute = Number(parts.find((part) => part.type === "minute")?.value ?? 0);
-  const second = Number(parts.find((part) => part.type === "second")?.value ?? 0);
-  const asUtc = Date.UTC(year, month - 1, day, hour, minute, second, 0);
-  return asUtc - value.getTime();
-}

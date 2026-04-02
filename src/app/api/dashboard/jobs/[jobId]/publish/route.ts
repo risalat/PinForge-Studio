@@ -5,6 +5,7 @@ import { requireAuthenticatedDashboardApiUser } from "@/lib/auth/dashboardSessio
 import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
 import { EditablePinDescriptionSchema, EditablePinTitleSchema } from "@/lib/ai/validators";
 import { isDatabaseConfigured } from "@/lib/env";
+import { MIN_URL_SPACING_MINUTES } from "@/lib/jobs/publishTiming";
 import {
   getOwnedGeneratedPinsForPublish,
   queueScheduleJobPins,
@@ -59,7 +60,7 @@ const publishSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("schedule"),
     firstPublishAt: z.string().min(1),
-    intervalMinutes: z.number().int().positive().max(60 * 24 * 60),
+    intervalMinutes: z.number().int().min(MIN_URL_SPACING_MINUTES).max(60 * 24 * 60),
     jitterMinutes: z.number().int().min(0).max(60 * 24 * 60).optional(),
     schedulePlan: z
       .array(

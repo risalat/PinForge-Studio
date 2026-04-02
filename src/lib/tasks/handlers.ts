@@ -14,6 +14,7 @@ import {
   scheduleJobPins,
   uploadJobPinsToPubler,
 } from "@/lib/jobs/generatePins";
+import { MIN_URL_SPACING_MINUTES } from "@/lib/jobs/publishTiming";
 import { normalizeErrorForLogging } from "@/lib/observability/operationContext";
 
 const cleanTempAssetsPayloadSchema = z.object({
@@ -60,7 +61,7 @@ const schedulePinsPayloadSchema = z.object({
   jobId: z.string().min(1),
   scheduleRunId: z.string().min(1).optional(),
   firstPublishAt: z.string().min(1),
-  intervalMinutes: z.number().int().positive(),
+  intervalMinutes: z.number().int().min(MIN_URL_SPACING_MINUTES),
   jitterMinutes: z.number().int().min(0).optional(),
   schedulePlan: z
     .array(

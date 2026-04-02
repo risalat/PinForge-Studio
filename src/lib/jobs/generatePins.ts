@@ -47,6 +47,7 @@ import {
 import { buildCapacityAwareSchedulePreview } from "@/lib/jobs/schedulePreview";
 import { buildTemplateDiverseOrder } from "@/lib/jobs/templateDiversity";
 import { getPublishQueueCapacitySummary } from "@/lib/jobs/publishQueueCapacity";
+import { getPublishScheduleContextForPost } from "@/lib/jobs/publishScheduleContext";
 import { renderPin } from "@/lib/renderer/renderPin";
 import { refreshPostPulseSnapshotsForJob } from "@/lib/dashboard/postPulse";
 import {
@@ -2906,15 +2907,23 @@ export async function scheduleJobPins(input: {
     });
   }
 
-  const queueCapacity = await getPublishQueueCapacitySummary({
-    userId: input.userId,
-    workspaceId,
-    fromDate: firstPublishAt,
-    days: 60,
-  });
+  const [queueCapacity, scheduleContext] = await Promise.all([
+    getPublishQueueCapacitySummary({
+      userId: input.userId,
+      workspaceId,
+      fromDate: firstPublishAt,
+      days: 60,
+    }),
+    getPublishScheduleContextForPost({
+      userId: input.userId,
+      postId: job.postId,
+      workspaceId,
+    }),
+  ]);
   const fallbackPreviewItems = buildCapacityAwareSchedulePreview({
     pinIds: selectedPins.map((pin) => pin.id),
     firstPublishAt,
+    minimumFirstPublishAt: scheduleContext.spacingRecommendedFirstPublishAt,
     intervalMinutes: input.intervalMinutes,
     jitterMinutes: input.jitterMinutes ?? 0,
     targetPerDay: queueCapacity.targetPerDay,
