@@ -576,13 +576,21 @@ export function SettingsManager({
   }, [workspaceProfiles, publerAccountsByWorkspace, publerBoardsByWorkspaceAccount]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-end gap-4">
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-[var(--dashboard-accent-border)] bg-[var(--dashboard-accent-soft-strong)] px-4 py-3">
+        <div className="flex flex-wrap items-center gap-2">
+          {success ? (
+            <p className="rounded-full border border-[var(--dashboard-success-border)] bg-[var(--dashboard-success-soft)] px-4 py-2 text-sm text-[var(--dashboard-success-ink)]">{success}</p>
+          ) : null}
+          {error ? (
+            <p className="rounded-full border border-[var(--dashboard-danger-border)] bg-[var(--dashboard-danger-soft)] px-4 py-2 text-sm text-[var(--dashboard-danger-ink)]">{error}</p>
+          ) : null}
+        </div>
         <button
           type="button"
           onClick={() => void handleSave()}
           disabled={isSaving}
-          className="rounded-full dashboard-accent-action dashboard-accent-action bg-[var(--dashboard-accent)] px-6 py-3 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
+          className="rounded-full dashboard-accent-action dashboard-accent-action bg-[var(--dashboard-accent)] px-5 py-2.5 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
         >
           <BusyActionLabel
             busy={isSaving}
@@ -591,24 +599,12 @@ export function SettingsManager({
             inverse
           />
         </button>
-
-        {success ? (
-          <p className="rounded-full border border-[var(--dashboard-success-border)] bg-[var(--dashboard-success-soft)] px-4 py-2 text-sm text-[var(--dashboard-success-ink)]">{success}</p>
-        ) : null}
-        {error ? (
-          <p className="rounded-full border border-[var(--dashboard-danger-border)] bg-[var(--dashboard-danger-soft)] px-4 py-2 text-sm text-[var(--dashboard-danger-ink)]">{error}</p>
-        ) : null}
       </div>
 
-      <section className="overflow-hidden rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] shadow-[var(--dashboard-shadow-sm)]">
-        <div className="border-b border-[var(--dashboard-line)] bg-[var(--dashboard-panel-alt)] px-5 py-4">
+      <section className="overflow-hidden rounded-[24px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] shadow-[var(--dashboard-shadow-sm)]">
+        <div className="border-b border-[var(--dashboard-line)] bg-[var(--dashboard-panel-alt)] px-4 py-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
-                Publer
-              </p>
-              <h2 className="mt-1 text-xl font-black tracking-[-0.03em]">Publishing access</h2>
-            </div>
+            <h2 className="text-lg font-bold">Publishing access</h2>
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
@@ -650,8 +646,8 @@ export function SettingsManager({
           </div>
         </div>
 
-        <div className="px-5 py-5">
-          <div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)] lg:items-center">
+        <div className="px-4 py-4">
+          <div className="grid gap-3 lg:grid-cols-[180px_minmax(0,1fr)] lg:items-center">
             <FieldLabel>Publer API key</FieldLabel>
             <div className="space-y-3">
               <input
@@ -673,7 +669,7 @@ export function SettingsManager({
             </div>
           </div>
 
-          <div className="mt-5 overflow-hidden rounded-[22px] border border-[var(--dashboard-line)]">
+          <div className="mt-4 overflow-hidden rounded-[20px] border border-[var(--dashboard-line)]">
             <div className="overflow-x-auto">
               <table className="min-w-[1420px] w-full table-fixed">
                 <thead className="bg-[var(--dashboard-panel-alt)]">
@@ -692,7 +688,7 @@ export function SettingsManager({
                     <tr>
                       <td
                         colSpan={7}
-                        className="px-5 py-5 text-sm text-[var(--dashboard-subtle)]"
+                        className="px-4 py-4 text-sm text-[var(--dashboard-subtle)]"
                       >
                         No workspace profiles yet.
                       </td>
@@ -710,7 +706,7 @@ export function SettingsManager({
                           key={`${profile.workspaceId || "new"}-${index}`}
                           className={index === workspaceProfiles.length - 1 ? "" : "border-b border-[var(--dashboard-line)]"}
                         >
-                          <td className="px-5 py-4 align-top">
+                          <td className="px-4 py-3 align-top">
                             <div className="space-y-2">
                               <select
                                 value={profile.workspaceId}
@@ -732,7 +728,7 @@ export function SettingsManager({
                               ) : null}
                             </div>
                           </td>
-                          <td className="px-5 py-4 align-top">
+                          <td className="px-4 py-3 align-top">
                             <input
                               value={profile.allowedDomainsInput}
                               onChange={(event) =>
@@ -742,7 +738,7 @@ export function SettingsManager({
                               className="w-full rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 outline-none"
                             />
                           </td>
-                          <td className="px-5 py-4 align-top">
+                          <td className="px-4 py-3 align-top">
                             <textarea
                               rows={3}
                               value={profile.sitemapUrlsInput}
@@ -753,7 +749,7 @@ export function SettingsManager({
                               className="w-full resize-y rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 outline-none"
                             />
                           </td>
-                          <td className="px-5 py-4 align-top">
+                          <td className="px-4 py-3 align-top">
                             <div className="space-y-2">
                               <input
                                 type="number"
@@ -771,7 +767,7 @@ export function SettingsManager({
                               </p>
                             </div>
                           </td>
-                          <td className="px-5 py-4 align-top">
+                          <td className="px-4 py-3 align-top">
                             <select
                               value={profile.defaultAccountId}
                               onChange={(event) => handleWorkspaceAccountSelection(index, event.target.value)}
@@ -786,7 +782,7 @@ export function SettingsManager({
                               ))}
                             </select>
                           </td>
-                          <td className="px-5 py-4 align-top">
+                          <td className="px-4 py-3 align-top">
                             <select
                               value={profile.defaultBoardId}
                               onChange={(event) => updateWorkspaceProfile(index, "defaultBoardId", event.target.value)}
@@ -801,7 +797,7 @@ export function SettingsManager({
                               ))}
                             </select>
                           </td>
-                          <td className="px-5 py-4 align-top">
+                          <td className="px-4 py-3 align-top">
                             <div className="flex flex-col gap-2">
                               <button
                                 type="button"
@@ -836,15 +832,10 @@ export function SettingsManager({
         </div>
       </section>
 
-      <section className="overflow-hidden rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] shadow-[var(--dashboard-shadow-sm)]">
-        <div className="border-b border-[var(--dashboard-line)] bg-[var(--dashboard-panel-alt)] px-5 py-4">
+      <section className="overflow-hidden rounded-[24px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] shadow-[var(--dashboard-shadow-sm)]">
+        <div className="border-b border-[var(--dashboard-line)] bg-[var(--dashboard-panel-alt)] px-4 py-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
-                AI
-              </p>
-              <h2 className="mt-1 text-xl font-black tracking-[-0.03em]">Copy generation keys</h2>
-            </div>
+            <h2 className="text-lg font-bold">Copy generation keys</h2>
             <button
               type="button"
               onClick={addAiCredential}
@@ -871,7 +862,7 @@ export function SettingsManager({
               <tbody>
                 {aiCredentials.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-5 py-5 text-sm text-[var(--dashboard-subtle)]">
+                    <td colSpan={6} className="px-4 py-4 text-sm text-[var(--dashboard-subtle)]">
                       No AI keys saved yet.
                     </td>
                   </tr>
@@ -881,7 +872,7 @@ export function SettingsManager({
                       key={getAiCredentialCacheKey(credential, index)}
                       className={index === aiCredentials.length - 1 ? "" : "border-b border-[var(--dashboard-line)]"}
                     >
-                      <td className="px-5 py-4 align-top">
+                      <td className="px-4 py-3 align-top">
                         <input
                           value={credential.label}
                           onChange={(event) => updateAiCredential(index, "label", event.target.value)}
@@ -889,7 +880,7 @@ export function SettingsManager({
                           className="w-full rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 outline-none"
                         />
                       </td>
-                      <td className="px-5 py-4 align-top">
+                      <td className="px-4 py-3 align-top">
                         <select
                           value={credential.provider}
                           onChange={(event) =>
@@ -904,7 +895,7 @@ export function SettingsManager({
                           ))}
                         </select>
                       </td>
-                      <td className="px-5 py-4 align-top">
+                      <td className="px-4 py-3 align-top">
                         <div className="space-y-2">
                           <input
                             type="password"
@@ -924,7 +915,7 @@ export function SettingsManager({
                           ) : null}
                         </div>
                       </td>
-                      <td className="px-5 py-4 align-top">
+                      <td className="px-4 py-3 align-top">
                         <div className="space-y-2">
                           {(() => {
                             const cacheKey = getAiCredentialCacheKey(credential, index);
@@ -980,7 +971,7 @@ export function SettingsManager({
                           })()}
                         </div>
                       </td>
-                      <td className="px-5 py-4 align-top">
+                      <td className="px-4 py-3 align-top">
                         <input
                           value={credential.customEndpoint}
                           onChange={(event) =>
@@ -990,7 +981,7 @@ export function SettingsManager({
                           className="w-full rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 outline-none"
                         />
                       </td>
-                      <td className="px-5 py-4 align-top">
+                      <td className="px-4 py-3 align-top">
                         <div className="flex flex-col gap-2">
                           <button
                             type="button"
@@ -1058,7 +1049,7 @@ function FieldLabel({ children }: { children: string }) {
 function SettingsHead({ children, className = "" }: { children: string; className?: string }) {
   return (
     <th
-      className={`px-5 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)] ${className}`}
+      className={`px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--dashboard-muted)] ${className}`}
     >
       {children}
     </th>

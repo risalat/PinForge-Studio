@@ -19,13 +19,14 @@ type TemplateSourceFilter = "all" | "builtin" | "custom";
 export default async function DashboardTemplatesPage({
   searchParams,
 }: {
-  searchParams?: Promise<{
-    view?: string;
-    group?: string;
-    groupSearch?: string;
-    templateSearch?: string;
-    source?: string;
-  }>;
+    searchParams?: Promise<{
+      view?: string;
+      group?: string;
+      groupSearch?: string;
+      templateSearch?: string;
+      source?: string;
+      notice?: string;
+    }>;
 }) {
   await requireAuthenticatedDashboardUser();
 
@@ -43,6 +44,7 @@ export default async function DashboardTemplatesPage({
   const groupSearch = resolvedSearchParams.groupSearch?.trim() ?? "";
   const templateSearch = resolvedSearchParams.templateSearch?.trim() ?? "";
   const sourceFilter = normalizeTemplateSourceFilter(resolvedSearchParams.source);
+  const actionNotice = normalizeTemplateGroupsNotice(resolvedSearchParams.notice);
 
   let content: ReactNode = null;
 
@@ -85,6 +87,7 @@ export default async function DashboardTemplatesPage({
         templateSearch={templateSearch}
         sourceFilter={sourceFilter}
         selectionMessage={selectionMessage}
+        actionNotice={actionNotice}
       />
     );
   } else {
@@ -126,6 +129,15 @@ export default async function DashboardTemplatesPage({
     </div>
   );
 }
+
+type TemplateGroupsNotice =
+  | "group-created"
+  | "group-saved"
+  | "group-deleted"
+  | "templates-added"
+  | "templates-removed"
+  | "select-template-to-add"
+  | "select-template-to-remove";
 
 function TemplateViewTab({
   href,
@@ -199,4 +211,19 @@ function buildGroupsTabHref(input: {
   }
 
   return `/dashboard/templates?${params.toString()}`;
+}
+
+function normalizeTemplateGroupsNotice(value: string | undefined): TemplateGroupsNotice | null {
+  switch (value) {
+    case "group-created":
+    case "group-saved":
+    case "group-deleted":
+    case "templates-added":
+    case "templates-removed":
+    case "select-template-to-add":
+    case "select-template-to-remove":
+      return value;
+    default:
+      return null;
+  }
 }

@@ -1,17 +1,15 @@
 import Link from "next/link";
-import type { ReactNode } from "react";
-import { TemplateGroupingSummary } from "@/components/dashboard/TemplateGroupingSummary";
 import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
 import { requireAuthenticatedDashboardUser } from "@/lib/auth/dashboardSession";
-import { renderRuntimeTemplate } from "@/lib/runtime-templates/renderRuntimeTemplate";
 import { listCustomTemplatesForUser } from "@/lib/runtime-templates/db";
+import { renderRuntimeTemplate } from "@/lib/runtime-templates/renderRuntimeTemplate";
 import { renderTemplate } from "@/lib/templates/registry";
 import {
   getBuiltInSelectableTemplateCandidatesForUser,
   listFinalizedCustomTemplateCandidatesForUser,
 } from "@/lib/templates/selectableTemplates";
 
-const THUMBNAIL_WIDTH = 280;
+const THUMBNAIL_WIDTH = 296;
 const THUMBNAIL_SCALE = THUMBNAIL_WIDTH / 1080;
 const THUMBNAIL_HEIGHT = Math.round(1920 * THUMBNAIL_SCALE);
 
@@ -24,237 +22,90 @@ export default async function DashboardLibraryPage() {
     listCustomTemplatesForUser(user.id),
   ]);
   const finalizedCustomTemplates = customFinalized.filter(
-    (
-      template,
-    ): template is NonNullable<(typeof customFinalized)[number]> => Boolean(template),
+    (template): template is NonNullable<(typeof customFinalized)[number]> => Boolean(template),
   );
   const draftCount = customTemplates.filter((template) => template.lifecycleStatus === "DRAFT").length;
   const archivedCount = customTemplates.filter((template) => template.lifecycleStatus === "ARCHIVED").length;
+  const totalSelectableCount = builtIns.length + finalizedCustomTemplates.length;
 
   return (
-    <div className="space-y-8 text-[var(--dashboard-text)]">
-      <section className="grid gap-4 xl:grid-cols-5">
-        <LibraryMetric label="Selectable Templates" value={String(builtIns.length + finalizedCustomTemplates.length)} />
-        <LibraryMetric label="Built-in Templates" value={String(builtIns.length)} />
-        <LibraryMetric label="Finalized Custom" value={String(finalizedCustomTemplates.length)} />
-        <LibraryMetric label="Drafts" value={String(draftCount)} linkHref="/dashboard/templates" linkLabel="Open drafts" />
-        <LibraryMetric label="Archived" value={String(archivedCount)} linkHref="/dashboard/templates" linkLabel="Open manager" />
+    <div className="space-y-5 text-[var(--dashboard-text)]">
+      <section className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-4 shadow-[var(--dashboard-shadow-sm)]">
+        <div className="flex flex-wrap items-center gap-2 rounded-[20px] border border-[var(--dashboard-accent-border)] bg-[var(--dashboard-accent-soft-strong)] px-4 py-3">
+          <SummaryChip label="Selectable" value={totalSelectableCount} />
+          <SummaryChip label="Built-in" value={builtIns.length} />
+          <SummaryChip label="Finalized custom" value={finalizedCustomTemplates.length} />
+          <SummaryChip label="Drafts" value={draftCount} />
+          <SummaryChip label="Archived" value={archivedCount} />
+          <div className="ml-auto flex flex-wrap gap-2">
+            <Link
+              href="/dashboard/templates"
+              className="rounded-full border border-[var(--dashboard-line)] bg-white/80 px-4 py-2 text-sm font-semibold text-[var(--dashboard-text)]"
+            >
+              Open templates
+            </Link>
+            <Link
+              href="/dashboard/jobs"
+              className="rounded-full border border-[var(--dashboard-line)] bg-white/80 px-4 py-2 text-sm font-semibold text-[var(--dashboard-text)]"
+            >
+              Use in jobs
+            </Link>
+          </div>
+        </div>
       </section>
 
-      <LibrarySection
-        title="Built-in Templates"
-        description="Production-safe built-in components. These continue to use the locked registry path exactly as before."
-      >
-        <div className="grid gap-6 2xl:grid-cols-2">
+      <LibrarySection title="Built-in templates" count={builtIns.length}>
+        <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
           {builtIns.map((template) => (
-            <article
+            <TemplateCard
               key={template.id}
-              className="rounded-[32px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-6 shadow-[var(--dashboard-shadow-sm)]"
-            >
-              <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
-                <div className="rounded-[26px] bg-[var(--dashboard-panel-alt)] p-4">
-                  <div
-                    className="overflow-hidden rounded-[22px] bg-white shadow-[var(--dashboard-shadow-sm)]"
-                    style={{ width: THUMBNAIL_WIDTH, height: THUMBNAIL_HEIGHT }}
-                  >
-                    <div
-                      style={{
-                        width: 1080,
-                        height: 1920,
-                        transform: `scale(${THUMBNAIL_SCALE})`,
-                        transformOrigin: "top left",
-                      }}
-                    >
-                      {renderTemplate(template.id, template.sampleProps)}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex min-w-0 flex-col justify-between gap-6">
-                  <div className="space-y-4">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Tag label="Built-in" tone="accent" />
-                        <Tag label={`${template.imageSlotCount} image slots`} />
-                        <Tag label={template.supportsSubtitle ? "Editorial" : "Overlay"} />
-                      </div>
-
-                    <div>
-                      <h2 className="text-3xl font-black tracking-[-0.04em]">{template.name}</h2>
-                      <p className="mt-2 text-sm font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
-                        {template.id}
-                      </p>
-                    </div>
-
-                      <div className="grid gap-3 sm:grid-cols-2">
-                      <DetailCard label="Bindings" value={template.supportedBindings.join(", ")} />
-                      <DetailCard
-                        label="Status"
-                        value={template.locked ? "Locked production template" : "Draft"}
-                      />
-                    </div>
-
-                    <TemplateGroupingSummary
-                      systemCategories={template.systemCategories}
-                      userGroups={template.userGroups}
-                    />
-                  </div>
-
-                  <div className="flex flex-wrap gap-3">
-                    <Link
-                      href={template.previewPath ?? `/preview/${template.id}`}
-                      className="rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-5 py-3 text-sm font-semibold text-white"
-                    >
-                      Open preview
-                    </Link>
-                    <Link
-                      href={`/render/${template.id}`}
-                      className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-5 py-3 text-sm font-semibold text-[var(--dashboard-subtle)]"
-                    >
-                      Render route
-                    </Link>
-                    <Link
-                      href="/dashboard/jobs"
-                      className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-5 py-3 text-sm font-semibold text-[var(--dashboard-subtle)]"
-                    >
-                      Use in jobs
-                    </Link>
-                    <Link
-                      href={`/dashboard/templates?view=groups&templateSearch=${encodeURIComponent(template.name)}`}
-                      className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-5 py-3 text-sm font-semibold text-[var(--dashboard-subtle)]"
-                    >
-                      Manage My groups
-                    </Link>
-                  </div>
-                </div>
-              </div>
-            </article>
+              preview={
+                <LibraryThumbnail>
+                  {renderTemplate(template.id, template.sampleProps)}
+                </LibraryThumbnail>
+              }
+              name={template.name}
+              badges={[
+                { label: "Built-in", tone: "accent" },
+                { label: `${template.imageSlotCount} slots` },
+              ]}
+              groupInfo={summarizeItems(template.userGroups.map((group) => group.name), "Not in any groups")}
+              previewHref={template.previewPath ?? `/preview/${template.id}`}
+              renderHref={`/render/${template.id}`}
+              manageGroupsHref={`/dashboard/templates?view=groups&templateSearch=${encodeURIComponent(template.name)}`}
+            />
           ))}
         </div>
       </LibrarySection>
 
-      <LibrarySection
-        title="My Finalized Custom Templates"
-        description="Only finalized and locked runtime-template versions appear here and in the production plan picker."
-      >
+      <LibrarySection title="My finalized custom templates" count={finalizedCustomTemplates.length}>
         {finalizedCustomTemplates.length === 0 ? (
-          <div className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-6 text-sm text-[var(--dashboard-subtle)] shadow-[var(--dashboard-shadow-sm)]">
-            No finalized custom templates yet. Finalize a draft from the template manager first.
-          </div>
+          <EmptyState
+            title="No finalized custom templates"
+            description="Finalize a custom template from Templates to make it available in the library."
+          />
         ) : (
-          <div className="grid gap-6 2xl:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
             {finalizedCustomTemplates.map((template) => (
-              <article
+              <TemplateCard
                 key={template.selectionKey}
-                className="rounded-[32px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-6 shadow-[var(--dashboard-shadow-sm)]"
-              >
-                <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
-                  <div className="rounded-[26px] bg-[var(--dashboard-panel-alt)] p-4">
-                    <div
-                      className="overflow-hidden rounded-[22px] bg-white shadow-[var(--dashboard-shadow-sm)]"
-                      style={{ width: THUMBNAIL_WIDTH, height: THUMBNAIL_HEIGHT }}
-                    >
-                      <div
-                        style={{
-                          width: 1080,
-                          height: 1920,
-                          transform: `scale(${THUMBNAIL_SCALE})`,
-                          transformOrigin: "top left",
-                        }}
-                      >
-                        {template.runtimeSchemaJson
-                          ? renderRuntimeTemplate(template.runtimeSchemaJson, template.sampleProps)
-                          : null}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex min-w-0 flex-col justify-between gap-6">
-                    <div className="space-y-4">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Tag label="Custom" tone="accent" />
-                        <Tag label="Finalized" />
-                        <Tag label={`v${template.versionNumber ?? 1}`} />
-                        <Tag label={`${template.imageSlotCount} image slots`} />
-                      </div>
-
-                      <div>
-                        <h2 className="text-3xl font-black tracking-[-0.04em]">{template.name}</h2>
-                        <p className="mt-2 text-sm font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
-                          {template.slug || template.templateId}
-                        </p>
-                      </div>
-
-                      <p className="text-sm leading-7 text-[var(--dashboard-subtle)]">
-                        {template.description || "Runtime-schema custom template."}
-                      </p>
-
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <DetailCard label="Bindings" value={template.supportedBindings.join(", ")} />
-                        <DetailCard
-                          label="Preset families"
-                          value={template.allowedPresetCategories.length > 0 ? template.allowedPresetCategories.join(", ") : "All presets"}
-                        />
-                        <DetailCard
-                          label="Image policy"
-                          value={`${template.imagePolicyMode} | min ${template.minImageSlotsRequired}`}
-                        />
-                        <DetailCard
-                          label="Copy hints"
-                          value={[
-                            template.copyHints.headlineStyle,
-                            template.copyHints.preferredMaxLines
-                              ? `${template.copyHints.preferredMaxLines} lines`
-                              : null,
-                            template.copyHints.preferredWordCount
-                              ? `${template.copyHints.preferredWordCount} words`
-                              : null,
-                          ]
-                            .filter(Boolean)
-                            .join(" | ") || "Default runtime hints"}
-                        />
-                      </div>
-
-                      <TemplateGroupingSummary
-                        systemCategories={template.systemCategories}
-                        userGroups={template.userGroups}
-                      />
-                    </div>
-
-                    <div className="flex flex-wrap gap-3">
-                      <Link
-                        href={template.previewPath}
-                        className="rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-5 py-3 text-sm font-semibold text-white"
-                      >
-                        Preview runtime
-                      </Link>
-                      <Link
-                        href={template.renderPath}
-                        className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-5 py-3 text-sm font-semibold text-[var(--dashboard-subtle)]"
-                      >
-                        Render route
-                      </Link>
-                      <Link
-                        href="/dashboard/jobs"
-                        className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-5 py-3 text-sm font-semibold text-[var(--dashboard-subtle)]"
-                      >
-                        Use in jobs
-                      </Link>
-                      <Link
-                        href="/dashboard/templates"
-                        className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-5 py-3 text-sm font-semibold text-[var(--dashboard-subtle)]"
-                      >
-                        Manage lifecycle
-                      </Link>
-                      <Link
-                        href={`/dashboard/templates?view=groups&templateSearch=${encodeURIComponent(template.name)}`}
-                        className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-5 py-3 text-sm font-semibold text-[var(--dashboard-subtle)]"
-                      >
-                        Manage My groups
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-              </article>
+                preview={
+                  <LibraryThumbnail>
+                    {template.runtimeSchemaJson
+                      ? renderRuntimeTemplate(template.runtimeSchemaJson, template.sampleProps)
+                      : null}
+                  </LibraryThumbnail>
+                }
+                name={template.name}
+                badges={[
+                  { label: "Custom", tone: "accent" },
+                  { label: `v${template.versionNumber ?? 1}` },
+                ]}
+                groupInfo={summarizeItems(template.userGroups.map((group) => group.name), "Not in any groups")}
+                previewHref={template.previewPath}
+                renderHref={template.renderPath}
+                manageGroupsHref={`/dashboard/templates?view=groups&templateSearch=${encodeURIComponent(template.name)}`}
+              />
             ))}
           </div>
         )}
@@ -265,50 +116,134 @@ export default async function DashboardLibraryPage() {
 
 function LibrarySection({
   title,
-  description,
+  count,
   children,
 }: {
   title: string;
-  description: string;
-  children: ReactNode;
+  count: number;
+  children: React.ReactNode;
 }) {
   return (
-    <section className="space-y-4">
-      <div>
-        <h2 className="text-2xl font-black tracking-[-0.04em]">{title}</h2>
-        <p className="mt-2 text-sm text-[var(--dashboard-subtle)]">{description}</p>
+    <section className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-4 shadow-[var(--dashboard-shadow-sm)]">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-[20px] bg-[var(--dashboard-panel-alt)] px-4 py-3">
+        <h2 className="text-xl font-bold">{title}</h2>
+        <span className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-muted)]">
+          {count}
+        </span>
       </div>
-      {children}
+      <div className="mt-4">{children}</div>
     </section>
   );
 }
 
-function LibraryMetric(input: {
-  label: string;
-  value: string;
-  linkHref?: string;
-  linkLabel?: string;
+function TemplateCard({
+  preview,
+  name,
+  badges,
+  groupInfo,
+  previewHref,
+  renderHref,
+  manageGroupsHref,
+}: {
+  preview: React.ReactNode;
+  name: string;
+  badges: Array<{ label: string; tone?: "neutral" | "accent" }>;
+  groupInfo: string;
+  previewHref: string;
+  renderHref: string;
+  manageGroupsHref: string;
 }) {
   return (
-    <div className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-5 shadow-[var(--dashboard-shadow-sm)]">
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">{input.label}</p>
-      <p className="mt-3 text-4xl font-black">{input.value}</p>
-      {input.linkHref && input.linkLabel ? (
-        <Link
-          href={input.linkHref}
-          className="mt-4 inline-flex rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)]"
-        >
-          {input.linkLabel}
-        </Link>
-      ) : null}
+    <article className="overflow-hidden rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] shadow-[var(--dashboard-shadow-sm)]">
+      <div className="border-b border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-3">
+        {preview}
+      </div>
+      <div className="space-y-3 p-4">
+        <div className="space-y-2">
+          <h3 className="line-clamp-2 text-lg font-bold">{name}</h3>
+          <div className="flex flex-wrap gap-2">
+            {badges.map((badge) => (
+              <Tag key={badge.label} label={badge.label} tone={badge.tone} />
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-[18px] bg-[var(--dashboard-panel-strong)] px-3 py-2">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--dashboard-muted)]">
+            My groups
+          </p>
+          <p className="mt-1 text-sm text-[var(--dashboard-text)]">{groupInfo}</p>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href={previewHref}
+            className="rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)]"
+          >
+            Preview
+          </Link>
+          <Link
+            href={renderHref}
+            className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)]"
+          >
+            Render
+          </Link>
+          <Link
+            href={manageGroupsHref}
+            className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)]"
+          >
+            Manage groups
+          </Link>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function LibraryThumbnail({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      className="mx-auto overflow-hidden rounded-[18px] bg-white shadow-[var(--dashboard-shadow-sm)]"
+      style={{ width: THUMBNAIL_WIDTH, height: THUMBNAIL_HEIGHT }}
+    >
+      <div
+        style={{
+          width: 1080,
+          height: 1920,
+          transform: `scale(${THUMBNAIL_SCALE})`,
+          transformOrigin: "top left",
+        }}
+      >
+        {children}
+      </div>
     </div>
   );
 }
 
-function Tag({ label, tone = "neutral" }: { label: string; tone?: "neutral" | "accent" }) {
+function SummaryChip({
+  label,
+  value,
+}: {
+  label: string;
+  value: number;
+}) {
+  return (
+    <span className="rounded-full border border-[var(--dashboard-line)] bg-white/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-text)]">
+      {label}: {value}
+    </span>
+  );
+}
+
+function Tag({
+  label,
+  tone = "neutral",
+}: {
+  label: string;
+  tone?: "neutral" | "accent";
+}) {
   return (
     <span
-      className={`rounded-full px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] ${
+      className={`rounded-full px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.14em] ${
         tone === "accent"
           ? "bg-[var(--dashboard-accent-soft)] text-[var(--dashboard-accent-strong)]"
           : "bg-[var(--dashboard-panel-alt)] text-[var(--dashboard-subtle)]"
@@ -319,11 +254,28 @@ function Tag({ label, tone = "neutral" }: { label: string; tone?: "neutral" | "a
   );
 }
 
-function DetailCard({ label, value }: { label: string; value: string }) {
+function EmptyState({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
   return (
-    <div className="rounded-[22px] bg-[var(--dashboard-panel-alt)] p-4">
-      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--dashboard-muted)]">{label}</p>
-      <p className="mt-2 text-sm leading-6 text-[var(--dashboard-subtle)]">{value}</p>
+    <div className="rounded-[24px] border border-dashed border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-5">
+      <p className="font-semibold text-[var(--dashboard-text)]">{title}</p>
+      <p className="mt-2 text-sm text-[var(--dashboard-subtle)]">{description}</p>
     </div>
   );
+}
+
+function summarizeItems(items: string[], emptyLabel: string, limit = 3) {
+  if (items.length === 0) {
+    return emptyLabel;
+  }
+
+  const visibleItems = items.slice(0, limit).map((item) => item.replace(/[-_]/g, " "));
+  const overflowCount = items.length - visibleItems.length;
+
+  return overflowCount > 0 ? `${visibleItems.join(", ")} +${overflowCount}` : visibleItems.join(", ");
 }

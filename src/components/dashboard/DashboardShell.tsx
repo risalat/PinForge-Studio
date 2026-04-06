@@ -123,43 +123,27 @@ export function DashboardShell({
         <div className="min-w-0">
           {isTemplateEditorRoute ? null : (
             <header className="sticky top-0 z-20 border-b border-[var(--dashboard-line)] bg-[color:var(--dashboard-canvas)]/92 backdrop-blur-xl">
-              <div className="flex flex-col gap-5 px-5 py-5 lg:px-8">
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.26em] text-[var(--dashboard-muted)]">
-                      {header.eyebrow}
-                    </p>
-                    <h1 className="mt-2 text-3xl font-black tracking-[-0.04em] text-[var(--dashboard-text)] lg:text-4xl">
-                      {header.title}
-                    </h1>
-                    <p className="mt-2 max-w-3xl text-sm text-[var(--dashboard-subtle)]">
-                      {header.description}
-                    </p>
-                  </div>
+              <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-4 lg:px-8">
+                <h1 className="text-3xl font-black tracking-[-0.04em] text-[var(--dashboard-text)] lg:text-4xl">
+                  {header.title}
+                </h1>
 
-                  <div className="flex flex-wrap items-center gap-3">
-                    <DashboardNotificationCenter calendarNotifications={calendarNotifications} />
-                    {header.secondaryActionHref && header.secondaryActionLabel ? (
+                <div className="flex flex-wrap items-center gap-3">
+                  <DashboardNotificationCenter calendarNotifications={calendarNotifications} />
+                  {header.secondaryActionHref && header.secondaryActionLabel ? (
                     <Link
                       href={header.secondaryActionHref}
                       className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-text)]"
                     >
                       {header.secondaryActionLabel}
                     </Link>
-                    ) : null}
-                    <Link
-                      href={header.primaryActionHref}
-                      className="rounded-full dashboard-accent-action dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)]"
-                    >
-                      {header.primaryActionLabel}
-                    </Link>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2 text-sm text-[var(--dashboard-subtle)]">
-                  <span className="font-medium text-[var(--dashboard-text)]">{buildBreadcrumb(pathname)}</span>
-                  <span className="h-1 w-1 rounded-full bg-[var(--dashboard-line)]" />
-                  <span>{header.eyebrow}</span>
+                  ) : null}
+                  <Link
+                    href={header.primaryActionHref}
+                    className="rounded-full dashboard-accent-action dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)]"
+                  >
+                    {header.primaryActionLabel}
+                  </Link>
                 </div>
               </div>
             </header>
@@ -195,33 +179,6 @@ function isNavItemActive(pathname: string, href: string) {
   }
 
   return pathname === href || pathname.startsWith(`${href}/`);
-}
-
-function buildBreadcrumb(pathname: string) {
-  if (pathname === "/dashboard") {
-    return "Dashboard / Overview";
-  }
-
-  return pathname
-    .replace("/dashboard", "")
-    .split("/")
-    .filter(Boolean)
-    .map((segment) => {
-      if (segment === "jobs") return "Jobs";
-      if (segment === "inbox") return "Inbox";
-      if (segment === "publishing") return "Publishing";
-      if (segment === "post-pulse") return "Post Pulse";
-      if (segment === "library") return "Library";
-      if (segment === "integrations") return "Integrations";
-      if (segment === "housekeeping") return "Housekeeping";
-      if (segment === "admin") return "Admin";
-      if (segment === "settings") return "Settings";
-      if (segment === "api-keys") return "API Keys";
-      if (segment === "publish") return "Publish";
-      if (segment.startsWith("c")) return "Detail";
-      return segment.charAt(0).toUpperCase() + segment.slice(1);
-    })
-    .join(" / ");
 }
 
 function NavIcon({

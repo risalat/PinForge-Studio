@@ -324,6 +324,7 @@ export function JobReviewManager({
   const [reviewGridFilter, setReviewGridFilter] = useState<ReviewGridFilter>(() =>
     readReviewGridFilter(jobId),
   );
+  const [planSetupMode, setPlanSetupMode] = useState<"assisted" | "manual">("assisted");
   const [isPlanEditorOpen, setIsPlanEditorOpen] = useState(false);
   const [recentlyFixedPlanIds, setRecentlyFixedPlanIds] = useState<string[]>(() =>
     readRecentlyFixedPlanIds(jobId),
@@ -1688,21 +1689,40 @@ export function JobReviewManager({
 
       <section
         id="plans"
-        className="space-y-4 rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-5 shadow-[var(--dashboard-shadow-sm)]"
+        className="space-y-4 rounded-[24px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-4 shadow-[var(--dashboard-shadow-sm)]"
       >
-        <div>
-          <h2 className="text-xl font-bold">Plan setup</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-bold">Plan setup</h2>
+          <div className="inline-flex rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-1">
+            {([
+              ["assisted", "Assisted planning"],
+              ["manual", "Manual plan"],
+            ] as const).map(([mode, label]) => {
+              const active = planSetupMode === mode;
+              return (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setPlanSetupMode(mode)}
+                  className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                    active
+                      ? "bg-[var(--dashboard-accent-soft)] text-[var(--dashboard-accent-strong)] ring-1 ring-[var(--dashboard-accent)]"
+                      : "text-[var(--dashboard-subtle)]"
+                  }`}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
         </div>
         {plansFeedback ? <InlineFeedback feedback={plansFeedback} /> : null}
 
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
-          <div className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-4">
+        {planSetupMode === "assisted" ? (
+          <div className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-3">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <p className="text-base font-bold text-[var(--dashboard-text)]">Assisted auto</p>
-                <p className="mt-1 text-sm text-[var(--dashboard-subtle)]">
-                  Studio picks eligible templates and maps selected images automatically.
-                </p>
+                <p className="text-base font-bold text-[var(--dashboard-text)]">Assisted planning</p>
               </div>
               <button
                 type="button"
@@ -1728,126 +1748,120 @@ export function JobReviewManager({
               </button>
             </div>
 
-            <div className="mt-4 space-y-4">
-              <div className="grid gap-4 md:grid-cols-[160px_minmax(260px,360px)]">
-                <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
-                  Pins to create
-                  <input
-                    type="number"
-                    min={1}
-                    value={pinCount}
-                    onChange={(event) => setPinCount(Number(event.target.value))}
-                    className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-3 py-2"
-                  />
-                </label>
-                <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
-                  Preset strategy
-                  <select
-                    value={assistedPresetStrategy}
-                    onChange={(event) =>
-                      setAssistedPresetStrategy(
-                        event.target.value as
-                          | "recommended"
-                          | "random_all"
-                          | "random_bold"
-                          | "random_feminine",
-                      )
-                    }
-                    className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-3 py-2"
-                  >
-                    <option value="recommended">Recommended per pin</option>
-                    <option value="random_all">Random from all presets</option>
-                    <option value="random_bold">Random bold presets only</option>
-                    <option value="random_feminine">Random feminine presets</option>
-                  </select>
-                </label>
-              </div>
-
-              <div className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-4">
-                <div className="flex flex-wrap gap-2">
-                  {([
-                    ["built_in", "Built-in only"],
-                    ["custom", "Custom only"],
-                    ["all", "All templates"],
-                  ] as const).map(([mode, label]) => {
-                    const active = assistedTemplateSourceMode === mode;
-                    return (
-                      <button
-                        key={mode}
-                        type="button"
-                        onClick={() => setAssistedTemplateSourceMode(mode)}
-                        className={`rounded-full border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] ${
-                          active
-                            ? "border-[var(--dashboard-accent)] bg-[var(--dashboard-accent-soft)] text-[var(--dashboard-accent-strong)]"
-                            : "border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] text-[var(--dashboard-muted)]"
-                        }`}
+            <div className="mt-3 space-y-3">
+              <div className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] shadow-[var(--dashboard-shadow-sm)]">
+                <div className="flex items-center gap-2 border-b border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-3">
+                  <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-[var(--dashboard-accent-soft)] px-2 text-xs font-bold text-[var(--dashboard-accent-strong)]">
+                    1
+                  </span>
+                  <p className="text-sm font-bold text-[var(--dashboard-text)]">Planning scope</p>
+                </div>
+                <div className="p-3">
+                  <div className="grid gap-3 md:grid-cols-[140px_minmax(220px,320px)]">
+                    <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
+                      Pins to create
+                      <input
+                        type="number"
+                        min={1}
+                        value={pinCount}
+                        onChange={(event) => setPinCount(Number(event.target.value))}
+                        className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-2"
+                      />
+                    </label>
+                    <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
+                      Preset strategy
+                      <select
+                        value={assistedPresetStrategy}
+                        onChange={(event) =>
+                          setAssistedPresetStrategy(
+                            event.target.value as
+                              | "recommended"
+                              | "random_all"
+                              | "random_bold"
+                              | "random_feminine",
+                          )
+                        }
+                        className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-2"
                       >
-                        {label}
-                      </button>
-                    );
-                  })}
+                        <option value="recommended">Recommended per pin</option>
+                        <option value="random_all">Random from all presets</option>
+                        <option value="random_bold">Random bold presets only</option>
+                        <option value="random_feminine">Random feminine presets</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div className="mt-3 inline-flex flex-wrap rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-1">
+                    {([
+                      ["built_in", "Built-in only"],
+                      ["custom", "Custom only"],
+                      ["all", "All templates"],
+                    ] as const).map(([mode, label]) => {
+                      const active = assistedTemplateSourceMode === mode;
+                      return (
+                        <button
+                          key={mode}
+                          type="button"
+                          onClick={() => setAssistedTemplateSourceMode(mode)}
+                          className={`rounded-full px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] ${
+                            active
+                              ? "bg-[var(--dashboard-accent)] text-white"
+                              : "text-[var(--dashboard-muted)]"
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2 text-sm">
+                    <span className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-1.5 text-[var(--dashboard-subtle)]">
+                      <span className="font-semibold text-[var(--dashboard-text)]">{templatesInSourceScope.length}</span> in scope
+                    </span>
+                    <span className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-1.5 text-[var(--dashboard-subtle)]">
+                      <span className="font-semibold text-[var(--dashboard-text)]">{templatesInGroupScope.length}</span> after groups
+                    </span>
+                    <span className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-1.5 text-[var(--dashboard-subtle)]">
+                      <span className="font-semibold text-[var(--dashboard-text)]">{activeSelectedTemplates.length}</span> selected
+                    </span>
+                  </div>
+                  {noTemplatesInSourceScope ? (
+                    <div className="mt-3 rounded-xl border border-[var(--dashboard-warning-border)] bg-[var(--dashboard-warning-soft)] px-4 py-3 text-sm text-[var(--dashboard-warning-ink)]">
+                      No eligible templates are available in the current source scope.
+                    </div>
+                  ) : templatesInGroupScope.length === 0 ? (
+                    <div className="mt-3 rounded-xl border border-[var(--dashboard-warning-border)] bg-[var(--dashboard-warning-soft)] px-4 py-3 text-sm text-[var(--dashboard-warning-ink)]">
+                      {hasSelectedGroupWithOnlyIneligibleTemplates
+                        ? "Selected groups currently contain only ineligible templates."
+                        : "No eligible templates remain after the current filters."}
+                    </div>
+                  ) : hasGroupedTemplatesExcludedFromPlanning ? (
+                    <div className="mt-3 rounded-xl border border-[var(--dashboard-warning-border)] bg-[var(--dashboard-warning-soft)] px-4 py-3 text-sm text-[var(--dashboard-warning-ink)]">
+                      Some grouped templates were excluded from assisted planning.
+                    </div>
+                  ) : null}
                 </div>
-                <div className="mt-4 grid gap-3 md:grid-cols-3">
-                  <PlannerSummaryCard
-                    label="Templates in scope"
-                    value={String(templatesInSourceScope.length)}
-                    detail="Current source filter"
-                  />
-                  <PlannerSummaryCard
-                    label="Eligible after groups"
-                    value={String(templatesInGroupScope.length)}
-                    detail={
-                      selectedTemplateGroupIds.length === 0
-                        ? "No group selected"
-                        : "Union of selected groups"
-                    }
-                  />
-                  <PlannerSummaryCard
-                    label="Selected for planning"
-                    value={String(activeSelectedTemplates.length)}
-                    detail="Advanced template filter"
-                  />
-                </div>
-                {noTemplatesInSourceScope ? (
-                  <div className="mt-3 rounded-xl border border-[var(--dashboard-warning-border)] bg-[var(--dashboard-warning-soft)] px-4 py-3 text-sm text-[var(--dashboard-warning-ink)]">
-                    No eligible templates are available in the current source scope.
-                  </div>
-                ) : selectedTemplateGroupIds.length === 0 ? (
-                  <p className="mt-3 text-sm text-[var(--dashboard-subtle)]">
-                    No template groups selected. Assisted planning will use all eligible templates in the current source scope.
-                  </p>
-                ) : templatesInGroupScope.length === 0 ? (
-                  <div className="mt-3 rounded-xl border border-[var(--dashboard-warning-border)] bg-[var(--dashboard-warning-soft)] px-4 py-3 text-sm text-[var(--dashboard-warning-ink)]">
-                    {hasSelectedGroupWithOnlyIneligibleTemplates
-                      ? "The selected template groups currently contain only ineligible templates for assisted planning. Draft and archived custom templates stay excluded here."
-                      : "No eligible templates remain after the current source scope and template group filters."}
-                  </div>
-                ) : hasGroupedTemplatesExcludedFromPlanning ? (
-                  <div className="mt-3 rounded-xl border border-[var(--dashboard-warning-border)] bg-[var(--dashboard-warning-soft)] px-4 py-3 text-sm text-[var(--dashboard-warning-ink)]">
-                    Some grouped templates are not currently eligible for assisted planning and were excluded.
-                  </div>
-                ) : (
-                  <p className="mt-3 text-sm text-[var(--dashboard-subtle)]">
-                    Template groups are the primary organizer here. Direct template selection below is an optional extra filter.
-                  </p>
-                )}
               </div>
 
-              <details className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)]">
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3">
-                  <div>
-                    <p className="text-sm font-bold text-[var(--dashboard-text)]">Template groups</p>
+              <details className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] shadow-[var(--dashboard-shadow-sm)]">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 border-b border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-[var(--dashboard-accent-soft)] px-2 text-xs font-bold text-[var(--dashboard-accent-strong)]">
+                        2
+                      </span>
+                      <p className="text-sm font-bold text-[var(--dashboard-text)]">Choose template groups</p>
+                    </div>
                     <p className="mt-1 text-sm text-[var(--dashboard-subtle)]">
                       {selectedTemplateGroupIds.length === 0
-                        ? "No groups selected. All templates in scope remain eligible."
+                        ? "All templates eligible"
                         : `${selectedTemplateGroupIds.length} group${selectedTemplateGroupIds.length === 1 ? "" : "s"} selected`}
                     </p>
                   </div>
-                  <span className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-muted)]">
+                  <span className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-muted)]">
                     Manage
                   </span>
                 </summary>
-                <div className="border-t border-[var(--dashboard-line)] px-4 py-4">
+                <div className="border-t border-[var(--dashboard-line)] px-3 py-3">
                   <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
                     Search groups
                     <input
@@ -1895,7 +1909,7 @@ export function JobReviewManager({
                         return (
                           <label
                             key={group.id}
-                            className={`flex items-start justify-between gap-3 rounded-xl border px-3 py-3 ${
+                            className={`flex items-start justify-between gap-3 rounded-xl border px-3 py-2.5 ${
                               active
                                 ? "border-[var(--dashboard-accent)] bg-[var(--dashboard-accent-soft)]"
                                 : "border-[var(--dashboard-line)] bg-[var(--dashboard-panel)]"
@@ -1943,26 +1957,31 @@ export function JobReviewManager({
                 </div>
               </details>
 
-              <details className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)]">
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3">
-                  <div>
-                    <p className="text-sm font-semibold text-[var(--dashboard-subtle)]">Advanced template selection</p>
-                    <p className="mt-1 text-sm font-bold text-[var(--dashboard-text)]">
+              <details className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] shadow-[var(--dashboard-shadow-sm)]">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 border-b border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-[var(--dashboard-panel)] px-2 text-xs font-bold text-[var(--dashboard-muted)]">
+                        3
+                      </span>
+                      <p className="text-sm font-bold text-[var(--dashboard-text)]">Template narrowing</p>
+                    </div>
+                    <p className="mt-1 text-sm text-[var(--dashboard-subtle)]">
                       {activeSelectedTemplates.length === templatesInGroupScope.length &&
                       templatesInGroupScope.length > 0
-                        ? `All ${templatesInGroupScope.length} eligible templates selected`
+                        ? "All eligible templates"
                         : activeSelectedTemplates.length === 0
                           ? "No templates selected"
-                          : `${activeSelectedTemplates.length} selected`}
+                          : `${activeSelectedTemplates.length} templates selected`}
                     </p>
                   </div>
-                  <span className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-muted)]">
+                  <span className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-muted)]">
                     Manage
                   </span>
                 </summary>
-                <div className="border-t border-[var(--dashboard-line)] px-4 py-4">
+                <div className="border-t border-[var(--dashboard-line)] px-3 py-3">
                   <p className="text-sm text-[var(--dashboard-subtle)]">
-                    Use this as an advanced narrowing step after source scope and template group filtering.
+                    Use this only when you want to narrow the eligible templates further.
                   </p>
                   <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
                     Search templates
@@ -2036,32 +2055,34 @@ export function JobReviewManager({
               </details>
             </div>
 
-            <label className="mt-4 flex items-center gap-3 rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-4 py-3 text-sm text-[var(--dashboard-subtle)]">
-              <input
-                type="checkbox"
-                checked={allowAnyPresetOverride}
-                onChange={(event) => setAllowAnyPresetOverride(event.target.checked)}
-              />
-              <span>
-                Allow any preset for assisted plans. Leave this off for template-safe preset matching.
-              </span>
-            </label>
-
-            <details className="mt-4 rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)]">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3">
-                <div>
-                  <p className="text-sm font-bold text-[var(--dashboard-text)]">Preset bundles</p>
-                  <p className="mt-1 text-sm text-[var(--dashboard-subtle)]">
-                    {selectedPresetCategoryIds.length === 0
-                      ? "All bundles available"
-                      : `${selectedPresetCategoryIds.length} bundle${selectedPresetCategoryIds.length === 1 ? "" : "s"} selected`}
-                  </p>
-                </div>
-                <span className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-muted)]">
+            <details className="mt-3 rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] shadow-[var(--dashboard-shadow-sm)]">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 border-b border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-[var(--dashboard-panel)] px-2 text-xs font-bold text-[var(--dashboard-muted)]">
+                      4
+                    </span>
+                    <p className="text-sm font-bold text-[var(--dashboard-text)]">Preset behavior</p>
+                  </div>
+                    <p className="mt-1 text-sm text-[var(--dashboard-subtle)]">
+                      {selectedPresetCategoryIds.length === 0
+                        ? "Recommended strategy / All bundles"
+                        : `Recommended strategy / ${selectedPresetCategoryIds.length} bundle${selectedPresetCategoryIds.length === 1 ? "" : "s"}`}
+                    </p>
+                  </div>
+                <span className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-muted)]">
                   Manage
                 </span>
               </summary>
-              <div className="border-t border-[var(--dashboard-line)] px-4 py-4">
+              <div className="border-t border-[var(--dashboard-line)] px-3 py-3">
+                <label className="flex items-center gap-3 rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 text-sm text-[var(--dashboard-subtle)]">
+                  <input
+                    type="checkbox"
+                    checked={allowAnyPresetOverride}
+                    onChange={(event) => setAllowAnyPresetOverride(event.target.checked)}
+                  />
+                  <span>Ignore template-safe preset limits when building assisted plans.</span>
+                </label>
                 <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
                   Search bundles
                   <input
@@ -2096,7 +2117,7 @@ export function JobReviewManager({
                       return (
                         <label
                           key={category.id}
-                          className={`flex items-start justify-between gap-3 rounded-xl border px-3 py-3 ${
+                          className={`flex items-start justify-between gap-3 rounded-xl border px-3 py-2.5 ${
                             active
                               ? "border-[var(--dashboard-accent)] bg-[var(--dashboard-accent-soft)]"
                               : "border-[var(--dashboard-line)] bg-[var(--dashboard-panel)]"
@@ -2127,7 +2148,8 @@ export function JobReviewManager({
             </details>
           </div>
 
-          <div className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-4">
+        ) : (
+          <div className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-3">
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="text-base font-bold text-[var(--dashboard-text)]">Manual plan</p>
@@ -2154,7 +2176,7 @@ export function JobReviewManager({
               </button>
             </div>
 
-            <div className="mt-4 space-y-4">
+            <div className="mt-3 space-y-3">
               <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
                 Template
                 <select
@@ -2212,17 +2234,17 @@ export function JobReviewManager({
               ) : null}
             </div>
           </div>
-        </div>
+        )}
       </section>
 
       <section
         id="generated-pins"
-        className="space-y-4 rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-5 shadow-[var(--dashboard-shadow-sm)]"
+        className="space-y-4 rounded-[24px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-4 shadow-[var(--dashboard-shadow-sm)]"
       >
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h2 className="text-xl font-bold">Render queue</h2>
-            <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-muted)]">
+            <h2 className="text-lg font-bold">Render queue</h2>
+            <div className="mt-1 flex flex-wrap gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-muted)]">
               <span>{renderablePlans.length} ready</span>
               <span>·</span>
               <span>{selectedActionPlans.length} selected</span>
@@ -2232,7 +2254,7 @@ export function JobReviewManager({
               <span>{generatedPins.length} outputs</span>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2">
             <select
               value={aiCredentialId}
               onChange={(event) => setAiCredentialId(event.target.value)}
@@ -2312,13 +2334,13 @@ export function JobReviewManager({
         {plansFeedback ? <InlineFeedback feedback={plansFeedback} /> : null}
 
         {renderProgress ? (
-          <div className="overflow-hidden rounded-[28px] border border-[var(--dashboard-accent-border)] bg-[linear-gradient(135deg,#ffffff_0%,#eef4ff_100%)] p-5 shadow-[0_18px_40px_rgba(30,94,255,0.12)]">
+          <div className="overflow-hidden rounded-[24px] border border-[var(--dashboard-accent-border)] bg-[linear-gradient(135deg,#ffffff_0%,#eef4ff_100%)] p-4 shadow-[0_18px_40px_rgba(30,94,255,0.12)]">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-accent-strong)]">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--dashboard-accent-strong)]">
                   Render progress
                 </p>
-                <h3 className="mt-2 text-xl font-black tracking-[-0.03em] text-[var(--dashboard-text)]">
+                <h3 className="mt-1 text-lg font-black tracking-[-0.03em] text-[var(--dashboard-text)]">
                   {renderProgress.completed} of {renderProgress.total} pins generated
                 </h3>
                 <p className="mt-2 text-sm text-[var(--dashboard-subtle)]">
@@ -2348,13 +2370,13 @@ export function JobReviewManager({
         ) : null}
 
         {presetRecommendationProgress ? (
-          <div className="overflow-hidden rounded-[28px] border border-[var(--dashboard-success-border)] bg-[linear-gradient(135deg,#ffffff_0%,#effcf5_100%)] p-5 shadow-[0_18px_40px_rgba(32,166,87,0.12)]">
+          <div className="overflow-hidden rounded-[24px] border border-[var(--dashboard-success-border)] bg-[linear-gradient(135deg,#ffffff_0%,#effcf5_100%)] p-4 shadow-[0_18px_40px_rgba(32,166,87,0.12)]">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-success-ink)]">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--dashboard-success-ink)]">
                   Preset tuning
                 </p>
-                <h3 className="mt-2 text-xl font-black tracking-[-0.03em] text-[var(--dashboard-text)]">
+                <h3 className="mt-1 text-lg font-black tracking-[-0.03em] text-[var(--dashboard-text)]">
                   {presetRecommendationProgress.updatedPlanCount} of {presetRecommendationProgress.total} plans tuned
                 </h3>
                 <p className="mt-2 text-sm text-[var(--dashboard-subtle)]">
@@ -2399,7 +2421,7 @@ export function JobReviewManager({
           <>
             {(unresolvedPlans.length > 0 || usableRenderedPins.length > 0) ? (
               <div
-                className={`rounded-[24px] border px-5 py-4 ${
+                className={`rounded-[20px] border px-4 py-3 ${
                   unresolvedPlans.length > 0
                     ? "border-[var(--dashboard-warning-border)] bg-[var(--dashboard-warning-soft)] text-[var(--dashboard-warning-ink)]"
                     : "border-[var(--dashboard-success-border)] bg-[var(--dashboard-success-soft)] text-[var(--dashboard-success-ink)]"
@@ -3768,26 +3790,6 @@ function SelectionChip({ label, onClick }: { label: string; onClick: () => void 
     >
       {label}
     </button>
-  );
-}
-
-function PlannerSummaryCard({
-  label,
-  value,
-  detail,
-}: {
-  label: string;
-  value: string;
-  detail: string;
-}) {
-  return (
-    <div className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--dashboard-muted)]">
-        {label}
-      </p>
-      <p className="mt-2 text-2xl font-black text-[var(--dashboard-text)]">{value}</p>
-      <p className="mt-1 text-sm text-[var(--dashboard-subtle)]">{detail}</p>
-    </div>
   );
 }
 

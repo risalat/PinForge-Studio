@@ -91,11 +91,13 @@ export default async function DashboardPublishingPage({
   );
 
   return (
-    <div className="space-y-6 text-[var(--dashboard-text)]">
-      <section className="grid gap-4 xl:grid-cols-3">
-        <PublishingMetric label="Ready" value={String(readyToPublish.length)} />
-        <PublishingMetric label="Scheduled" value={String(scheduled.length)} />
-        <PublishingMetric label="Failed" value={String(failed.length)} />
+    <div className="space-y-5 text-[var(--dashboard-text)]">
+      <section className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-4 shadow-[var(--dashboard-shadow-sm)]">
+        <div className="flex flex-wrap items-center gap-2 rounded-[20px] border border-[var(--dashboard-accent-border)] bg-[var(--dashboard-accent-soft-strong)] px-4 py-3">
+          <SummaryChip label="Ready" value={readyToPublish.length} />
+          <SummaryChip label="Scheduled" value={scheduled.length} />
+          <SummaryChip label="Failed" value={failed.length} />
+        </div>
       </section>
 
       {!databaseReady ? (
@@ -110,7 +112,7 @@ export default async function DashboardPublishingPage({
             </div>
           ) : (
             <div className="overflow-hidden rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] shadow-[var(--dashboard-shadow-sm)]">
-              <div className="border-b border-[var(--dashboard-line)] px-5 py-4">
+              <div className="border-b border-[var(--dashboard-line)] bg-[var(--dashboard-panel-alt)] px-4 py-3">
                 <DashboardPublishingTableControls
                   initialQuery={selectedQuery}
                   initialLane={selectedLane}
@@ -121,7 +123,7 @@ export default async function DashboardPublishingPage({
               </div>
               <div className="overflow-x-auto">
                 <table className="min-w-[980px] w-full table-fixed">
-                  <thead className="bg-[var(--dashboard-panel-alt)]">
+                  <thead className="bg-[var(--dashboard-panel-strong)]">
                     <tr className="text-left">
                       <PublishingHead className="w-[34%]">Post</PublishingHead>
                       <PublishingHead className="w-[11%]">Domain</PublishingHead>
@@ -140,37 +142,37 @@ export default async function DashboardPublishingPage({
                         key={`${job.id}-${job.lane}`}
                         className={index === publishingRows.length - 1 ? "" : "border-b border-[var(--dashboard-line)]"}
                       >
-                        <td className="px-5 py-5 align-top">
+                        <td className="px-4 py-4 align-top">
                           <div className="min-w-0">
-                            <p className="line-clamp-2 text-base font-bold text-[var(--dashboard-text)]">
+                            <p className="line-clamp-2 text-sm font-bold text-[var(--dashboard-text)]">
                               {job.title}
                             </p>
                           </div>
                         </td>
-                        <td className="px-5 py-5 align-top">
+                        <td className="px-4 py-4 align-top">
                           <p className="text-sm font-semibold text-[var(--dashboard-text)]">{job.domain}</p>
                         </td>
-                        <td className="px-5 py-5 align-top">
+                        <td className="px-4 py-4 align-top">
                           <p className="text-sm font-semibold text-[var(--dashboard-text)]">
                             {job.createdAt.toLocaleDateString()}
                           </p>
                         </td>
-                        <td className="px-5 py-5 align-top">
+                        <td className="px-4 py-4 align-top">
                           <CycleCell meta={cycleMetaByJobId.get(job.id)} />
                         </td>
-                        <td className="px-5 py-5 align-top">
+                        <td className="px-4 py-4 align-top">
                           <p className="text-sm font-semibold text-[var(--dashboard-text)]">{job.generatedPins}</p>
                         </td>
-                        <td className="px-5 py-5 align-top">
+                        <td className="px-4 py-4 align-top">
                           <LaneChip label={job.lane} />
                         </td>
-                        <td className="px-5 py-5 align-top">
+                        <td className="px-4 py-4 align-top">
                           <QueueStatus label={job.jobStatus} tone={toneForStatus(job.jobStatus)} />
                         </td>
-                        <td className="px-5 py-5 align-top">
+                        <td className="px-4 py-4 align-top">
                           <QueueStatus label={job.scheduleStatus} tone={toneForStatus(job.scheduleStatus)} />
                         </td>
-                        <td className="px-5 py-5 align-top">
+                        <td className="px-4 py-4 align-top">
                           <div className="flex flex-col gap-2">
                             <Link
                               href={`/dashboard/jobs/${job.id}/publish`}
@@ -265,19 +267,18 @@ function firstSearchParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] ?? "" : value ?? "";
 }
 
-function PublishingMetric({ label, value }: { label: string; value: string }) {
+function SummaryChip({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-5 shadow-[var(--dashboard-shadow-sm)]">
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">{label}</p>
-      <p className="mt-3 text-4xl font-black">{value}</p>
-    </div>
+    <span className="rounded-full border border-[var(--dashboard-line)] bg-white/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-text)]">
+      {label}: {value}
+    </span>
   );
 }
 
 function PublishingHead({ children, className = "" }: { children: string; className?: string }) {
   return (
     <th
-      className={`px-5 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)] ${className}`}
+      className={`px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)] ${className}`}
     >
       {children}
     </th>
@@ -341,7 +342,7 @@ function LaneChip({ label }: { label: string }) {
         : "border-[var(--dashboard-warning-border)] bg-[var(--dashboard-warning-soft)] text-[var(--dashboard-warning-ink)]";
 
   return (
-    <span className={`rounded-full border px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] ${className}`}>
+    <span className={`rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] ${className}`}>
       {label}
     </span>
   );
@@ -364,7 +365,7 @@ function QueueStatus({
           : "border-[var(--dashboard-line)] bg-[var(--dashboard-panel-alt)] text-[var(--dashboard-subtle)]";
 
   return (
-    <span className={`rounded-full border px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] ${className}`}>
+    <span className={`rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] ${className}`}>
       {label}
     </span>
   );

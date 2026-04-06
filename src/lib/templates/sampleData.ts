@@ -119,6 +119,19 @@ export const sampleTemplateDataFourImageGridCenterBandTitleDomain: TemplateRende
   visualPreset: "berry-citrus",
 };
 
+export const sampleTemplateDataFourImageGridCenterPosterNumberTitle: TemplateRenderProps = {
+  title: "Fall Living Room Makeover Ideas",
+  images: [
+    "/sample-images/7.jpg",
+    "/sample-images/1.jpg",
+    "/sample-images/8.jpg",
+    "/sample-images/9.jpg",
+  ],
+  domain: "mightypaint.com",
+  itemNumber: 5,
+  visualPreset: "cocoa-blush",
+};
+
 export const sampleTemplateDataFiveImageCenterBandNumberDomain: TemplateRenderProps = {
   title: "Beautiful Bedroom Decor Ideas You'll Love",
   images: [

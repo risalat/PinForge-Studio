@@ -137,7 +137,7 @@ export function HousekeepingManager({ databaseReady }: { databaseReady: boolean 
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {error ? (
         <div className="rounded-2xl border border-[var(--dashboard-danger-border)] bg-[var(--dashboard-danger-soft)] px-4 py-3 text-sm text-[var(--dashboard-danger-ink)]">
           {error}
@@ -145,13 +145,10 @@ export function HousekeepingManager({ databaseReady }: { databaseReady: boolean 
       ) : null}
 
       <section className="grid gap-4 xl:grid-cols-3">
-        <div className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-5 shadow-[var(--dashboard-shadow-sm)]">
+        <div className="rounded-[24px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-4 shadow-[var(--dashboard-shadow-sm)]">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
-                Storage audit
-              </p>
-              <h2 className="mt-2 text-xl font-bold">Missing generated assets</h2>
+              <h2 className="text-lg font-bold">Missing generated assets</h2>
             </div>
             <button
               type="button"
@@ -168,7 +165,7 @@ export function HousekeepingManager({ databaseReady }: { databaseReady: boolean 
             </button>
           </div>
           {auditResult ? (
-            <div className="mt-5 space-y-4">
+            <div className="mt-4 space-y-4">
               <div className="grid gap-3 md:grid-cols-3">
                 <Metric label="Provider" value={auditResult.provider.toUpperCase()} />
                 <Metric label="Checked" value={String(auditResult.checkedPins)} />
@@ -200,13 +197,10 @@ export function HousekeepingManager({ databaseReady }: { databaseReady: boolean 
           ) : null}
         </div>
 
-        <div className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-5 shadow-[var(--dashboard-shadow-sm)]">
+        <div className="rounded-[24px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-4 shadow-[var(--dashboard-shadow-sm)]">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
-                Temp cleanup
-              </p>
-              <h2 className="mt-2 text-xl font-bold">Stale temp assets</h2>
+              <h2 className="text-lg font-bold">Stale temp assets</h2>
             </div>
             <div className="flex gap-2">
               <button
@@ -236,8 +230,8 @@ export function HousekeepingManager({ databaseReady }: { databaseReady: boolean 
               </button>
             </div>
           </div>
-          <div className="mt-5 flex max-w-[180px] flex-col gap-2">
-            <label className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--dashboard-muted)]">
+          <div className="mt-4 flex max-w-[180px] flex-col gap-2">
+            <label className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--dashboard-muted)]">
               Age threshold
             </label>
             <input
@@ -250,7 +244,7 @@ export function HousekeepingManager({ databaseReady }: { databaseReady: boolean 
             />
           </div>
           {cleanupResult ? (
-            <div className="mt-5 space-y-4">
+            <div className="mt-4 space-y-4">
               <div className="grid gap-3 md:grid-cols-4">
                 <Metric label="Provider" value={cleanupResult.provider.toUpperCase()} />
                 <Metric label="Days" value={String(cleanupResult.days)} />
@@ -279,13 +273,10 @@ export function HousekeepingManager({ databaseReady }: { databaseReady: boolean 
           ) : null}
         </div>
 
-        <div className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-5 shadow-[var(--dashboard-shadow-sm)]">
+        <div className="rounded-[24px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-4 shadow-[var(--dashboard-shadow-sm)]">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
-                Canonical repair
-              </p>
-              <h2 className="mt-2 text-xl font-bold">Merge duplicate posts</h2>
+              <h2 className="text-lg font-bold">Merge duplicate posts</h2>
               <p className="mt-2 text-sm text-[var(--dashboard-subtle)]">
                 Run after Publer sync when you want to consolidate duplicate article URLs into a single canonical post record.
               </p>
@@ -305,7 +296,7 @@ export function HousekeepingManager({ databaseReady }: { databaseReady: boolean 
             </button>
           </div>
           {canonicalRepairResult ? (
-            <div className="mt-5 space-y-4">
+            <div className="mt-4 space-y-4">
               <div className="grid gap-3 md:grid-cols-2">
                 <Metric label="Scanned" value={String(canonicalRepairResult.scannedPosts)} />
                 <Metric label="Groups touched" value={String(canonicalRepairResult.canonicalGroupsTouched)} />
@@ -325,8 +316,8 @@ export function HousekeepingManager({ databaseReady }: { databaseReady: boolean 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3">
-      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--dashboard-muted)]">{label}</p>
-      <p className="mt-2 text-lg font-bold text-[var(--dashboard-text)]">{value}</p>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--dashboard-muted)]">{label}</p>
+      <p className="mt-1 text-base font-bold text-[var(--dashboard-text)]">{value}</p>
     </div>
   );
 }

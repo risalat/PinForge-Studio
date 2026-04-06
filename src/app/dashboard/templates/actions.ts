@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
 import { isDatabaseConfigured } from "@/lib/env";
 import {
@@ -48,13 +49,20 @@ export async function createTemplateGroupAction(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim();
 
-  await createTemplateGroupForUser({
+  const group = await createTemplateGroupForUser({
     userId: user.id,
     name,
     description: description || undefined,
   });
 
   revalidateTemplateGroupRoutes();
+  redirect(
+    buildTemplateGroupsActionRedirectUrl({
+      formData,
+      groupId: group.id,
+      notice: "group-created",
+    }),
+  );
 }
 
 export async function updateTemplateGroupAction(formData: FormData) {
@@ -81,6 +89,13 @@ export async function updateTemplateGroupAction(formData: FormData) {
   });
 
   revalidateTemplateGroupRoutes();
+  redirect(
+    buildTemplateGroupsActionRedirectUrl({
+      formData,
+      groupId,
+      notice: "group-saved",
+    }),
+  );
 }
 
 export async function deleteTemplateGroupAction(formData: FormData) {
@@ -101,6 +116,12 @@ export async function deleteTemplateGroupAction(formData: FormData) {
   });
 
   revalidateTemplateGroupRoutes();
+  redirect(
+    buildTemplateGroupsActionRedirectUrl({
+      formData,
+      notice: "group-deleted",
+    }),
+  );
 }
 
 export async function assignTemplatesToGroupAction(formData: FormData) {
@@ -112,8 +133,18 @@ export async function assignTemplatesToGroupAction(formData: FormData) {
   const groupId = String(formData.get("groupId") ?? "").trim();
   const templateIds = readTemplateIdsFromFormData(formData);
 
-  if (!groupId || templateIds.length === 0) {
+  if (!groupId) {
     throw new Error("Template group assignment is missing.");
+  }
+
+  if (templateIds.length === 0) {
+    redirect(
+      buildTemplateGroupsActionRedirectUrl({
+        formData,
+        groupId,
+        notice: "select-template-to-add",
+      }),
+    );
   }
 
   await assignTemplatesToGroupForUser({
@@ -123,6 +154,13 @@ export async function assignTemplatesToGroupAction(formData: FormData) {
   });
 
   revalidateTemplateGroupRoutes();
+  redirect(
+    buildTemplateGroupsActionRedirectUrl({
+      formData,
+      groupId,
+      notice: "templates-added",
+    }),
+  );
 }
 
 export async function removeTemplatesFromGroupAction(formData: FormData) {
@@ -134,8 +172,18 @@ export async function removeTemplatesFromGroupAction(formData: FormData) {
   const groupId = String(formData.get("groupId") ?? "").trim();
   const templateIds = readTemplateIdsFromFormData(formData);
 
-  if (!groupId || templateIds.length === 0) {
+  if (!groupId) {
     throw new Error("Template group assignment is missing.");
+  }
+
+  if (templateIds.length === 0) {
+    redirect(
+      buildTemplateGroupsActionRedirectUrl({
+        formData,
+        groupId,
+        notice: "select-template-to-remove",
+      }),
+    );
   }
 
   await removeTemplatesFromGroupForUser({
@@ -145,6 +193,13 @@ export async function removeTemplatesFromGroupAction(formData: FormData) {
   });
 
   revalidateTemplateGroupRoutes();
+  redirect(
+    buildTemplateGroupsActionRedirectUrl({
+      formData,
+      groupId,
+      notice: "templates-removed",
+    }),
+  );
 }
 
 export async function validateRuntimeTemplateAction(formData: FormData) {
@@ -323,6 +378,38 @@ function revalidateTemplateGroupRoutes() {
   revalidatePath("/dashboard/library");
   revalidatePath("/dashboard/jobs");
   revalidatePath("/dashboard/jobs/[jobId]", "page");
+}
+
+function buildTemplateGroupsActionRedirectUrl(input: {
+  formData: FormData;
+  groupId?: string;
+  notice?: string;
+}) {
+  const params = new URLSearchParams();
+  params.set("view", "groups");
+
+  const groupId = input.groupId?.trim() || String(input.formData.get("returnGroupId") ?? "").trim();
+  const groupSearch = String(input.formData.get("returnGroupSearch") ?? "").trim();
+  const templateSearch = String(input.formData.get("returnTemplateSearch") ?? "").trim();
+  const source = String(input.formData.get("returnSource") ?? "").trim();
+
+  if (groupId) {
+    params.set("group", groupId);
+  }
+  if (groupSearch) {
+    params.set("groupSearch", groupSearch);
+  }
+  if (templateSearch) {
+    params.set("templateSearch", templateSearch);
+  }
+  if (source && source !== "all") {
+    params.set("source", source);
+  }
+  if (input.notice?.trim()) {
+    params.set("notice", input.notice.trim());
+  }
+
+  return `/dashboard/templates?${params.toString()}`;
 }
 
 function parseOptionalInteger(value: FormDataEntryValue | null) {

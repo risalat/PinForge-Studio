@@ -6,7 +6,7 @@ import { isDatabaseConfigured } from "@/lib/env";
 import type { ApiKeyListItem } from "@/lib/types";
 
 export default async function DashboardApiKeysPage() {
-  const user = await requireAuthenticatedDashboardUser();
+  await requireAuthenticatedDashboardUser();
   let databaseReady = isDatabaseConfigured();
   let apiKeys: ApiKeyListItem[] = [];
 
@@ -19,20 +19,19 @@ export default async function DashboardApiKeysPage() {
   }
 
   return (
-    <div className="space-y-8 text-[var(--dashboard-text)]">
-        <div className="flex flex-wrap items-center justify-between gap-4">
+    <div className="space-y-5 text-[var(--dashboard-text)]">
+        <div className="flex flex-wrap items-center justify-between gap-4 rounded-[20px] border border-[var(--dashboard-accent-border)] bg-[var(--dashboard-accent-soft-strong)] px-4 py-3">
           <div>
-            <p className="max-w-2xl text-base leading-7 text-[var(--dashboard-subtle)]">
+            <p className="max-w-2xl text-sm leading-6 text-[var(--dashboard-subtle)]">
               Generate bearer keys for the Chrome extension. Plaintext keys are shown once only and
               stored hashed in the database.
             </p>
-            <p className="mt-3 text-sm text-[var(--dashboard-subtle)]">{user.email}</p>
           </div>
 
           <div className="flex flex-wrap gap-3">
             <Link
               href="/dashboard/inbox"
-              className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-5 py-3 text-sm font-semibold text-[var(--dashboard-subtle)]"
+              className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2.5 text-sm font-semibold text-[var(--dashboard-subtle)]"
             >
               Back to intake
             </Link>

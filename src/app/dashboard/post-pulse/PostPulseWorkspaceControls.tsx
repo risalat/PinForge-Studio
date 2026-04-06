@@ -67,7 +67,7 @@ export function PostPulseWorkspaceControls({
   }
 
   return (
-    <div className="flex flex-col items-end gap-3">
+    <div className="flex flex-col gap-2 xl:items-end">
       <div className="flex flex-wrap items-center justify-end gap-3">
         <select
           value={filter}
@@ -95,7 +95,7 @@ export function PostPulseWorkspaceControls({
         <PostPulseSyncButton workspaceId={workspaceId} />
       </div>
       {isNavigating ? (
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--dashboard-muted)]">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--dashboard-muted)] xl:text-right">
           <BusyActionLabel busy label="Filters ready" busyLabel="Updating post list..." />
         </p>
       ) : null}

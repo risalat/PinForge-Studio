@@ -10,6 +10,7 @@ import { TemplateFourImageGridNumberTitle } from "@/templates/TemplateFourImageG
 import { TemplateFourImageGridNumberTitleDomain } from "@/templates/TemplateFourImageGridNumberTitleDomain";
 import { TemplateFourImageGridTitleFooter } from "@/templates/TemplateFourImageGridTitleFooter";
 import { TemplateFourImageGridCenterBandTitleDomain } from "@/templates/TemplateFourImageGridCenterBandTitleDomain";
+import { TemplateFourImageGridCenterPosterNumberTitle } from "@/templates/TemplateFourImageGridCenterPosterNumberTitle";
 import { TemplateFiveImageCenterBandNumberDomain } from "@/templates/TemplateFiveImageCenterBandNumberDomain";
 import { TemplateHeroArchSidebarTriptych } from "@/templates/TemplateHeroArchSidebarTriptych";
 import { TemplateThreeImageCenterPosterNumberFooter } from "@/templates/TemplateThreeImageCenterPosterNumberFooter";
@@ -28,6 +29,7 @@ import {
   sampleTemplateDataFourImageGridNumberTitleDomain,
   sampleTemplateDataFourImageGridTitleFooter,
   sampleTemplateDataFourImageGridCenterBandTitleDomain,
+  sampleTemplateDataFourImageGridCenterPosterNumberTitle,
   sampleTemplateDataFiveImageCenterBandNumberDomain,
   sampleTemplateDataHeroArchSidebarTriptych,
   sampleTemplateDataThreeImageCenterPosterNumberFooter,
@@ -230,6 +232,21 @@ export const TEMPLATE_CONFIGS: Record<string, TemplateConfig> = {
       footer: true,
     },
   },
+  "four-image-grid-center-poster-number-title": {
+    id: "four-image-grid-center-poster-number-title",
+    name: "Four Image Grid Center Poster Number Title",
+    componentKey: "TemplateFourImageGridCenterPosterNumberTitle",
+    previewPath: "/preview/four-image-grid-center-poster-number-title",
+    locked: true,
+    canvas: { width: 1080, height: 1920 },
+    imageSlotCount: 4,
+    textFields: ["title", "itemNumber", "visualPreset"],
+    features: {
+      overlay: true,
+      numberTreatment: "hero",
+      footer: false,
+    },
+  },
   "five-image-center-band-number-domain": {
     id: "five-image-center-band-number-domain",
     name: "Five Image Center Band Number Domain",
@@ -413,6 +430,7 @@ const TEMPLATE_COMPONENTS: Record<
   "four-image-grid-number-title-domain": TemplateFourImageGridNumberTitleDomain,
   "four-image-grid-title-footer": TemplateFourImageGridTitleFooter,
   "four-image-grid-center-band-title-domain": TemplateFourImageGridCenterBandTitleDomain,
+  "four-image-grid-center-poster-number-title": TemplateFourImageGridCenterPosterNumberTitle,
   "five-image-center-band-number-domain": TemplateFiveImageCenterBandNumberDomain,
   "hero-arch-sidebar-triptych": TemplateHeroArchSidebarTriptych,
   "three-image-center-poster-number-footer": TemplateThreeImageCenterPosterNumberFooter,
@@ -487,6 +505,10 @@ export function getSampleTemplateProps(templateId: string) {
 
   if (templateId === "four-image-grid-center-band-title-domain") {
     return sampleTemplateDataFourImageGridCenterBandTitleDomain;
+  }
+
+  if (templateId === "four-image-grid-center-poster-number-title") {
+    return sampleTemplateDataFourImageGridCenterPosterNumberTitle;
   }
 
   if (templateId === "five-image-center-band-number-domain") {

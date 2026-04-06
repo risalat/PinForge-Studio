@@ -29,41 +29,50 @@ export default async function DashboardInboxPage() {
   const cycleMetaByJobId = buildCycleMetaByJobId(jobs);
 
   return (
-    <div className="space-y-8 text-[var(--dashboard-text)]">
-      <section className="grid gap-4 xl:grid-cols-4">
-        <InboxMetric
-          label="New intake"
-          value={String(inboxJobs.filter((job) => job.status === "RECEIVED").length)}
-        />
-        <InboxMetric
-          label="Reviewing"
-          value={String(inboxJobs.filter((job) => job.status === "REVIEWING").length)}
-        />
-        <InboxMetric
-          label="Ready to generate"
-          value={String(inboxJobs.filter((job) => job.status === "READY_FOR_GENERATION").length)}
-        />
-        <InboxMetric
-          label="Needs attention"
-          value={String(inboxJobs.filter((job) => job.status === "FAILED").length)}
-        />
-      </section>
-
+    <div className="space-y-5 text-[var(--dashboard-text)]">
       {!databaseReady ? (
         <div className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-6 text-[var(--dashboard-subtle)] shadow-[var(--dashboard-shadow-sm)]">
           `DATABASE_URL` is not configured yet.
         </div>
       ) : (
-        <section className="space-y-4">
+        <>
+          <section className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-4 shadow-[var(--dashboard-shadow-sm)]">
+            <div className="flex flex-wrap items-center gap-2 rounded-[20px] border border-[var(--dashboard-accent-border)] bg-[var(--dashboard-accent-soft-strong)] px-4 py-3">
+              <SummaryChip
+                label="New"
+                value={inboxJobs.filter((job) => job.status === "RECEIVED").length}
+              />
+              <SummaryChip
+                label="Reviewing"
+                value={inboxJobs.filter((job) => job.status === "REVIEWING").length}
+              />
+              <SummaryChip
+                label="Ready"
+                value={inboxJobs.filter((job) => job.status === "READY_FOR_GENERATION").length}
+              />
+              <SummaryChip
+                label="Attention"
+                value={inboxJobs.filter((job) => job.status === "FAILED").length}
+              />
+            </div>
+          </section>
+
+          <section className="space-y-4">
           {inboxJobs.length === 0 ? (
             <div className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-6 text-[var(--dashboard-subtle)] shadow-[var(--dashboard-shadow-sm)]">
               No intake jobs currently need review.
             </div>
           ) : (
             <div className="overflow-hidden rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] shadow-[var(--dashboard-shadow-sm)]">
+              <div className="flex items-center justify-between gap-3 border-b border-[var(--dashboard-line)] bg-[var(--dashboard-panel-alt)] px-4 py-3">
+                <h2 className="text-lg font-bold">Inbox queue</h2>
+                <span className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-muted)]">
+                  {inboxJobs.length}
+                </span>
+              </div>
               <div className="overflow-x-auto">
                 <table className="min-w-[980px] w-full table-fixed">
-                  <thead className="bg-[var(--dashboard-panel-alt)]">
+                  <thead className="bg-[var(--dashboard-panel-strong)]">
                     <tr className="text-left">
                       <InboxHead className="w-[38%]">Post</InboxHead>
                       <InboxHead className="w-[12%]">Domain</InboxHead>
@@ -80,21 +89,23 @@ export default async function DashboardInboxPage() {
                         key={job.id}
                         className={index === inboxJobs.length - 1 ? "" : "border-b border-[var(--dashboard-line)]"}
                       >
-                        <td className="px-5 py-5 align-top">
+                        <td className="px-4 py-4 align-top">
                           <div className="min-w-0">
                             <Link
                               href={`/dashboard/jobs/${job.id}`}
-                              className="line-clamp-2 text-lg font-bold text-[var(--dashboard-text)] underline decoration-[var(--dashboard-accent)] underline-offset-4"
+                              className="line-clamp-2 text-base font-bold text-[var(--dashboard-text)] underline decoration-[var(--dashboard-accent)] underline-offset-4"
                             >
                               {job.articleTitleSnapshot}
                             </Link>
-                            <p className="mt-2 break-all text-sm text-[var(--dashboard-subtle)]">{job.postUrlSnapshot}</p>
+                            <p className="mt-1 line-clamp-1 break-all text-xs text-[var(--dashboard-subtle)]">
+                              {job.postUrlSnapshot}
+                            </p>
                           </div>
                         </td>
-                        <td className="px-5 py-5 align-top">
+                        <td className="px-4 py-4 align-top">
                           <p className="text-sm font-semibold text-[var(--dashboard-text)]">{job.domainSnapshot}</p>
                         </td>
-                        <td className="px-5 py-5 align-top">
+                        <td className="px-4 py-4 align-top">
                           <p className="text-sm font-semibold text-[var(--dashboard-text)]">
                             {new Date(job.createdAt).toLocaleDateString()}
                           </p>
@@ -102,16 +113,16 @@ export default async function DashboardInboxPage() {
                             {new Date(job.createdAt).toLocaleTimeString()}
                           </p>
                         </td>
-                        <td className="px-5 py-5 align-top">
+                        <td className="px-4 py-4 align-top">
                           <CycleCell meta={cycleMetaByJobId.get(job.id)} />
                         </td>
-                        <td className="px-5 py-5 align-top">
+                        <td className="px-4 py-4 align-top">
                           <p className="text-sm font-semibold text-[var(--dashboard-text)]">{job.sourceImages.length}</p>
                         </td>
-                        <td className="px-5 py-5 align-top">
+                        <td className="px-4 py-4 align-top">
                           <StatusBadge label={formatLabel(job.status)} tone={toneForStatus(job.status)} />
                         </td>
-                        <td className="px-5 py-5 align-top">
+                        <td className="px-4 py-4 align-top">
                           <Link
                             href={`/dashboard/jobs/${job.id}`}
                             className="inline-flex rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white"
@@ -125,19 +136,19 @@ export default async function DashboardInboxPage() {
                 </table>
               </div>
             </div>
-          )}
-        </section>
+              )}
+          </section>
+        </>
       )}
     </div>
   );
 }
 
-function InboxMetric({ label, value }: { label: string; value: string }) {
+function SummaryChip({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-5 shadow-[var(--dashboard-shadow-sm)]">
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">{label}</p>
-      <p className="mt-3 text-4xl font-black">{value}</p>
-    </div>
+    <span className="rounded-full border border-[var(--dashboard-line)] bg-white/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-text)]">
+      {label}: {value}
+    </span>
   );
 }
 
@@ -158,7 +169,7 @@ function StatusBadge({
           : "border-[var(--dashboard-line)] bg-[var(--dashboard-panel-alt)] text-[var(--dashboard-subtle)]";
 
   return (
-    <span className={`rounded-full border px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] ${className}`}>
+    <span className={`rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] ${className}`}>
       {label}
     </span>
   );
@@ -187,7 +198,7 @@ function toneForStatus(status: string) {
 function InboxHead({ children, className = "" }: { children: string; className?: string }) {
   return (
     <th
-      className={`px-5 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)] ${className}`}
+      className={`px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)] ${className}`}
     >
       {children}
     </th>

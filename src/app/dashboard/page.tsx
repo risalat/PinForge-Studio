@@ -227,7 +227,7 @@ export default async function DashboardPage({
   });
 
   return (
-    <div className="space-y-8 text-[var(--dashboard-text)]">
+    <div className="space-y-5 text-[var(--dashboard-text)]">
       {!data.databaseReady ? (
         <div className="rounded-[30px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-6 text-[var(--dashboard-subtle)] shadow-[var(--dashboard-shadow-sm)]">
           `DATABASE_URL` is not configured yet.

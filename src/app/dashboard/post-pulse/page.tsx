@@ -55,20 +55,14 @@ export default async function DashboardPostPulsePage({
     ) ?? null;
 
   return (
-    <div className="space-y-6 text-[var(--dashboard-text)]">
-      <section className="grid gap-4 xl:grid-cols-4">
-        <MetricCard label="Posts tracked" value={String(summary.postsTracked)} />
-        <MetricCard
-          label="Needs fresh pins"
-          value={String(summary.needsFreshPins)}
-          tone="warning"
-        />
-        <MetricCard
-          label="In progress"
-          value={String(summary.scheduledInFlight)}
-          tone="info"
-        />
-        <MetricCard label="Fresh" value={String(summary.fresh)} tone="success" />
+    <div className="space-y-5 text-[var(--dashboard-text)]">
+      <section className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-4 shadow-[var(--dashboard-shadow-sm)]">
+        <div className="flex flex-wrap items-center gap-2 rounded-[20px] border border-[var(--dashboard-accent-border)] bg-[var(--dashboard-accent-soft-strong)] px-4 py-3">
+          <SummaryChip label="Tracked" value={summary.postsTracked} />
+          <SummaryChip label="Needs fresh pins" value={summary.needsFreshPins} tone="warning" />
+          <SummaryChip label="In progress" value={summary.scheduledInFlight} tone="info" />
+          <SummaryChip label="Fresh" value={summary.fresh} tone="success" />
+        </div>
       </section>
 
       {!databaseReady ? (
@@ -76,25 +70,18 @@ export default async function DashboardPostPulsePage({
           `DATABASE_URL` is not configured yet.
         </div>
       ) : (
-        <section className="rounded-[32px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-6 shadow-[var(--dashboard-shadow-md)]">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
-                Post Tracker
-              </p>
-              <h2 className="mt-2 text-2xl font-black tracking-[-0.04em]">
-                Publishing freshness by article
-              </h2>
-              <p className="mt-2 text-sm text-[var(--dashboard-muted)]">
-                {latestSyncAt
-                  ? `Last Publer sync ${formatRelativeTime(latestSyncAt)}`
-                  : "No Publer sync yet."}
-              </p>
+        <section className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-4 shadow-[var(--dashboard-shadow-sm)]">
+          <div className="flex flex-wrap items-center justify-between gap-4 rounded-[20px] bg-[var(--dashboard-panel-alt)] px-4 py-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <h2 className="text-xl font-bold">Publishing freshness by article</h2>
+              <span className="rounded-full border border-[var(--dashboard-warning-border)] bg-[var(--dashboard-warning-soft)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-warning-ink)]">
+                {summary.needsFreshPins} need fresh pins
+              </span>
+              <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-muted)]">
+                {latestSyncAt ? `Last sync ${formatRelativeTime(latestSyncAt)}` : "No sync yet"}
+              </span>
             </div>
-            <div className="flex flex-col items-end gap-3">
-              <div className="rounded-2xl border border-[var(--dashboard-warning-border)] bg-[var(--dashboard-warning-soft)] px-4 py-3 text-sm text-[var(--dashboard-warning-ink)]">
-                {summary.needsFreshPins} post{summary.needsFreshPins === 1 ? "" : "s"} currently need fresh pins.
-              </div>
+            <div className="flex flex-wrap items-center gap-3">
               <PostPulseWorkspaceControls
                 workspaceId={selectedWorkspaceId}
                 initialFilter={selectedFilter}
@@ -104,26 +91,26 @@ export default async function DashboardPostPulsePage({
           </div>
 
           {records.length === 0 ? (
-            <div className="mt-6 rounded-[24px] border border-dashed border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-6 text-sm text-[var(--dashboard-subtle)]">
+            <div className="mt-4 rounded-[24px] border border-dashed border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-6 text-sm text-[var(--dashboard-subtle)]">
               No tracked posts yet.
             </div>
           ) : (
-            <div className="mt-6 overflow-hidden rounded-[24px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)]">
+            <div className="mt-4 overflow-hidden rounded-[24px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)]">
               <table className="min-w-full table-fixed divide-y divide-[var(--dashboard-line)] text-sm">
-                <thead className="bg-[var(--dashboard-panel-alt)] text-left uppercase tracking-[0.16em] text-[var(--dashboard-muted)]">
+                <thead className="bg-[var(--dashboard-panel-strong)] text-left uppercase tracking-[0.16em] text-[var(--dashboard-muted)]">
                   <tr>
-                    <th className="w-[34%] px-5 py-4">Post</th>
-                    <th className="w-[9%] px-5 py-4">Generated</th>
-                    <th className="w-[16%] px-5 py-4">Publer activity</th>
-                    <th className="w-[20%] px-5 py-4">Latest activity</th>
-                    <th className="w-[12%] px-5 py-4">Freshness</th>
-                    <th className="w-[9%] px-5 py-4">Actions</th>
+                    <th className="w-[34%] px-4 py-3 text-[11px]">Post</th>
+                    <th className="w-[9%] px-4 py-3 text-[11px]">Generated</th>
+                    <th className="w-[16%] px-4 py-3 text-[11px]">Publer activity</th>
+                    <th className="w-[20%] px-4 py-3 text-[11px]">Latest activity</th>
+                    <th className="w-[12%] px-4 py-3 text-[11px]">Freshness</th>
+                    <th className="w-[9%] px-4 py-3 text-[11px]">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--dashboard-line)]">
                   {records.map((record) => (
                     <tr key={record.postId}>
-                      <td className="px-5 py-4 align-top">
+                      <td className="px-4 py-4 align-top">
                         <a
                           href={toExternalHref(record.url)}
                           target="_blank"
@@ -131,7 +118,7 @@ export default async function DashboardPostPulsePage({
                           className="block transition hover:text-[var(--dashboard-accent-strong)]"
                         >
                           <p
-                            className="font-semibold text-[var(--dashboard-text)] underline decoration-transparent underline-offset-4 transition hover:decoration-current"
+                            className="text-sm font-semibold text-[var(--dashboard-text)] underline decoration-transparent underline-offset-4 transition hover:decoration-current"
                             style={{
                               display: "-webkit-box",
                               WebkitBoxOrient: "vertical",
@@ -142,17 +129,19 @@ export default async function DashboardPostPulsePage({
                             {record.title}
                           </p>
                         </a>
-                        <p className="mt-1 break-all text-[var(--dashboard-subtle)]">{record.url}</p>
+                        <p className="mt-1 line-clamp-1 break-all text-xs text-[var(--dashboard-subtle)]">
+                          {record.url}
+                        </p>
                         <p className="mt-2 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--dashboard-muted)]">
-                          {record.domain} · {record.totalJobs} job{record.totalJobs === 1 ? "" : "s"}
+                          {record.domain} / {record.totalJobs} job{record.totalJobs === 1 ? "" : "s"}
                         </p>
                       </td>
-                      <td className="px-5 py-4 align-top font-semibold">
+                      <td className="px-4 py-4 align-top font-semibold">
                         {record.totalGeneratedPins}
                       </td>
-                      <td className="px-5 py-4 align-top">
+                      <td className="px-4 py-4 align-top">
                         <p className="font-semibold text-[var(--dashboard-text)]">
-                          {record.publishedCount} published · {record.scheduledCount} scheduled
+                          {record.publishedCount} published / {record.scheduledCount} scheduled
                         </p>
                         <div className="mt-2 flex flex-wrap gap-1">
                           {record.recentActivityDots.length > 0 ? (
@@ -164,7 +153,7 @@ export default async function DashboardPostPulsePage({
                           )}
                         </div>
                       </td>
-                      <td className="px-5 py-4 align-top">
+                      <td className="px-4 py-4 align-top">
                         <p className="font-semibold text-[var(--dashboard-text)]">
                           {record.lastPublishedAt
                             ? `Published ${formatDate(record.lastPublishedAt)}`
@@ -185,10 +174,10 @@ export default async function DashboardPostPulsePage({
                               : "No pending schedule"}
                         </p>
                       </td>
-                      <td className="px-5 py-4 align-top">
+                      <td className="px-4 py-4 align-top">
                         <StatusPill status={record.freshnessStatus} />
                       </td>
-                      <td className="px-5 py-4 align-top">
+                      <td className="px-4 py-4 align-top">
                         <div className="flex flex-wrap gap-2">
                           {record.freshnessStatus === "needs_fresh_pins" && record.latestJobId ? (
                             <>
@@ -204,7 +193,7 @@ export default async function DashboardPostPulsePage({
                             <>
                               <Link
                                 href={`/dashboard/jobs/${record.latestJobId}`}
-                                className="rounded-full dashboard-accent-action dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white"
+                                className="rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white"
                               >
                                 Open latest job
                               </Link>
@@ -232,13 +221,13 @@ export default async function DashboardPostPulsePage({
   );
 }
 
-function MetricCard({
+function SummaryChip({
   label,
   value,
   tone = "neutral",
 }: {
   label: string;
-  value: string;
+  value: string | number;
   tone?: "neutral" | "warning" | "success" | "info";
 }) {
   const className =
@@ -251,9 +240,9 @@ function MetricCard({
           : "border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] text-[var(--dashboard-text)]";
 
   return (
-    <div className={`rounded-[28px] border p-5 shadow-[var(--dashboard-shadow-sm)] ${className}`}>
-      <p className="text-xs font-semibold uppercase tracking-[0.18em]">{label}</p>
-      <p className="mt-3 text-4xl font-black">{value}</p>
+    <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 ${className}`}>
+      <span className="text-[11px] font-semibold uppercase tracking-[0.16em]">{label}</span>
+      <span className="text-sm font-black">{value}</span>
     </div>
   );
 }
@@ -269,7 +258,9 @@ function StatusPill({ status }: { status: PostPulseStatus }) {
           : "border-[var(--dashboard-line)] bg-[var(--dashboard-panel-alt)] text-[var(--dashboard-subtle)]";
 
   return (
-    <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] ${className}`}>
+    <span
+      className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] ${className}`}
+    >
       {formatStatus(status)}
     </span>
   );
@@ -280,7 +271,7 @@ function ActivityDot({ state }: { state: PostPulseActivityDotState }) {
     state === "published"
       ? "bg-[var(--dashboard-success)]"
       : state === "scheduled"
-        ? "dashboard-accent-action dashboard-accent-action bg-[var(--dashboard-accent)]"
+        ? "dashboard-accent-action bg-[var(--dashboard-accent)]"
         : "bg-[var(--dashboard-line-strong,#cfd5e3)]";
 
   return <span className={`h-2.5 w-2.5 rounded-full ${className}`} />;
@@ -328,4 +319,3 @@ function toExternalHref(url: string) {
 
   return `https://${url}`;
 }
-

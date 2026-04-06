@@ -35,35 +35,53 @@ export default async function DashboardIntegrationsPage() {
   }
 
   return (
-    <div className="space-y-8 text-[var(--dashboard-text)]">
-      <section className="grid gap-4 xl:grid-cols-3">
-        <IntegrationStat
-          label="Publer"
-          value={
-            settings.publerCredentialState === "ready"
-              ? "Ready"
-              : settings.publerCredentialState === "unavailable"
-                ? "Saved but unavailable"
-                : "Missing key"
-          }
-          tone={settings.publerCredentialState === "missing" ? "warning" : settings.publerCredentialState === "ready" ? "good" : "warning"}
-        />
-        <IntegrationStat
-          label="AI keys"
-          value={
-            settings.aiCredentials.length > 0
-              ? String(settings.aiCredentials.length)
-              : settings.aiCredentialState === "unavailable"
-                ? "Saved but unavailable"
-                : "Missing key"
-          }
-          tone={settings.aiCredentialState === "missing" ? "warning" : settings.aiCredentialState === "ready" ? "good" : "warning"}
-        />
-        <IntegrationStat
-          label="Workspace profiles"
-          value={settings.workspaceProfiles.length > 0 ? String(settings.workspaceProfiles.length) : "Not set"}
-          tone="neutral"
-        />
+    <div className="space-y-5 text-[var(--dashboard-text)]">
+      <section className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-4 shadow-[var(--dashboard-shadow-sm)]">
+        <div className="flex flex-wrap items-center gap-2 rounded-[20px] border border-[var(--dashboard-accent-border)] bg-[var(--dashboard-accent-soft-strong)] px-4 py-3">
+          <IntegrationChip
+            label="Publer"
+            value={
+              settings.publerCredentialState === "ready"
+                ? "Ready"
+                : settings.publerCredentialState === "unavailable"
+                  ? "Saved but unavailable"
+                  : "Missing key"
+            }
+            tone={
+              settings.publerCredentialState === "missing"
+                ? "warning"
+                : settings.publerCredentialState === "ready"
+                  ? "good"
+                  : "warning"
+            }
+          />
+          <IntegrationChip
+            label="AI keys"
+            value={
+              settings.aiCredentials.length > 0
+                ? String(settings.aiCredentials.length)
+                : settings.aiCredentialState === "unavailable"
+                  ? "Saved but unavailable"
+                  : "Missing key"
+            }
+            tone={
+              settings.aiCredentialState === "missing"
+                ? "warning"
+                : settings.aiCredentialState === "ready"
+                  ? "good"
+                  : "warning"
+            }
+          />
+          <IntegrationChip
+            label="Workspace profiles"
+            value={
+              settings.workspaceProfiles.length > 0
+                ? String(settings.workspaceProfiles.length)
+                : "Not set"
+            }
+            tone="neutral"
+          />
+        </div>
       </section>
 
       {!databaseReady ? (
@@ -77,7 +95,7 @@ export default async function DashboardIntegrationsPage() {
   );
 }
 
-function IntegrationStat({
+function IntegrationChip({
   label,
   value,
   tone,
@@ -86,19 +104,17 @@ function IntegrationStat({
   value: string;
   tone: "neutral" | "good" | "warning";
 }) {
+  const className =
+    tone === "good"
+      ? "border-[var(--dashboard-success-border)] bg-[var(--dashboard-success-soft)] text-[var(--dashboard-success-ink)]"
+      : tone === "warning"
+        ? "border-[var(--dashboard-warning-border)] bg-[var(--dashboard-warning-soft)] text-[var(--dashboard-warning-ink)]"
+        : "border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] text-[var(--dashboard-text)]";
+
   return (
-    <div className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-5 shadow-[var(--dashboard-shadow-sm)]">
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">{label}</p>
-      <p className="mt-3 text-2xl font-bold">{value}</p>
-      <div
-        className={`mt-4 h-1.5 rounded-full ${
-          tone === "good"
-            ? "bg-[var(--dashboard-success-border)]"
-            : tone === "warning"
-              ? "bg-[var(--dashboard-warning-border)]"
-              : "bg-[var(--dashboard-line)]"
-        }`}
-      />
+    <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 ${className}`}>
+      <span className="text-[11px] font-semibold uppercase tracking-[0.16em]">{label}</span>
+      <span className="text-sm font-black">{value}</span>
     </div>
   );
 }

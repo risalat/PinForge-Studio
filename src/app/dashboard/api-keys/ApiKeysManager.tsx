@@ -88,13 +88,13 @@ export function ApiKeysManager({
   }
 
   return (
-    <div className="space-y-6">
-      <section id="new-key" className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-6 shadow-[var(--dashboard-shadow-sm)]">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end">
+    <div className="space-y-5">
+      <section id="new-key" className="rounded-[24px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-4 shadow-[var(--dashboard-shadow-sm)]">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
           <div className="flex-1">
             <label
               htmlFor="api-key-name"
-              className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]"
+              className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--dashboard-muted)]"
             >
               New key label
             </label>
@@ -102,7 +102,7 @@ export function ApiKeysManager({
               id="api-key-name"
               value={newKeyName}
               onChange={(event) => setNewKeyName(event.target.value)}
-              className="mt-3 w-full rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 text-base text-[var(--dashboard-text)] outline-none"
+              className="mt-2 w-full rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3 text-base text-[var(--dashboard-text)] outline-none"
             />
           </div>
 
@@ -110,7 +110,7 @@ export function ApiKeysManager({
             type="button"
             onClick={handleCreate}
             disabled={Boolean(activeAction) || newKeyName.trim() === ""}
-            className="rounded-full dashboard-accent-action dashboard-accent-action bg-[var(--dashboard-accent)] px-5 py-3 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
+            className="rounded-full dashboard-accent-action dashboard-accent-action bg-[var(--dashboard-accent)] px-5 py-2.5 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)] disabled:opacity-60"
           >
             <BusyActionLabel
               busy={isCreating}
@@ -122,8 +122,8 @@ export function ApiKeysManager({
         </div>
 
         {generatedKey ? (
-          <div className="mt-5 rounded-2xl border border-[var(--dashboard-accent-border)] bg-[var(--dashboard-accent-soft-strong)] p-4">
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-accent-strong)]">
+          <div className="mt-4 rounded-2xl border border-[var(--dashboard-accent-border)] bg-[var(--dashboard-accent-soft-strong)] p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--dashboard-accent-strong)]">
               Copy this key now
             </p>
             <p className="mt-2 text-sm leading-6 text-[var(--dashboard-subtle)]">
@@ -137,45 +137,45 @@ export function ApiKeysManager({
         ) : null}
 
         {error ? (
-          <div className="mt-5 rounded-2xl border border-[var(--dashboard-danger-border)] bg-[var(--dashboard-danger-soft)] px-4 py-3 text-sm text-[var(--dashboard-danger-ink)]">
+          <div className="mt-4 rounded-2xl border border-[var(--dashboard-danger-border)] bg-[var(--dashboard-danger-soft)] px-4 py-3 text-sm text-[var(--dashboard-danger-ink)]">
             {error}
           </div>
         ) : null}
       </section>
 
-      <section className="overflow-hidden rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] shadow-[var(--dashboard-shadow-sm)]">
+      <section className="overflow-hidden rounded-[24px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] shadow-[var(--dashboard-shadow-sm)]">
         <table className="min-w-full divide-y divide-[var(--dashboard-line)]">
-          <thead className="bg-[var(--dashboard-panel-alt)] text-left text-sm uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
+          <thead className="bg-[var(--dashboard-panel-alt)] text-left text-[11px] uppercase tracking-[0.16em] text-[var(--dashboard-muted)]">
             <tr>
-              <th className="px-5 py-4">Label</th>
-              <th className="px-5 py-4">Prefix</th>
-              <th className="px-5 py-4">Created</th>
-              <th className="px-5 py-4">Last used</th>
-              <th className="px-5 py-4">Status</th>
-              <th className="px-5 py-4">Action</th>
+              <th className="px-4 py-3">Label</th>
+              <th className="px-4 py-3">Prefix</th>
+              <th className="px-4 py-3">Created</th>
+              <th className="px-4 py-3">Last used</th>
+              <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3">Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--dashboard-line)]">
             {apiKeys.length === 0 ? (
               <tr>
-                <td className="px-5 py-6 text-sm text-[var(--dashboard-subtle)]" colSpan={6}>
+                <td className="px-4 py-5 text-sm text-[var(--dashboard-subtle)]" colSpan={6}>
                   No API keys yet.
                 </td>
               </tr>
             ) : (
               apiKeys.map((apiKey) => (
                 <tr key={apiKey.id}>
-                  <td className="px-5 py-4 font-semibold text-[var(--dashboard-text)]">{apiKey.name}</td>
-                  <td className="px-5 py-4 font-mono text-sm text-[var(--dashboard-subtle)]">{apiKey.keyPrefix}</td>
-                  <td className="px-5 py-4 text-sm text-[var(--dashboard-subtle)]">
+                  <td className="px-4 py-3 font-semibold text-[var(--dashboard-text)]">{apiKey.name}</td>
+                  <td className="px-4 py-3 font-mono text-sm text-[var(--dashboard-subtle)]">{apiKey.keyPrefix}</td>
+                  <td className="px-4 py-3 text-sm text-[var(--dashboard-subtle)]">
                     {new Date(apiKey.createdAt).toLocaleString()}
                   </td>
-                  <td className="px-5 py-4 text-sm text-[var(--dashboard-subtle)]">
+                  <td className="px-4 py-3 text-sm text-[var(--dashboard-subtle)]">
                     {apiKey.lastUsedAt ? new Date(apiKey.lastUsedAt).toLocaleString() : "Never"}
                   </td>
-                  <td className="px-5 py-4">
+                  <td className="px-4 py-3">
                     <span
-                      className={`rounded-full px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] ${
+                      className={`rounded-full px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] ${
                         apiKey.isActive
                           ? "bg-[var(--dashboard-success-soft)] text-[var(--dashboard-success-ink)]"
                           : "bg-[var(--dashboard-danger-soft)] text-[var(--dashboard-danger-ink)]"
@@ -184,13 +184,13 @@ export function ApiKeysManager({
                       {apiKey.isActive ? "Active" : "Revoked"}
                     </span>
                   </td>
-                  <td className="px-5 py-4">
+                  <td className="px-4 py-3">
                     {apiKey.isActive ? (
                       <button
                         type="button"
                         onClick={() => handleRevoke(apiKey.id)}
                         disabled={Boolean(activeAction)}
-                        className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-subtle)] disabled:opacity-60"
+                        className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--dashboard-subtle)] disabled:opacity-60"
                       >
                         <BusyActionLabel
                           busy={activeAction === `revoke:${apiKey.id}`}
@@ -199,7 +199,7 @@ export function ApiKeysManager({
                         />
                       </button>
                     ) : (
-                      <span className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
+                      <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--dashboard-muted)]">
                         Inactive
                       </span>
                     )}

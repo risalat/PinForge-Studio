@@ -129,50 +129,29 @@ export function DashboardOverviewWorkspace({
   }
 
   return (
-    <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
+    <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
       <div className="space-y-5">
-        <section className="rounded-[34px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-5 shadow-[var(--dashboard-shadow-md)]">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.26em] text-[var(--dashboard-muted)]">
-                Workspace command
-              </p>
-              <h2 className="mt-2 text-3xl font-black tracking-[-0.04em] text-[var(--dashboard-text)]">
+        <section className="rounded-[24px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-4 shadow-[var(--dashboard-shadow-sm)]">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+            <div className="space-y-3">
+              <h2 className="text-xl font-black tracking-[-0.04em] text-[var(--dashboard-text)]">
                 Run the Pinterest pipeline
               </h2>
+              <div className="flex flex-wrap gap-2">
+                <MetricInline label="Processed" value={data.postsProcessed} />
+                <MetricInline label="Pins" value={data.pinsGenerated} />
+                <MetricInline label="Needs fresh" value={data.postsNeedingFreshPins} />
+              </div>
             </div>
-            <div className="flex flex-wrap gap-3">
-              <MetricInline label="Processed" value={data.postsProcessed} />
-              <MetricInline label="Pins" value={data.pinsGenerated} />
-              <MetricInline label="Needs fresh" value={data.postsNeedingFreshPins} />
+            <div className="flex flex-wrap gap-2">
+              <QuickLinkChip href="/dashboard/inbox" label="Inbox" value={intakeJobs} />
+              <QuickLinkChip href="/dashboard/jobs" label="Jobs" value={activeWorkflowJobs.length} />
+              <QuickLinkChip href="/dashboard/publishing" label="Publishing" value={data.readyToSchedule} />
             </div>
-          </div>
-          <div className="mt-5 grid gap-3 md:grid-cols-3">
-            <ActionCard
-              href="/dashboard/inbox"
-              label="Inbox"
-              value={intakeJobs}
-              title="Review intake"
-              detail="Needs review"
-            />
-            <ActionCard
-              href="/dashboard/jobs"
-              label="Jobs"
-              value={activeWorkflowJobs.length}
-              title="Run workflows"
-              detail="Active now"
-            />
-            <ActionCard
-              href="/dashboard/publishing"
-              label="Publishing"
-              value={data.readyToSchedule}
-              title="Schedule pins"
-              detail="Ready now"
-            />
           </div>
         </section>
 
-        <section className="rounded-[30px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-3 shadow-[var(--dashboard-shadow-sm)]">
+        <section className="rounded-[20px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-2 shadow-[var(--dashboard-shadow-sm)]">
           <div className="flex flex-wrap gap-2">
             <OverviewTabLink
               active={activeTab === "priority"}
@@ -197,19 +176,16 @@ export function DashboardOverviewWorkspace({
 
         {activeTab === "priority" ? (
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_290px]">
-            <section className="overflow-hidden rounded-[34px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] shadow-[var(--dashboard-shadow-md)]">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--dashboard-line)] px-5 py-4">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--dashboard-muted)]">
-                    Today&apos;s fresh-pin targets
-                  </p>
-                  <h3 className="mt-1 text-2xl font-black tracking-[-0.04em] text-[var(--dashboard-text)]">
-                    Top stale opportunities
-                  </h3>
-                </div>
-                <div className="flex flex-wrap gap-3">
-                  <MetricInline label="Ready" value={data.todaysFreshTargets.length} />
-                  <MetricInline label="Queued" value={data.queuedFreshTargetCount} />
+            <section className="overflow-hidden rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] shadow-[var(--dashboard-shadow-sm)]">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--dashboard-line)] bg-[var(--dashboard-panel-alt)] px-4 py-3">
+                <h3 className="text-lg font-bold text-[var(--dashboard-text)]">
+                  Top stale opportunities
+                </h3>
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-3 text-sm font-semibold text-[var(--dashboard-subtle)]">
+                    <span>Ready {data.todaysFreshTargets.length}</span>
+                    <span>Queued {data.queuedFreshTargetCount}</span>
+                  </div>
                   <Link
                     href="/dashboard/post-pulse"
                     className="rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)]"
@@ -225,11 +201,11 @@ export function DashboardOverviewWorkspace({
               ) : (
                 <div className="divide-y divide-[var(--dashboard-line)]">
                   {data.todaysFreshTargets.slice(0, 6).map((target, index) => (
-                    <div
+                  <div
                       key={target.postId}
-                      className="grid gap-4 px-5 py-4 lg:grid-cols-[54px_minmax(0,1fr)_210px] lg:items-center"
+                      className="grid gap-4 px-4 py-3 lg:grid-cols-[48px_minmax(0,1fr)_210px] lg:items-center"
                     >
-                      <div className="inline-flex h-12 w-12 items-center justify-center rounded-[16px] bg-[var(--dashboard-panel-alt)] text-base font-black text-[var(--dashboard-accent-strong)]">
+                      <div className="inline-flex h-10 w-10 items-center justify-center rounded-[14px] bg-[var(--dashboard-panel-alt)] text-sm font-black text-[var(--dashboard-accent-strong)]">
                         {index + 1}
                       </div>
                       <div className="min-w-0">
@@ -275,50 +251,24 @@ export function DashboardOverviewWorkspace({
             </section>
 
             <section className="space-y-4">
-              <div className="rounded-[30px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-5 shadow-[var(--dashboard-shadow-sm)]">
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--dashboard-muted)]">
-                  Priority snapshot
-                </p>
+              <div className="rounded-[24px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-4 shadow-[var(--dashboard-shadow-sm)]">
+                <p className="text-sm font-bold text-[var(--dashboard-text)]">Priority snapshot</p>
                 <div className="mt-4 space-y-3">
                   <CompactStat label="Ready to schedule" value={data.readyToSchedule} />
                   <CompactStat label="Needs fresh pins" value={data.postsNeedingFreshPins} />
                   <CompactStat label="Active workflows" value={activeWorkflowJobs.length} />
                 </div>
               </div>
-              <div className="rounded-[30px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-5 shadow-[var(--dashboard-shadow-sm)]">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--dashboard-muted)]">
-                    Queue pressure
-                  </p>
-                  <Link
-                    href="/dashboard/publishing"
-                    className="text-sm font-semibold text-[var(--dashboard-accent-strong)]"
-                  >
-                    Open
-                  </Link>
-                </div>
-                <p className="mt-3 text-3xl font-black text-[var(--dashboard-text)]">
-                  {queueStatusLabel}
-                </p>
-                <p className="mt-2 text-sm text-[var(--dashboard-subtle)]">
-                  Next open: {nextOpenLabel}
-                </p>
-              </div>
             </section>
           </div>
         ) : null}
 
         {activeTab === "opportunities" ? (
-          <section className="overflow-hidden rounded-[34px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] shadow-[var(--dashboard-shadow-md)]">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--dashboard-line)] px-5 py-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--dashboard-muted)]">
-                  Articles never pinned yet
-                </p>
-                <h3 className="mt-1 text-2xl font-black tracking-[-0.04em] text-[var(--dashboard-text)]">
-                  Workspace opportunities
-                </h3>
-              </div>
+          <section className="overflow-hidden rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] shadow-[var(--dashboard-shadow-sm)]">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--dashboard-line)] bg-[var(--dashboard-panel-alt)] px-4 py-3">
+              <h3 className="text-lg font-bold text-[var(--dashboard-text)]">
+                Workspace opportunities
+              </h3>
               <div className="flex flex-wrap gap-3">
                 <MetricInline label="Untracked" value={data.untrackedSitemapArticles.totalUntracked} />
                 <MetricInline label="Matching" value={data.untrackedSitemapArticles.totalMatching} />
@@ -330,8 +280,8 @@ export function DashboardOverviewWorkspace({
                 </Link>
               </div>
             </div>
-            <div className="overflow-hidden rounded-b-[34px] border-t border-[var(--dashboard-line)] bg-[var(--dashboard-panel)]">
-              <form className="grid gap-3 border-b border-[var(--dashboard-line)] bg-[var(--dashboard-panel-alt)] px-5 py-4 lg:grid-cols-[minmax(0,1fr)_220px_160px]">
+            <div className="overflow-hidden rounded-b-[28px] border-t border-[var(--dashboard-line)] bg-[var(--dashboard-panel)]">
+              <form className="grid gap-3 border-b border-[var(--dashboard-line)] bg-[var(--dashboard-panel-alt)] px-4 py-3 lg:grid-cols-[minmax(0,1fr)_220px_160px]">
                 <input type="hidden" name="tab" value="opportunities" />
                 <input
                   type="search"
@@ -379,7 +329,7 @@ export function DashboardOverviewWorkspace({
                 </div>
               ) : (
                 <>
-                  <div className="grid grid-cols-[minmax(0,1.3fr)_140px_140px_170px] gap-4 bg-[var(--dashboard-panel-alt)] px-5 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
+                  <div className="grid grid-cols-[minmax(0,1.3fr)_140px_140px_170px] gap-4 bg-[var(--dashboard-panel-alt)] px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--dashboard-muted)]">
                     <span>Article</span>
                     <span>Domain</span>
                     <span>Lastmod</span>
@@ -389,7 +339,7 @@ export function DashboardOverviewWorkspace({
                     {data.untrackedSitemapArticles.articles.map((article) => (
                       <div
                         key={article.normalizedUrl}
-                        className="grid grid-cols-[minmax(0,1.3fr)_140px_140px_170px] items-center gap-4 px-5 py-4"
+                        className="grid grid-cols-[minmax(0,1.3fr)_140px_140px_170px] items-center gap-4 px-4 py-3"
                       >
                         <div className="min-w-0">
                           <p className="truncate font-semibold text-[var(--dashboard-text)]">{article.titleGuess}</p>
@@ -413,7 +363,7 @@ export function DashboardOverviewWorkspace({
                     ))}
                   </div>
                   {data.untrackedSitemapArticles.totalPages > 1 ? (
-                    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--dashboard-line)] px-5 py-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--dashboard-line)] px-4 py-3">
                       <p className="text-sm text-[var(--dashboard-subtle)]">
                         Page {data.untrackedSitemapArticles.page} of {data.untrackedSitemapArticles.totalPages}
                       </p>
@@ -445,16 +395,11 @@ export function DashboardOverviewWorkspace({
 
         {activeTab === "queue" ? (
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
-            <section className="overflow-hidden rounded-[34px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] shadow-[var(--dashboard-shadow-md)]">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--dashboard-line)] px-5 py-4">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--dashboard-muted)]">
-                    Queue coverage
-                  </p>
-                  <h3 className="mt-1 text-2xl font-black tracking-[-0.04em] text-[var(--dashboard-text)]">
-                    Publishing capacity
-                  </h3>
-                </div>
+            <section className="overflow-hidden rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] shadow-[var(--dashboard-shadow-sm)]">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--dashboard-line)] bg-[var(--dashboard-panel-alt)] px-4 py-3">
+                <h3 className="text-lg font-bold text-[var(--dashboard-text)]">
+                  Publishing capacity
+                </h3>
                 <Link
                   href="/dashboard/publishing"
                   className="rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)]"
@@ -464,7 +409,7 @@ export function DashboardOverviewWorkspace({
               </div>
               {data.queueCapacity ? (
                 <>
-                  <div className="grid gap-4 border-b border-[var(--dashboard-line)] px-5 py-4 md:grid-cols-3">
+                  <div className="grid gap-4 border-b border-[var(--dashboard-line)] px-4 py-3 md:grid-cols-3">
                     <QueueSummaryCard
                       label="Today"
                       value={`${data.queueCapacity.todayScheduledCount}/${queueTargetPerDay}`}
@@ -485,7 +430,7 @@ export function DashboardOverviewWorkspace({
                     {queuePreviewDays.map((day) => (
                       <div
                         key={day.date}
-                        className="grid grid-cols-[170px_120px_120px_minmax(0,1fr)] items-center gap-4 px-5 py-4 text-sm"
+                        className="grid grid-cols-[170px_120px_120px_minmax(0,1fr)] items-center gap-4 px-4 py-3 text-sm"
                       >
                         <div>
                           <p className="font-semibold text-[var(--dashboard-text)]">
@@ -516,23 +461,18 @@ export function DashboardOverviewWorkspace({
               )}
             </section>
 
-            <section className="overflow-hidden rounded-[34px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] shadow-[var(--dashboard-shadow-md)]">
-              <div className="flex items-center justify-between gap-3 border-b border-[var(--dashboard-line)] px-5 py-4">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--dashboard-muted)]">
-                    Ready queue
-                  </p>
-                  <h3 className="mt-1 text-2xl font-black tracking-[-0.04em] text-[var(--dashboard-text)]">
-                    Jobs to schedule
-                  </h3>
-                </div>
+            <section className="overflow-hidden rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] shadow-[var(--dashboard-shadow-sm)]">
+              <div className="flex items-center justify-between gap-3 border-b border-[var(--dashboard-line)] bg-[var(--dashboard-panel-alt)] px-4 py-3">
+                <h3 className="text-lg font-bold text-[var(--dashboard-text)]">
+                  Jobs to schedule
+                </h3>
                 <p className="text-sm font-semibold text-[var(--dashboard-subtle)]">
                   {data.readyToSchedule}
                 </p>
               </div>
               <div className="divide-y divide-[var(--dashboard-line)]">
                 {readyQueueJobs.slice(0, 6).map((job) => (
-                  <div key={job.id} className="px-5 py-4">
+                  <div key={job.id} className="px-4 py-3">
                     <Link
                       href={`/dashboard/jobs/${job.id}/publish`}
                       className="line-clamp-2 font-semibold text-[var(--dashboard-text)] underline decoration-[var(--dashboard-accent)] underline-offset-4"
@@ -556,14 +496,11 @@ export function DashboardOverviewWorkspace({
         ) : null}
       </div>
 
-      <aside className="space-y-5">
-        <div className="rounded-[34px] border border-[var(--dashboard-line)] bg-[linear-gradient(155deg,#0f1b3d_0%,#1249cc_58%,#3cc9ff_100%)] p-5 text-white shadow-[var(--dashboard-shadow-accent)]">
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/72">
-            Continue latest
-          </p>
+      <aside className="space-y-4">
+        <div className="rounded-[24px] border border-[var(--dashboard-line)] bg-[linear-gradient(155deg,#0f1b3d_0%,#1249cc_58%,#3cc9ff_100%)] p-4 text-white shadow-[var(--dashboard-shadow-accent)]">
           {latestJob ? (
             <>
-              <h3 className="mt-3 line-clamp-3 text-2xl font-black tracking-[-0.04em]">
+              <h3 className="line-clamp-3 text-xl font-black tracking-[-0.04em]">
                 {latestJob.articleTitleSnapshot}
               </h3>
               <p className="mt-2 text-sm text-white/82">{formatLabel(latestJob.status)}</p>
@@ -587,13 +524,11 @@ export function DashboardOverviewWorkspace({
           )}
         </div>
 
-        <div className="rounded-[30px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-5 shadow-[var(--dashboard-shadow-sm)]">
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--dashboard-muted)]">
-            Queue pressure
-          </p>
-          <p className="mt-3 text-3xl font-black text-[var(--dashboard-text)]">{queueStatusLabel}</p>
-          <p className="mt-2 text-sm text-[var(--dashboard-subtle)]">Next open: {nextOpenLabel}</p>
-          <div className="mt-4 flex flex-wrap gap-2">
+        <div className="rounded-[20px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-3 shadow-[var(--dashboard-shadow-sm)]">
+          <p className="text-sm font-bold text-[var(--dashboard-text)]">Queue pressure</p>
+          <p className="mt-2 text-2xl font-black text-[var(--dashboard-text)]">{queueStatusLabel}</p>
+          <p className="mt-1 text-sm text-[var(--dashboard-subtle)]">Next open: {nextOpenLabel}</p>
+          <div className="mt-3 flex flex-wrap gap-2">
             {queuePreviewDays.slice(0, 4).map((day) => (
               <span
                 key={day.date}
@@ -605,11 +540,9 @@ export function DashboardOverviewWorkspace({
           </div>
         </div>
 
-        <div className="rounded-[30px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-5 shadow-[var(--dashboard-shadow-sm)]">
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--dashboard-muted)]">
-            Workspace pulse
-          </p>
-          <div className="mt-4 space-y-3">
+        <div className="rounded-[20px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-3 shadow-[var(--dashboard-shadow-sm)]">
+          <p className="text-sm font-bold text-[var(--dashboard-text)]">Workspace pulse</p>
+          <div className="mt-3 space-y-2">
             <CompactStat label="Fresh targets ready" value={data.todaysFreshTargets.length} />
             <CompactStat label="Queued fresh targets" value={data.queuedFreshTargetCount} />
             <CompactStat label="Active workflows" value={activeWorkflowJobs.length} />
@@ -620,32 +553,24 @@ export function DashboardOverviewWorkspace({
   );
 }
 
-function ActionCard({
+function QuickLinkChip({
   href,
   label,
   value,
-  title,
-  detail,
 }: {
   href: string;
   label: string;
   value: number;
-  title: string;
-  detail: string;
 }) {
   return (
     <Link
       href={href}
-      className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-5 transition hover:border-[var(--dashboard-accent)] hover:bg-white"
+      className="inline-flex items-center gap-3 rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2.5 transition hover:border-[var(--dashboard-accent)] hover:bg-white"
     >
-      <div className="flex items-start justify-between gap-3">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
-          {label}
-        </p>
-        <span className="text-2xl font-black text-[var(--dashboard-text)]">{value}</span>
-      </div>
-      <h3 className="mt-3 text-lg font-bold text-[var(--dashboard-text)]">{title}</h3>
-      <p className="mt-1 text-sm text-[var(--dashboard-subtle)]">{detail}</p>
+      <span className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
+        {label}
+      </span>
+      <span className="text-lg font-black text-[var(--dashboard-text)]">{value}</span>
     </Link>
   );
 }
@@ -663,9 +588,9 @@ function OverviewTabLink({
     <button
       type="button"
       onClick={onSelect}
-      className={`rounded-full px-5 py-3 text-sm font-semibold transition ${
+      className={`rounded-full px-4 py-2.5 text-sm font-semibold transition ${
         active
-          ? "dashboard-accent-action bg-[var(--dashboard-accent)] text-white shadow-[var(--dashboard-shadow-accent)]"
+          ? "bg-[var(--dashboard-accent-soft)] text-[var(--dashboard-accent-strong)] ring-1 ring-[var(--dashboard-accent)]"
           : "border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] text-[var(--dashboard-subtle)]"
       }`}
       aria-pressed={active}
@@ -677,20 +602,20 @@ function OverviewTabLink({
 
 function MetricInline({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-5 py-3">
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
+    <div className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--dashboard-muted)]">
         {label}
       </p>
-      <p className="mt-1 text-xl font-black text-[var(--dashboard-text)]">{value}</p>
+      <p className="mt-0.5 text-base font-black text-[var(--dashboard-text)]">{value}</p>
     </div>
   );
 }
 
 function CompactStat({ label, value }: { label: string; value: number }) {
   return (
-    <div className="flex items-center justify-between gap-4 rounded-[20px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3">
+    <div className="flex items-center justify-between gap-4 rounded-[18px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2.5">
       <span className="text-sm font-semibold text-[var(--dashboard-subtle)]">{label}</span>
-      <span className="text-xl font-black text-[var(--dashboard-text)]">{value}</span>
+      <span className="text-base font-black text-[var(--dashboard-text)]">{value}</span>
     </div>
   );
 }
@@ -705,11 +630,11 @@ function QueueSummaryCard({
   detail: string;
 }) {
   return (
-    <div className="rounded-[22px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-4">
-      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--dashboard-muted)]">
+    <div className="rounded-[20px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-3">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--dashboard-muted)]">
         {label}
       </p>
-      <p className="mt-2 text-2xl font-black text-[var(--dashboard-text)]">{value}</p>
+      <p className="mt-1 text-xl font-black text-[var(--dashboard-text)]">{value}</p>
       <p className="mt-1 text-sm text-[var(--dashboard-subtle)]">{detail}</p>
     </div>
   );

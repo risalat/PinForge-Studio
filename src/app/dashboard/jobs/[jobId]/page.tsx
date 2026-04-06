@@ -36,7 +36,7 @@ type PageProps = {
 };
 
 export default async function DashboardJobDetailsPage({ params }: PageProps) {
-  const authUser = await requireAuthenticatedDashboardUser();
+  await requireAuthenticatedDashboardUser();
   const { jobId } = await params;
 
   if (!isDatabaseConfigured()) {
@@ -86,15 +86,14 @@ export default async function DashboardJobDetailsPage({ params }: PageProps) {
   const isFailedCycle = job.status === "FAILED" || job.scheduleRuns[0]?.status === "FAILED";
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
-      <div className="min-w-0 space-y-6">
-        <section className="rounded-[32px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-6 shadow-[var(--dashboard-shadow-md)]">
+    <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
+      <div className="min-w-0 space-y-5">
+        <section className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-4 shadow-[var(--dashboard-shadow-sm)]">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0 flex-1">
-              <h2 className="text-3xl font-black tracking-[-0.04em] text-[var(--dashboard-text)]">
+              <h2 className="text-2xl font-black tracking-[-0.04em] text-[var(--dashboard-text)]">
                 {job.articleTitleSnapshot}
               </h2>
-              <p className="mt-2 truncate text-sm text-[var(--dashboard-subtle)]">{authUser.email}</p>
               <p className="mt-2 break-all text-sm text-[var(--dashboard-subtle)]">{job.postUrlSnapshot}</p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -106,7 +105,7 @@ export default async function DashboardJobDetailsPage({ params }: PageProps) {
             </div>
           </div>
 
-          <div className="mt-5 grid gap-3 md:grid-cols-4">
+          <div className="mt-4 grid gap-3 md:grid-cols-4">
             <MetricTile label="Source images" value={String(job.sourceImages.length)} />
             <MetricTile label="Generated pins" value={String(job.generatedPins.length)} />
             <MetricTile label="Keywords" value={String(job.globalKeywords.length)} />
@@ -114,7 +113,7 @@ export default async function DashboardJobDetailsPage({ params }: PageProps) {
           </div>
         </section>
 
-        <section className="sticky top-[92px] z-10 rounded-[24px] border border-[var(--dashboard-line)] bg-[color:var(--dashboard-panel)]/95 px-3 py-3 shadow-[var(--dashboard-shadow-sm)] backdrop-blur-xl">
+        <section className="sticky top-[92px] z-10 rounded-[20px] border border-[var(--dashboard-line)] bg-[color:var(--dashboard-panel)]/95 px-3 py-2.5 shadow-[var(--dashboard-shadow-sm)] backdrop-blur-xl">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="flex flex-wrap gap-2">
               <SectionLink href="#review" label="Review" />
@@ -302,8 +301,8 @@ function SectionLink({ href, label }: { href: string; label: string }) {
 
 function AsidePanel({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-5 shadow-[var(--dashboard-shadow-sm)]">
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">{title}</p>
+    <section className="rounded-[24px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-4 shadow-[var(--dashboard-shadow-sm)]">
+      <p className="text-sm font-bold text-[var(--dashboard-text)]">{title}</p>
       <div className="mt-3">{children}</div>
     </section>
   );
@@ -320,9 +319,9 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
 
 function MetricTile({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-4">
-      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--dashboard-muted)]">{label}</p>
-      <p className="mt-2 text-xl font-bold text-[var(--dashboard-text)]">{value}</p>
+    <div className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-3">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--dashboard-muted)]">{label}</p>
+      <p className="mt-1 text-lg font-bold text-[var(--dashboard-text)]">{value}</p>
     </div>
   );
 }

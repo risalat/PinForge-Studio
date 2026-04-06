@@ -6,6 +6,7 @@ type AutoFitTextProps = {
   as?: "h1" | "h2" | "p" | "span";
   text: string;
   className?: string;
+  style?: CSSProperties;
   minFontSize: number;
   maxFontSize: number;
   lineHeight: number;
@@ -45,6 +46,7 @@ export function AutoFitText({
   as = "p",
   text,
   className,
+  style: customStyle,
   minFontSize,
   maxFontSize,
   lineHeight,
@@ -219,6 +221,7 @@ export function AutoFitText({
   ]);
 
   const style = {
+    ...customStyle,
     color: textColor,
     display: "block",
     fontFamily,

@@ -63,7 +63,7 @@ export default async function DashboardJobsPage({
   };
 
   return (
-    <div className="space-y-8 text-[var(--dashboard-text)]">
+    <div className="space-y-5 text-[var(--dashboard-text)]">
         {!databaseReady ? (
           <div className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-6 text-[var(--dashboard-subtle)] shadow-[var(--dashboard-shadow-sm)]">
             `DATABASE_URL` is not configured yet. Jobs will appear after the database is connected
@@ -71,11 +71,13 @@ export default async function DashboardJobsPage({
           </div>
         ) : (
           <>
-            <section className="grid gap-4 xl:grid-cols-4">
-              <SummaryCard label="Total jobs" value={String(totals.total)} />
-              <SummaryCard label="In review" value={String(totals.review)} />
-              <SummaryCard label="Pins generated" value={String(totals.generated)} />
-              <SummaryCard label="Scheduled runs" value={String(totals.scheduled)} />
+            <section className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-4 shadow-[var(--dashboard-shadow-sm)]">
+              <div className="flex flex-wrap items-center gap-2 rounded-[20px] border border-[var(--dashboard-accent-border)] bg-[var(--dashboard-accent-soft-strong)] px-4 py-3">
+                <SummaryChip label="Total" value={totals.total} />
+                <SummaryChip label="In review" value={totals.review} />
+                <SummaryChip label="Generated" value={totals.generated} />
+                <SummaryChip label="Scheduled" value={totals.scheduled} />
+              </div>
             </section>
 
             <section className="space-y-4">
@@ -85,7 +87,7 @@ export default async function DashboardJobsPage({
                 </div>
               ) : (
                 <div className="overflow-hidden rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] shadow-[var(--dashboard-shadow-sm)]">
-                  <div className="border-b border-[var(--dashboard-line)] px-5 py-4">
+                  <div className="border-b border-[var(--dashboard-line)] bg-[var(--dashboard-panel-alt)] px-4 py-3">
                     <DashboardJobsTableControls
                       initialQuery={selectedQuery}
                       initialStatus={selectedStatus}
@@ -96,7 +98,7 @@ export default async function DashboardJobsPage({
                   </div>
                   <div className="overflow-x-auto">
                     <table className="min-w-[1080px] w-full table-fixed">
-                      <thead className="bg-[var(--dashboard-panel-alt)]">
+                      <thead className="bg-[var(--dashboard-panel-strong)]">
                         <tr className="text-left">
                           <TableHead className="w-[34%]">Post</TableHead>
                           <TableHead className="w-[11%]">Domain</TableHead>
@@ -115,23 +117,23 @@ export default async function DashboardJobsPage({
                             key={job.id}
                             className={index === jobs.length - 1 ? "" : "border-b border-[var(--dashboard-line)]"}
                           >
-                            <td className="px-5 py-5 align-top">
+                            <td className="px-4 py-4 align-top">
                               <div className="min-w-0">
                                 <Link
                                   href={`/dashboard/jobs/${job.id}`}
-                                  className="line-clamp-2 text-lg font-bold text-[var(--dashboard-text)] underline decoration-[var(--dashboard-accent)] underline-offset-4"
+                                  className="line-clamp-2 text-base font-bold text-[var(--dashboard-text)] underline decoration-[var(--dashboard-accent)] underline-offset-4"
                                 >
                                   {job.articleTitleSnapshot}
                                 </Link>
-                                <p className="mt-2 break-all text-sm text-[var(--dashboard-subtle)]">
+                                <p className="mt-1 line-clamp-1 break-all text-xs text-[var(--dashboard-subtle)]">
                                   {job.postUrlSnapshot}
                                 </p>
                               </div>
                             </td>
-                            <td className="px-5 py-5 align-top">
+                            <td className="px-4 py-4 align-top">
                               <p className="text-sm font-semibold text-[var(--dashboard-text)]">{job.domainSnapshot}</p>
                             </td>
-                        <td className="px-5 py-5 align-top">
+                        <td className="px-4 py-4 align-top">
                           <p className="text-sm font-semibold text-[var(--dashboard-text)]">
                             {new Date(job.createdAt).toLocaleDateString()}
                           </p>
@@ -139,29 +141,29 @@ export default async function DashboardJobsPage({
                             {new Date(job.createdAt).toLocaleTimeString()}
                           </p>
                         </td>
-                        <td className="px-5 py-5 align-top">
+                        <td className="px-4 py-4 align-top">
                           <CycleCell meta={cycleMetaByJobId.get(job.id)} />
                         </td>
-                        <td className="px-5 py-5 align-top">
+                        <td className="px-4 py-4 align-top">
                           <p className="text-sm font-semibold text-[var(--dashboard-text)]">
                             {job.sourceImages.length}
                               </p>
                             </td>
-                            <td className="px-5 py-5 align-top">
+                            <td className="px-4 py-4 align-top">
                               <p className="text-sm font-semibold text-[var(--dashboard-text)]">
                                 {job.generatedPins.length}
                               </p>
                             </td>
-                            <td className="px-5 py-5 align-top">
+                            <td className="px-4 py-4 align-top">
                               <StatusChip label={formatLabel(job.status)} tone={toneForStatus(job.status)} />
                             </td>
-                            <td className="px-5 py-5 align-top">
+                            <td className="px-4 py-4 align-top">
                               <StatusChip
                                 label={formatLabel(job.scheduleRuns[0]?.status ?? "NOT_STARTED")}
                                 tone={toneForStatus(job.scheduleRuns[0]?.status ?? "NOT_STARTED")}
                               />
                             </td>
-                            <td className="px-5 py-5 align-top">
+                            <td className="px-4 py-4 align-top">
                               <div className="flex flex-col gap-2">
                                 <Link
                                   href={`/dashboard/jobs/${job.id}`}
@@ -193,12 +195,11 @@ export default async function DashboardJobsPage({
   );
 }
 
-function SummaryCard({ label, value }: { label: string; value: string }) {
+function SummaryChip({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-3xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-4 shadow-[var(--dashboard-shadow-sm)]">
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">{label}</p>
-      <p className="mt-2 text-2xl font-bold text-[var(--dashboard-text)]">{value}</p>
-    </div>
+    <span className="rounded-full border border-[var(--dashboard-line)] bg-white/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-text)]">
+      {label}: {value}
+    </span>
   );
 }
 
@@ -213,7 +214,7 @@ function StatusChip({ label, tone }: { label: string; tone: "neutral" | "good" |
           : "border-[var(--dashboard-line)] bg-[var(--dashboard-panel-alt)] text-[var(--dashboard-subtle)]";
 
   return (
-    <span className={`rounded-full border px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] ${className}`}>
+    <span className={`rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] ${className}`}>
       {label}
     </span>
   );
@@ -349,7 +350,7 @@ function buildCycleMetaByJobId(
 function TableHead({ children, className = "" }: { children: string; className?: string }) {
   return (
     <th
-      className={`px-5 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)] ${className}`}
+      className={`px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)] ${className}`}
     >
       {children}
     </th>

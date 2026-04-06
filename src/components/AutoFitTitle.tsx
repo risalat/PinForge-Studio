@@ -4,6 +4,7 @@ import type { CSSProperties } from "react";
 type AutoFitTitleProps = {
   text: string;
   className?: string;
+  style?: CSSProperties;
   minFontSize: number;
   maxFontSize: number;
   lineHeight: number;
@@ -20,6 +21,7 @@ type AutoFitTitleProps = {
 export function AutoFitTitle({
   text,
   className,
+  style,
   minFontSize,
   maxFontSize,
   lineHeight,
@@ -37,6 +39,7 @@ export function AutoFitTitle({
       as="h1"
       text={text}
       className={className}
+      style={style}
       minFontSize={minFontSize}
       maxFontSize={maxFontSize}
       lineHeight={lineHeight}

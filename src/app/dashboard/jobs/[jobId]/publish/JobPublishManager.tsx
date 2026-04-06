@@ -2019,10 +2019,10 @@ function formatDateLabel(value: string) {
 
   return (
     <div className="space-y-6">
-      <section className="sticky top-[92px] z-10 rounded-[24px] border border-[var(--dashboard-line)] bg-[color:var(--dashboard-panel)]/95 px-3 py-3 shadow-[var(--dashboard-shadow-sm)] backdrop-blur-xl">
+      <section className="sticky top-[84px] z-10 rounded-[20px] border border-[var(--dashboard-line)] bg-[color:var(--dashboard-panel)]/95 px-3 py-3 shadow-[var(--dashboard-shadow-sm)] backdrop-blur-xl">
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-full bg-[var(--dashboard-panel-alt)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-text)]">
+            <span className="rounded-full bg-[var(--dashboard-panel-alt)] px-3 py-1.5 text-sm font-semibold text-[var(--dashboard-text)]">
               {selectedPinIds.length}/{currentPins.length} selected
             </span>
             <StepJump href="#publish-destination" label="Destination" />
@@ -2087,9 +2087,9 @@ function formatDateLabel(value: string) {
         </div>
       </section>
 
-      <section className="rounded-[24px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-4 py-3 shadow-[var(--dashboard-shadow-sm)]">
+      <section className="rounded-[20px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-4 py-3 shadow-[var(--dashboard-shadow-sm)]">
         <div className="grid gap-3 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] xl:items-start">
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-2 sm:grid-cols-3">
             <SummaryCard label="Media" value={`${summary.uploaded}/${currentPins.length}`} />
             <SummaryCard label="Descriptions" value={`${summary.descriptionsReady}/${currentPins.length}`} />
             <SummaryCard label="Scheduled" value={`${summary.scheduled}/${currentPins.length}`} />
@@ -2112,7 +2112,7 @@ function formatDateLabel(value: string) {
                 />
               ) : null}
             </div>
-            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
               <StateDetail label="Publer" value={publerRuntimeState.detail} tone={publerRuntimeState.tone} />
               <StateDetail label="AI" value={aiRuntimeState.detail} tone={aiRuntimeState.tone} />
               {liveLatestScheduleRun?.errorMessage ? (
@@ -2124,13 +2124,10 @@ function formatDateLabel(value: string) {
       </section>
 
       {unresolvedArtworkPins.length > 0 ? (
-        <section className="rounded-[24px] border border-[var(--dashboard-warning-border)] bg-[var(--dashboard-warning-soft)] px-5 py-4 shadow-[var(--dashboard-shadow-sm)]">
+        <section className="rounded-[20px] border border-[var(--dashboard-warning-border)] bg-[var(--dashboard-warning-soft)] px-4 py-3 shadow-[var(--dashboard-shadow-sm)]">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
             <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[var(--dashboard-warning-ink)]">
-                Warning only
-              </p>
-              <p className="mt-2 text-sm text-[var(--dashboard-warning-ink)]">
+              <p className="text-sm text-[var(--dashboard-warning-ink)]">
                 {unresolvedArtworkPins.length} pin{unresolvedArtworkPins.length === 1 ? "" : "s"} still have flagged or unfinished artwork review states. {publishReadyArtworkPins.length} usable pin{publishReadyArtworkPins.length === 1 ? "" : "s"} are selected by default so you can keep publishing moving.
               </p>
             </div>
@@ -3682,9 +3679,9 @@ function formatDateLabel(value: string) {
 
 function SummaryCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-3xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-4 shadow-[var(--dashboard-shadow-sm)]">
+    <div className="rounded-[20px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-3">
       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">{label}</p>
-      <p className="mt-2 text-2xl font-bold text-[var(--dashboard-text)]">{value}</p>
+      <p className="mt-1 text-lg font-bold text-[var(--dashboard-text)]">{value}</p>
     </div>
   );
 }
@@ -3707,10 +3704,10 @@ function StepSection({
   return (
     <section
       id={id}
-      className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-5 shadow-[var(--dashboard-shadow-sm)]"
+      className="rounded-[22px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-4 shadow-[var(--dashboard-shadow-sm)]"
     >
       <div className="flex items-center justify-between gap-4">
-        <h2 className="min-w-0 truncate whitespace-nowrap text-xl font-bold">{title}</h2>
+        <h2 className="min-w-0 truncate whitespace-nowrap text-lg font-bold">{title}</h2>
         <div className="ml-auto flex min-w-0 items-center gap-3 overflow-hidden">
           {summary ? (
             <div className="flex max-w-full min-w-0 flex-nowrap items-center gap-2 overflow-x-auto pr-1 text-sm font-semibold text-[var(--dashboard-muted)] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
@@ -3748,7 +3745,7 @@ function StepSummaryPill({
 
   return (
     <span
-      className={`whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-semibold tracking-[0.08em] ${className}`}
+      className={`whitespace-nowrap rounded-full border px-3 py-1 text-[11px] font-semibold tracking-[0.06em] ${className}`}
     >
       {label}
     </span>
@@ -3867,7 +3864,7 @@ function StepJump({ href, label }: { href: string; label: string }) {
   return (
     <Link
       href={href}
-      className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] transition hover:border-[var(--dashboard-accent)] hover:text-[var(--dashboard-accent-strong)]"
+      className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-3 py-1.5 text-sm font-semibold text-[var(--dashboard-subtle)] transition hover:border-[var(--dashboard-accent)] hover:text-[var(--dashboard-accent-strong)]"
     >
       {label}
     </Link>
@@ -3879,7 +3876,7 @@ function SelectionButton({ label, onClick }: { label: string; onClick: () => voi
     <button
       type="button"
       onClick={onClick}
-      className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)]"
+      className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-1.5 text-sm font-semibold text-[var(--dashboard-subtle)]"
     >
       {label}
     </button>
@@ -3938,8 +3935,8 @@ function getActionButtonClass(input: {
 }) {
   const baseClass =
     input.tone === "primary"
-      ? "rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)]"
-      : "rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)]";
+      ? "rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-1.5 text-sm font-semibold text-white shadow-[var(--dashboard-shadow-accent)]"
+      : "rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-1.5 text-sm font-semibold text-[var(--dashboard-subtle)]";
 
   if (input.busy) {
     return `${baseClass} cursor-progress opacity-100`;
