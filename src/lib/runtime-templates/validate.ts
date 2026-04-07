@@ -53,6 +53,13 @@ type Rect = {
   bottom: number;
 };
 
+type ShapeBlockElement = Extract<
+  RuntimeTemplateDocument["elements"][number],
+  {
+    type: "shapeBlock";
+  }
+>;
+
 export function validateRuntimeTemplateDocument(
   input: unknown,
   options?: RuntimeValidationOptions,
@@ -391,6 +398,41 @@ function buildLayoutValidation(
           ),
         );
       }
+
+      const backingShape = findBackingShapeBlock(document, element);
+      if (!backingShape) {
+        return;
+      }
+
+      const insets = getRectInsets(backingShape, element);
+      const recommendedHorizontalInset = getRecommendedHorizontalInset(element);
+      const recommendedVerticalInset = getRecommendedVerticalInset(element);
+      const isHorizontallyTight =
+        insets.left < recommendedHorizontalInset || insets.right < recommendedHorizontalInset;
+      const isVerticallyTight =
+        insets.top < recommendedVerticalInset || insets.bottom < recommendedVerticalInset;
+
+      if (isHorizontallyTight || isVerticallyTight) {
+        const messages: string[] = [];
+        if (isHorizontallyTight) {
+          messages.push("side padding is too tight");
+        }
+        if (isVerticallyTight) {
+          messages.push("top or bottom padding is too tight");
+        }
+
+        warnings.push(
+          issue(
+            "warning",
+            "text_backing_shape_padding_risk",
+            `${getRoleLabel(element)} nearly fills its backing shape block and ${messages.join(
+              " and ",
+            )}. Tight text-frame padding can look centered in preview but crowd real render content.`,
+            `elements.${element.id}`,
+            "layout",
+          ),
+        );
+      }
     });
 
   checkTextOverlap(titleElement, subtitleElement, errors, "title_subtitle_overlap");
@@ -649,6 +691,117 @@ function rectIntersectionArea(first: Rect, second: Rect) {
   const width = Math.max(0, Math.min(first.right, second.right) - Math.max(first.left, second.left));
   const height = Math.max(0, Math.min(first.bottom, second.bottom) - Math.max(first.top, second.top));
   return width * height;
+}
+
+function rectArea(rect: Rect) {
+  return Math.max(0, rect.right - rect.left) * Math.max(0, rect.bottom - rect.top);
+}
+
+function isPointInsideRect(
+  point: {
+    x: number;
+    y: number;
+  },
+  rect: Rect,
+) {
+  return (
+    point.x >= rect.left &&
+    point.x <= rect.right &&
+    point.y >= rect.top &&
+    point.y <= rect.bottom
+  );
+}
+
+function findBackingShapeBlock(
+  document: RuntimeTemplateDocument,
+  textElement: RuntimeTextElement,
+) {
+  const textRect = toRect(textElement);
+  const textArea = rectArea(textRect);
+  const textCenter = {
+    x: textElement.x + textElement.width / 2,
+    y: textElement.y + textElement.height / 2,
+  };
+
+  const candidates = document.elements
+    .filter(
+      (element): element is ShapeBlockElement =>
+        element.type === "shapeBlock" && element.visible && element.zIndex <= textElement.zIndex,
+    )
+    .map((element) => {
+      const overlapArea = rectIntersectionArea(textRect, toRect(element));
+      return {
+        element,
+        overlapArea,
+      };
+    })
+    .filter(({ element, overlapArea }) => {
+      if (textArea <= 0 || overlapArea <= 0) {
+        return false;
+      }
+      const shapeRect = toRect(element);
+      return (
+        overlapArea / textArea >= 0.7 &&
+        isPointInsideRect(textCenter, shapeRect)
+      );
+    })
+    .sort((left, right) => {
+      if (right.overlapArea !== left.overlapArea) {
+        return right.overlapArea - left.overlapArea;
+      }
+      return right.element.zIndex - left.element.zIndex;
+    });
+
+  return candidates[0]?.element ?? null;
+}
+
+function getRectInsets(
+  outer: Pick<RuntimeTemplateDocument["elements"][number], "x" | "y" | "width" | "height">,
+  inner: Pick<RuntimeTemplateDocument["elements"][number], "x" | "y" | "width" | "height">,
+) {
+  const outerRect = toRect(outer);
+  const innerRect = toRect(inner);
+
+  return {
+    left: innerRect.left - outerRect.left,
+    right: outerRect.right - innerRect.right,
+    top: innerRect.top - outerRect.top,
+    bottom: outerRect.bottom - innerRect.bottom,
+  };
+}
+
+function getRecommendedHorizontalInset(element: RuntimeTextElement) {
+  switch (element.semanticRole) {
+    case "title":
+      return 32;
+    case "subtitle":
+      return 28;
+    case "domain":
+      return 24;
+    case "itemNumber":
+      return 20;
+    case "cta":
+      return 24;
+    default:
+      return 24;
+  }
+}
+
+function getRecommendedVerticalInset(element: RuntimeTextElement) {
+  switch (element.semanticRole) {
+    case "title":
+      return 24;
+    case "subtitle":
+      return 18;
+    case "domain":
+      return 16;
+    case "itemNumber":
+      return 16;
+    case "cta":
+      return 16;
+    default:
+      return 16;
+  }
 }
 
 function isCriticalTextElement(

@@ -1073,6 +1073,10 @@ function TemplateMetaPanel(props: {
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
           Preview content
         </p>
+        <p className="mt-2 text-xs leading-5 text-[var(--dashboard-muted)]">
+          Editor preview uses this sample content. Final generated pins use live job content and can
+          expose tight spacing more aggressively.
+        </p>
         <div className="mt-3 space-y-3">
           <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
             Title

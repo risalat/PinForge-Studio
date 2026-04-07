@@ -175,7 +175,11 @@ export default async function RuntimeTemplatePreviewPage({
 
           <div className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-5 shadow-[var(--dashboard-shadow-sm)]">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
-              Sample payload
+              Editor sample payload
+            </p>
+            <p className="mt-2 text-xs leading-5 text-[var(--dashboard-muted)]">
+              This preview uses editor sample content. Final generated pins use live plan payloads,
+              which can reveal tighter spacing than the editor sample does.
             </p>
             <dl className="mt-4 space-y-3 text-sm text-[var(--dashboard-subtle)]">
               <div>
