@@ -1,15 +1,16 @@
+/* eslint-disable @next/next/no-img-element */
+
 import { AutoFitText } from "@/components/AutoFitText";
-import { ImageSlot } from "@/components/ImageSlot";
 import { getSplitVerticalVisualPreset } from "@/lib/templates/visualPresets";
 import type { TemplateRenderProps } from "@/lib/templates/types";
 import type { CSSProperties } from "react";
 
 const TEMPLATE_TYPOGRAPHY = {
   display: {
-    fontFamily: "var(--font-poppins), sans-serif",
-    fontWeight: 800,
-    letterSpacing: "-0.055em",
-    lineHeight: 0.84,
+    fontFamily: "var(--font-antonio), sans-serif",
+    fontWeight: 700,
+    letterSpacing: "-0.065em",
+    lineHeight: 0.86,
     textTransform: "uppercase" as const,
   },
 } as const;
@@ -26,12 +27,12 @@ export function TemplateFourImageGridCenterPosterNumberTitle({
   const displayNumber = typeof itemNumber === "number" && itemNumber > 0 ? itemNumber : 5;
   const segments = buildPosterSegments(title);
   const dividerColor = "#fffaf7";
-  const posterBackground = mixHex("#cc7445", preset.palette.band, 0.14);
-  const outlineColor = mixHex("#6d2232", preset.palette.footer, 0.12);
-  const textColor = "#fff9f5";
-  const overlayShadow = withAlpha("#6d2232", 0.14);
-  const textShadow = `4px 6px 0 ${withAlpha("#6d2232", 0.16)}, 0 18px 28px ${withAlpha("#5a281e", 0.08)}`;
-  const textStrokeWidth = 8;
+  const circleBackground = mixHex("#cf6c36", preset.palette.band, 0.08);
+  const outlineColor = mixHex("#5a2418", preset.palette.footer, 0.05);
+  const textColor = "#fffaf6";
+  const circleShadow = withAlpha("#6b2432", 0.16);
+  const textShadow = `0 8px 0 ${withAlpha("#4f2118", 0.34)}, 0 18px 24px ${withAlpha("#4a1d15", 0.14)}`;
+  const textStrokeWidth = 14;
   const outlinedTextStyle: CSSProperties = {
     WebkitTextStroke: `${textStrokeWidth}px ${outlineColor}`,
     paintOrder: "stroke fill",
@@ -42,7 +43,7 @@ export function TemplateFourImageGridCenterPosterNumberTitle({
     <div
       data-pin-canvas="true"
       className="relative h-[1920px] w-[1080px] overflow-hidden"
-      style={{ backgroundColor: dividerColor }}
+      style={{ backgroundColor: "#f7eee6" }}
     >
       <GridImage src={imageSet[0]} alt={title} className="left-0 top-0 h-[956px] w-[536px]" />
       <GridImage src={imageSet[1]} alt={title} className="right-0 top-0 h-[956px] w-[536px]" />
@@ -59,28 +60,26 @@ export function TemplateFourImageGridCenterPosterNumberTitle({
       />
 
       <div className="absolute inset-x-0 top-[306px] z-30 flex justify-center">
-        <div className="relative h-[1240px] w-[644px]">
+        <div className="relative h-[1240px] w-[690px]">
           <div
-            className="absolute left-1/2 top-[180px] z-10 h-[720px] w-[540px] -translate-x-1/2"
+            className="absolute left-1/2 top-[212px] z-10 h-[548px] w-[548px] -translate-x-1/2 rounded-full"
             style={{
-              backgroundColor: posterBackground,
-              clipPath:
-                "polygon(22% 0%, 78% 0%, 87% 6%, 91% 18%, 91% 35%, 86% 50%, 80% 58%, 79% 74%, 75% 100%, 25% 100%, 21% 74%, 20% 58%, 14% 50%, 9% 35%, 9% 18%, 13% 6%)",
-              boxShadow: `0 28px 60px ${overlayShadow}`,
+              backgroundColor: circleBackground,
+              boxShadow: `0 34px 70px ${circleShadow}`,
             }}
           />
 
-          <div className="absolute inset-x-0 top-[10px] z-30 flex h-[214px] items-end justify-center">
-            <div className="grid w-full grid-cols-[184px_minmax(0,1fr)] items-end gap-1 px-0">
-              <div className="h-[170px]">
+          <div className="absolute inset-x-0 top-[22px] z-30 flex h-[202px] items-end justify-center">
+            <div className="flex h-[186px] w-[612px] items-end justify-center gap-[22px]">
+              <div className="h-[182px] w-[156px]">
                 <AutoFitText
                   as="p"
                   text={String(displayNumber)}
-                  minFontSize={104}
-                  maxFontSize={178}
+                  minFontSize={120}
+                  maxFontSize={194}
                   maxLines={1}
                   lineHeight={TEMPLATE_TYPOGRAPHY.display.lineHeight}
-                  className="h-full w-full text-right"
+                  className="h-full w-full text-center"
                   textColor={textColor}
                   fontFamily={TEMPLATE_TYPOGRAPHY.display.fontFamily}
                   fontWeight={TEMPLATE_TYPOGRAPHY.display.fontWeight}
@@ -89,15 +88,15 @@ export function TemplateFourImageGridCenterPosterNumberTitle({
                   style={outlinedTextStyle}
                 />
               </div>
-              <div className="h-[164px]">
+              <div className="h-[170px] w-[432px]">
                 <AutoFitText
                   as="p"
                   text={segments.topLine}
-                  minFontSize={98}
-                  maxFontSize={176}
+                  minFontSize={106}
+                  maxFontSize={184}
                   maxLines={1}
                   lineHeight={TEMPLATE_TYPOGRAPHY.display.lineHeight}
-                  className="h-full w-full text-left"
+                  className="h-full w-full text-center"
                   textColor={textColor}
                   fontFamily={TEMPLATE_TYPOGRAPHY.display.fontFamily}
                   fontWeight={TEMPLATE_TYPOGRAPHY.display.fontWeight}
@@ -109,17 +108,17 @@ export function TemplateFourImageGridCenterPosterNumberTitle({
             </div>
           </div>
 
-          <div className="absolute inset-x-[86px] top-[274px] z-20 flex h-[446px] flex-col justify-center">
+          <div className="absolute inset-x-[94px] top-[280px] z-20 flex h-[410px] flex-col justify-center gap-[6px]">
             {segments.middleLines.map((line, index) => (
               <div
                 key={`${line}-${index}`}
-                className={`flex ${segments.middleLines.length === 1 ? "h-full items-center" : "h-[198px] items-end"} justify-center`}
+                className={`flex ${segments.middleLines.length === 1 ? "h-full items-center" : "h-[186px] items-center"} justify-center`}
               >
                 <AutoFitText
                   as="p"
                   text={line}
-                  minFontSize={100}
-                  maxFontSize={174}
+                  minFontSize={110}
+                  maxFontSize={188}
                   maxLines={1}
                   lineHeight={TEMPLATE_TYPOGRAPHY.display.lineHeight}
                   className="w-full text-center"
@@ -134,17 +133,17 @@ export function TemplateFourImageGridCenterPosterNumberTitle({
             ))}
           </div>
 
-          <div className="absolute inset-x-[6px] top-[774px] z-30 flex h-[354px] flex-col justify-start">
+          <div className="absolute inset-x-0 top-[768px] z-30 flex h-[392px] flex-col justify-start gap-[6px]">
             {segments.bottomLines.map((line, index) => (
               <div
                 key={`${line}-${index}`}
-                className={`flex ${segments.bottomLines.length === 1 ? "h-full items-start" : "h-[160px] items-start"} justify-center`}
+                className={`flex ${segments.bottomLines.length === 1 ? "h-full items-center" : "h-[176px] items-center"} justify-center`}
               >
                 <AutoFitText
                   as="p"
                   text={line}
-                  minFontSize={96}
-                  maxFontSize={168}
+                  minFontSize={108}
+                  maxFontSize={184}
                   maxLines={1}
                   lineHeight={TEMPLATE_TYPOGRAPHY.display.lineHeight}
                   className="w-full text-center"
@@ -175,10 +174,19 @@ function GridImage({
 }) {
   return (
     <div className={`absolute ${className}`}>
-      <ImageSlot src={src} alt={alt} className="h-full w-full" />
+      <img
+        src={src}
+        alt={alt}
+        className="h-full w-full object-cover object-center"
+        style={{ filter: "sepia(0.12) saturate(1.22) contrast(1.04) brightness(1.01) hue-rotate(-8deg)" }}
+      />
       <div
         className="absolute inset-0"
-        style={{ background: "linear-gradient(180deg, rgba(255,249,243,0.03) 0%, rgba(89,50,33,0.06) 100%)" }}
+        style={{ background: "linear-gradient(180deg, rgba(255,240,224,0.08) 0%, rgba(161,83,35,0.1) 100%)" }}
+      />
+      <div
+        className="absolute inset-0"
+        style={{ background: "linear-gradient(180deg, rgba(255,249,243,0.02) 0%, rgba(89,50,33,0.08) 100%)" }}
       />
     </div>
   );
