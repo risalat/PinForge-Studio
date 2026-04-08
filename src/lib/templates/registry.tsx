@@ -23,8 +23,10 @@ import { TemplateMasonryGridNumberTitleFooter } from "@/templates/TemplateMasonr
 import { TemplateHeroTwoSplitText } from "@/templates/TemplateHeroTwoSplitText";
 import { TemplateColorPopLadderNumberCard } from "@/templates/TemplateColorPopLadderNumberCard";
 import { TemplateHeroScrapbookTapeTag } from "@/templates/TemplateHeroScrapbookTapeTag";
+import { TemplateBookmarkRibbonCollageTitle } from "@/templates/TemplateBookmarkRibbonCollageTitle";
 import type { JSX } from "react";
 import {
+  sampleTemplateDataBookmarkRibbonCollageTitle,
   sampleTemplateDataFourImageMasonryHeroNumberDomainPill,
   sampleTemplateDataFourImageGridNumberTitle,
   sampleTemplateDataFourImageGridNumberTitleDomain,
@@ -429,6 +431,21 @@ export const TEMPLATE_CONFIGS: Record<string, TemplateConfig> = {
       footer: true,
     },
   },
+  "bookmark-ribbon-collage-title": {
+    id: "bookmark-ribbon-collage-title",
+    name: "Bookmark Ribbon Collage Title",
+    componentKey: "TemplateBookmarkRibbonCollageTitle",
+    previewPath: "/preview/bookmark-ribbon-collage-title",
+    locked: true,
+    canvas: { width: 1080, height: 1920 },
+    imageSlotCount: 4,
+    textFields: ["title", "itemNumber", "domain", "visualPreset"],
+    features: {
+      overlay: true,
+      numberTreatment: "hero",
+      footer: true,
+    },
+  },
 };
 
 const TEMPLATE_COMPONENTS: Record<
@@ -460,6 +477,7 @@ const TEMPLATE_COMPONENTS: Record<
   "hero-two-split-text": TemplateHeroTwoSplitText,
   "color-pop-ladder-number-card": TemplateColorPopLadderNumberCard,
   "hero-scrapbook-tape-tag": TemplateHeroScrapbookTapeTag,
+  "bookmark-ribbon-collage-title": TemplateBookmarkRibbonCollageTitle,
 };
 
 export function getTemplateConfig(templateId: string) {
@@ -575,6 +593,10 @@ export function getSampleTemplateProps(templateId: string) {
 
   if (templateId === "hero-scrapbook-tape-tag") {
     return sampleTemplateDataHeroScrapbookTapeTag;
+  }
+
+  if (templateId === "bookmark-ribbon-collage-title") {
+    return sampleTemplateDataBookmarkRibbonCollageTitle;
   }
 
   return sampleTemplateDataWithSubtitle;

@@ -298,3 +298,16 @@ export const sampleTemplateDataHeroScrapbookTapeTag: TemplateRenderProps = {
   itemNumber: 27,
   visualPreset: "cocoa-blush",
 };
+
+export const sampleTemplateDataBookmarkRibbonCollageTitle: TemplateRenderProps = {
+  title: "Modern Sunroom Decor Ideas",
+  images: [
+    "/sample-images/8.jpg",
+    "/sample-images/1.jpg",
+    "/sample-images/2.jpg",
+    "/sample-images/7.jpg",
+  ],
+  domain: "mightypaint.com",
+  itemNumber: 18,
+  visualPreset: "rosewater-satin",
+};

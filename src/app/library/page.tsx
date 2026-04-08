@@ -185,6 +185,8 @@ function getTemplateDescription(templateId: string) {
       return "Full-width hero image with a side-by-side number and three-line title strip, followed by a lower two-image split.";
     case "hero-scrapbook-tape-tag":
       return "Scrapbook collage with one dominant hero photo, taped snapshot frames, a torn-paper headline slab, and a hanging number tag.";
+    case "bookmark-ribbon-collage-title":
+      return "Magazine-cover collage with a tall bookmark number ribbon, floating snapshot frames, and a bold lower editorial title card.";
     default:
       return "Locked Pinterest template ready for preview, render, and manual plan use.";
   }
@@ -232,6 +234,8 @@ function getTemplateUsage(templateId: string) {
       return "Use for listicle pins that need one dominant hero, a huge count, and a stacked center title strip.";
     case "hero-scrapbook-tape-tag":
       return "Use for decor and lifestyle roundups where a handcrafted scrapbook feel can stop the scroll more aggressively than a clean editorial grid.";
+    case "bookmark-ribbon-collage-title":
+      return "Use for premium roundup covers where a bold number rail and a cleaner magazine-style title block should feel more elevated than a scrapbook layout.";
     default:
       return "Use for locked template-driven render tests and job planning.";
   }

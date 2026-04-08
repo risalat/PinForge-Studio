@@ -4366,6 +4366,8 @@ function getArtworkTitleRule(templateId: string) {
       return { maxWords: 5, maxChars: 36, maxLines: 3, singleLine: false };
     case "color-pop-ladder-number-card":
       return { maxWords: 4, maxChars: 30, maxLines: 3, singleLine: false };
+    case "bookmark-ribbon-collage-title":
+      return { maxWords: 6, maxChars: 34, maxLines: 3, singleLine: false };
     case "hero-arch-sidebar-triptych":
       return { maxWords: 5, maxChars: 30, maxLines: 5, singleLine: false };
     case "three-image-center-poster-number-footer":
@@ -4415,6 +4417,10 @@ function getArtworkGoal(templateId: string, templateSupportsSubtitle: boolean) {
 
   if (templateId === "hero-scrapbook-tape-tag") {
     return "Create a number-aware Pinterest artwork headline for a scrapbook collage with a torn-paper title slab and a separate hanging number tag. Use 4 to 6 strong words total, do not include the count in the headline itself, and make it feel like a high-click roundup cover rather than a sentence. Favor a softer opener followed by two punchier title phrases.";
+  }
+
+  if (templateId === "bookmark-ribbon-collage-title") {
+    return "Create a number-aware Pinterest artwork headline for an editorial collage cover with a tall bookmark number ribbon and a bold lower title card. Use 4 to 6 strong words total, do not include the count in the headline itself, and make it feel premium, decor-editorial, and instantly scannable. Favor a softer opener followed by two punchier title phrases.";
   }
 
   if (templateId === "five-image-center-band-number-domain") {
