@@ -4413,6 +4413,10 @@ function getArtworkGoal(templateId: string, templateSupportsSubtitle: boolean) {
     return "Create a bright Pinterest artwork headline for a colorful tilted title card with a separate hero number tile. Use 3 to 4 strong words total, do not include the count in the headline itself, avoid filler, and make it feel feed-first and punchy. Favor roundup closers like Ideas, Decor, Colors, or Looks.";
   }
 
+  if (templateId === "hero-scrapbook-tape-tag") {
+    return "Create a number-aware Pinterest artwork headline for a scrapbook collage with a torn-paper title slab and a separate hanging number tag. Use 4 to 6 strong words total, do not include the count in the headline itself, and make it feel like a high-click roundup cover rather than a sentence. Favor a softer opener followed by two punchier title phrases.";
+  }
+
   if (templateId === "five-image-center-band-number-domain") {
     return "Create a number-aware Pinterest artwork headline for a center band with a separate ellipse number badge. It must be 4 to 6 strong words total, never fewer than 4 words, and should not include the count in the headline itself. Favor a softer 1 to 2 word opener followed by two bolder lower lines. Keep it decor-editorial, compact, and visually scannable.";
   }

@@ -183,6 +183,8 @@ function getTemplateDescription(templateId: string) {
       return "Seven-image masonry collage with a centered number card, dark editorial title band, and footer domain pill.";
     case "hero-two-split-text":
       return "Full-width hero image with a side-by-side number and three-line title strip, followed by a lower two-image split.";
+    case "hero-scrapbook-tape-tag":
+      return "Scrapbook collage with one dominant hero photo, taped snapshot frames, a torn-paper headline slab, and a hanging number tag.";
     default:
       return "Locked Pinterest template ready for preview, render, and manual plan use.";
   }
@@ -228,6 +230,8 @@ function getTemplateUsage(templateId: string) {
       return "Use for editorial collage pins that need a richer masonry structure with a centered count hook.";
     case "hero-two-split-text":
       return "Use for listicle pins that need one dominant hero, a huge count, and a stacked center title strip.";
+    case "hero-scrapbook-tape-tag":
+      return "Use for decor and lifestyle roundups where a handcrafted scrapbook feel can stop the scroll more aggressively than a clean editorial grid.";
     default:
       return "Use for locked template-driven render tests and job planning.";
   }

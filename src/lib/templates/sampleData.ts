@@ -285,3 +285,16 @@ export const sampleTemplateDataColorPopLadderNumberCard: TemplateRenderProps = {
   itemNumber: 21,
   visualPreset: "sunset-punch",
 };
+
+export const sampleTemplateDataHeroScrapbookTapeTag: TemplateRenderProps = {
+  title: "Cozy Patio Lighting Ideas",
+  images: [
+    "/sample-images/8.jpg",
+    "/sample-images/1.jpg",
+    "/sample-images/2.jpg",
+    "/sample-images/7.jpg",
+  ],
+  domain: "mightypaint.com",
+  itemNumber: 27,
+  visualPreset: "cocoa-blush",
+};

@@ -22,6 +22,7 @@ import { TemplateNineImageGridOverlayNumberFooter } from "@/templates/TemplateNi
 import { TemplateMasonryGridNumberTitleFooter } from "@/templates/TemplateMasonryGridNumberTitleFooter";
 import { TemplateHeroTwoSplitText } from "@/templates/TemplateHeroTwoSplitText";
 import { TemplateColorPopLadderNumberCard } from "@/templates/TemplateColorPopLadderNumberCard";
+import { TemplateHeroScrapbookTapeTag } from "@/templates/TemplateHeroScrapbookTapeTag";
 import type { JSX } from "react";
 import {
   sampleTemplateDataFourImageMasonryHeroNumberDomainPill,
@@ -37,6 +38,7 @@ import {
   sampleTemplateDataTwoImageSlantBandNumberDomain,
   sampleTemplateDataHeroTwoSplitText,
   sampleTemplateDataColorPopLadderNumberCard,
+  sampleTemplateDataHeroScrapbookTapeTag,
   sampleTemplateDataHeroTextTripleSplitFooter,
   sampleTemplateDataMasonryGridNumberTitleFooter,
   sampleTemplateDataNineImageGridOverlayNumberFooter,
@@ -412,6 +414,21 @@ export const TEMPLATE_CONFIGS: Record<string, TemplateConfig> = {
       footer: true,
     },
   },
+  "hero-scrapbook-tape-tag": {
+    id: "hero-scrapbook-tape-tag",
+    name: "Hero Scrapbook Tape Tag",
+    componentKey: "TemplateHeroScrapbookTapeTag",
+    previewPath: "/preview/hero-scrapbook-tape-tag",
+    locked: true,
+    canvas: { width: 1080, height: 1920 },
+    imageSlotCount: 4,
+    textFields: ["title", "itemNumber", "domain", "visualPreset"],
+    features: {
+      overlay: true,
+      numberTreatment: "hero",
+      footer: true,
+    },
+  },
 };
 
 const TEMPLATE_COMPONENTS: Record<
@@ -442,6 +459,7 @@ const TEMPLATE_COMPONENTS: Record<
   "masonry-grid-number-title-footer": TemplateMasonryGridNumberTitleFooter,
   "hero-two-split-text": TemplateHeroTwoSplitText,
   "color-pop-ladder-number-card": TemplateColorPopLadderNumberCard,
+  "hero-scrapbook-tape-tag": TemplateHeroScrapbookTapeTag,
 };
 
 export function getTemplateConfig(templateId: string) {
@@ -553,6 +571,10 @@ export function getSampleTemplateProps(templateId: string) {
 
   if (templateId === "color-pop-ladder-number-card") {
     return sampleTemplateDataColorPopLadderNumberCard;
+  }
+
+  if (templateId === "hero-scrapbook-tape-tag") {
+    return sampleTemplateDataHeroScrapbookTapeTag;
   }
 
   return sampleTemplateDataWithSubtitle;
