@@ -80,6 +80,16 @@ export function resolveRuntimeTemplateTokens(
     ["#ffffff", "#fff7ef", tintTowardsWhite(preset.palette.title, 0.8)],
     8,
   );
+  const deepTitle = deepenHex(preset.palette.title, 0.16);
+  const darkerTitle = deepenHex(preset.palette.title, 0.28);
+  const deepSubtitle = deepenHex(preset.palette.subtitle, 0.22);
+  const deepDomain = deepenHex(preset.palette.domain, 0.18);
+  const darkerDomain = deepenHex(preset.palette.domain, 0.32);
+  const deepNumber = deepenHex(preset.palette.number, 0.2);
+  const deepDivider = deepenHex(preset.palette.divider, 0.22);
+  const darkInk = "#1d1d1d";
+  const brightWhite = "#ffffff";
+  const warmWhite = "#fff7ef";
 
   return {
     preset,
@@ -97,32 +107,32 @@ export function resolveRuntimeTemplateTokens(
       "text.title": ensureContrastColor(
         primarySurface,
         preset.palette.title,
-        [deepenHex(preset.palette.title, 0.16), deepenHex(preset.palette.footer, 0.22), "#1d1d1d"],
+        [deepTitle, darkerTitle, deepenHex(preset.palette.footer, 0.22), darkInk, brightWhite, warmWhite],
         5.6,
       ),
       "text.subtitle": ensureContrastColor(
         primarySurface,
         preset.palette.subtitle,
-        [deepenHex(preset.palette.subtitle, 0.18), deepenHex(preset.palette.title, 0.12)],
+        [deepSubtitle, deepTitle, darkerTitle, deepDomain, darkInk, brightWhite, warmWhite],
         4.8,
       ),
       "text.meta": ensureContrastColor(
         primarySurface,
         preset.palette.domain,
-        [deepenHex(preset.palette.domain, 0.12), deepenHex(preset.palette.title, 0.14)],
+        [deepDomain, darkerDomain, deepTitle, darkInk, brightWhite, warmWhite],
         4.8,
       ),
       "text.inverse": inverseText,
       "text.number": ensureContrastColor(
         primarySurface,
         preset.palette.number,
-        [deepenHex(preset.palette.number, 0.16), deepenHex(preset.palette.title, 0.14)],
+        [deepNumber, deepTitle, darkerTitle, darkInk, brightWhite, warmWhite],
         5,
       ),
       "text.cta": ensureContrastColor(
         primarySurface,
         mixHex(preset.palette.domain, preset.palette.divider, 0.42),
-        [preset.palette.domain, deepenHex(preset.palette.title, 0.18)],
+        [deepDomain, deepDivider, deepTitle, darkInk, brightWhite, warmWhite],
         4.8,
       ),
     },

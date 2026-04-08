@@ -18,7 +18,8 @@
     "storage:audit": "node scripts/storage-audit.mjs",
     "storage:cleanup-temp": "node scripts/storage-cleanup-temp.mjs",
     "playwright:install": "playwright install chromium",
-    "template:qa": "node scripts/template-visual-qa.mjs"
+    "template:qa": "node scripts/template-visual-qa.mjs",
+    "preset:contrast": "npx tsx scripts/preset-contrast-audit.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1005.0",

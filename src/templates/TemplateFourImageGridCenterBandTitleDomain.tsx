@@ -237,7 +237,8 @@ function resolveColors(
     | "dark-drama"
     | "graphic-pop"
     | "fresh-vivid"
-    | "feminine-bold",
+    | "feminine-bold"
+    | "food-bold",
   palette: {
     canvas: string;
     band: string;
@@ -251,11 +252,11 @@ function resolveColors(
 ) {
   const bandBackground = "#ffffff";
   const railColor =
-    category === "graphic-pop" || category === "fresh-vivid" || category === "feminine-bold"
+    category === "graphic-pop" || category === "fresh-vivid" || category === "feminine-bold" || category === "food-bold"
       ? palette.divider
       : mixHex(palette.divider, palette.title, 0.18);
   const titleAccentA =
-    category === "graphic-pop" || category === "fresh-vivid" || category === "feminine-bold"
+    category === "graphic-pop" || category === "fresh-vivid" || category === "feminine-bold" || category === "food-bold"
       ? deepenHex(mixHex(palette.title, palette.divider, 0.15), 0.18)
       : deepenHex(mixHex(palette.title, palette.footer, 0.2), 0.22);
   const titleAccentB =
@@ -271,7 +272,7 @@ function resolveColors(
         ? deepenHex(mixHex(palette.divider, palette.number, 0.56), 0.1)
         : category === "feminine-bold"
           ? deepenHex(mixHex(palette.number, palette.divider, 0.7), 0.12)
-          : category === "fresh-vivid" || category === "graphic-pop"
+          : category === "fresh-vivid" || category === "graphic-pop" || category === "food-bold"
             ? deepenHex(mixHex(palette.divider, palette.number, 0.5), 0.12)
             : deepenHex(mixHex(palette.divider, palette.number, 0.62), 0.12);
   const titleColors = [

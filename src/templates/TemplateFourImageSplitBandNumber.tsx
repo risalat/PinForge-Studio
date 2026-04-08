@@ -185,7 +185,8 @@ function resolveSplitBandColors(
     | "dark-drama"
     | "graphic-pop"
     | "fresh-vivid"
-    | "feminine-bold",
+    | "feminine-bold"
+    | "food-bold",
   palette: {
     canvas: string;
     band: string;
@@ -201,7 +202,7 @@ function resolveSplitBandColors(
   const baseBadgeBackground =
     category === "dark-drama"
       ? tintTowardsWhite(mixHex(palette.canvas, palette.divider, 0.22), 0.08)
-      : category === "graphic-pop" || category === "fresh-vivid" || category === "feminine-bold"
+      : category === "graphic-pop" || category === "fresh-vivid" || category === "feminine-bold" || category === "food-bold"
         ? tintTowardsWhite(mixHex(palette.canvas, palette.divider, 0.36), 0.2)
         : category === "earthy-warm"
           ? tintTowardsWhite(mixHex(palette.canvas, palette.footer, 0.3), 0.16)
@@ -221,7 +222,7 @@ function resolveSplitBandColors(
 
   const numberColor = ensureContrastColor(
     baseBadgeBackground,
-    category === "graphic-pop" || category === "fresh-vivid" || category === "feminine-bold"
+    category === "graphic-pop" || category === "fresh-vivid" || category === "feminine-bold" || category === "food-bold"
       ? deepenHex(mixHex(palette.number, palette.domain, 0.42), 0.16)
       : deepenHex(mixHex(palette.number, palette.title, 0.28), 0.2),
     [
@@ -245,7 +246,7 @@ function resolveSplitBandColors(
       ? tintTowardsWhite(palette.divider, 0.18)
       : category === "earthy-warm"
         ? mixHex(tintTowardsWhite(palette.divider, 0.28), palette.title, 0.18)
-        : category === "graphic-pop" || category === "fresh-vivid"
+        : category === "graphic-pop" || category === "fresh-vivid" || category === "food-bold"
           ? tintTowardsWhite(mixHex(palette.divider, palette.title, 0.18), 0.1)
           : category === "feminine-bold"
             ? tintTowardsWhite(mixHex(palette.divider, palette.title, 0.14), 0.14)

@@ -447,7 +447,8 @@ function resolvePosterColors(
     | "dark-drama"
     | "graphic-pop"
     | "fresh-vivid"
-    | "feminine-bold",
+    | "feminine-bold"
+    | "food-bold",
   palette: {
     canvas: string;
     band: string;
@@ -460,7 +461,7 @@ function resolvePosterColors(
   },
 ) {
   const boldCategory =
-    category === "graphic-pop" || category === "fresh-vivid" || category === "feminine-bold";
+    category === "graphic-pop" || category === "fresh-vivid" || category === "feminine-bold" || category === "food-bold";
   const posterBackground = boldCategory
     ? tintTowardsWhite(mixHex(palette.canvas, palette.band, 0.12), 0.96)
     : "#fffdf9";

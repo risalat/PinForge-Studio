@@ -1967,6 +1967,420 @@ export const SPLIT_VERTICAL_VISUAL_PRESETS: Record<
     },
     recommendationTags: ["orange", "warm", "vibrant", "playful", "feed-first"],
   },
+  "tomato-basil": {
+    id: "tomato-basil",
+    label: "Tomato Basil",
+    description: "Tomato red, basil green, and warm cream for savory recipe roundups.",
+    palette: {
+      canvas: "#efe3d7",
+      band: "#fff6ef",
+      footer: "#9d2d22",
+      divider: "#4f7a42",
+      title: "#fff8f2",
+      subtitle: "#f6d3b1",
+      domain: "#fff8f1",
+      number: "#fff4ea",
+    },
+    supportingColors: ["#d24b2e", "#6e9637", "#f0b44d"],
+    typography: {
+      title: {
+        fontFamily: FONT_STACKS.editorial,
+        fontWeight: 700,
+        letterSpacing: "-0.008em",
+        lineHeight: 1.18,
+      },
+      subtitle: {
+        fontFamily: FONT_STACKS.sans,
+        fontWeight: 700,
+        letterSpacing: "0.16em",
+        lineHeight: 1.08,
+        textTransform: "uppercase",
+      },
+      number: {
+        fontFamily: FONT_STACKS.display,
+        fontWeight: 700,
+        letterSpacing: "-0.02em",
+        lineHeight: 1,
+      },
+      domain: {
+        fontFamily: FONT_STACKS.sans,
+        fontWeight: 700,
+        letterSpacing: "0.08em",
+        lineHeight: 1.04,
+        textTransform: "uppercase",
+      },
+    },
+    layout: {
+      bandPaddingX: 92,
+      bandHeightWithSubtitle: 434,
+      bandHeightWithoutSubtitle: 368,
+      titleBlockHeightWithSubtitle: 198,
+      titleBlockHeightWithoutSubtitle: 272,
+      titleMinSizeWithSubtitle: 62,
+      titleMaxSizeWithSubtitle: 94,
+      titleMinSizeWithoutSubtitle: 70,
+      titleMaxSizeWithoutSubtitle: 108,
+      titleMaxLinesWithSubtitle: 2,
+      titleMaxLinesWithoutSubtitle: 2,
+      titleTopGapWithSubtitle: 22,
+      subtitleMinSize: 28,
+      subtitleMaxSize: 36,
+      subtitleMaxLines: 1,
+      dividerWidth: 188,
+      dividerHeight: 3,
+      dividerGapTop: 16,
+      footerHeight: 122,
+      footerPaddingX: 54,
+      footerMinSize: 24,
+      footerMaxSize: 30,
+    },
+    recommendationTags: ["food", "savory", "tomato", "basil", "recipe"],
+  },
+  "honey-saffron": {
+    id: "honey-saffron",
+    label: "Honey Saffron",
+    description: "Golden honey tones with saffron warmth and deep brown contrast.",
+    palette: {
+      canvas: "#f3e7d0",
+      band: "#fff9ec",
+      footer: "#a5541d",
+      divider: "#e2a72d",
+      title: "#fff8f0",
+      subtitle: "#ffe1a3",
+      domain: "#fffaf2",
+      number: "#fff4ea",
+    },
+    supportingColors: ["#f0c14a", "#cd6b2d", "#7c4b1d"],
+    typography: {
+      title: {
+        fontFamily: FONT_STACKS.editorial,
+        fontWeight: 700,
+        letterSpacing: "-0.008em",
+        lineHeight: 1.18,
+      },
+      subtitle: {
+        fontFamily: FONT_STACKS.sans,
+        fontWeight: 700,
+        letterSpacing: "0.16em",
+        lineHeight: 1.08,
+        textTransform: "uppercase",
+      },
+      number: {
+        fontFamily: FONT_STACKS.display,
+        fontWeight: 700,
+        letterSpacing: "-0.02em",
+        lineHeight: 1,
+      },
+      domain: {
+        fontFamily: FONT_STACKS.sans,
+        fontWeight: 700,
+        letterSpacing: "0.08em",
+        lineHeight: 1.04,
+        textTransform: "uppercase",
+      },
+    },
+    layout: {
+      bandPaddingX: 92,
+      bandHeightWithSubtitle: 434,
+      bandHeightWithoutSubtitle: 368,
+      titleBlockHeightWithSubtitle: 198,
+      titleBlockHeightWithoutSubtitle: 272,
+      titleMinSizeWithSubtitle: 62,
+      titleMaxSizeWithSubtitle: 94,
+      titleMinSizeWithoutSubtitle: 70,
+      titleMaxSizeWithoutSubtitle: 108,
+      titleMaxLinesWithSubtitle: 2,
+      titleMaxLinesWithoutSubtitle: 2,
+      titleTopGapWithSubtitle: 22,
+      subtitleMinSize: 28,
+      subtitleMaxSize: 36,
+      subtitleMaxLines: 1,
+      dividerWidth: 188,
+      dividerHeight: 3,
+      dividerGapTop: 16,
+      footerHeight: 122,
+      footerPaddingX: 54,
+      footerMinSize: 24,
+      footerMaxSize: 30,
+    },
+    recommendationTags: ["food", "warm", "golden", "baking", "recipe"],
+  },
+  "blueberry-cream": {
+    id: "blueberry-cream",
+    label: "Blueberry Cream",
+    description: "Berry navy, cream, and pastry blush for dessert and breakfast pins.",
+    palette: {
+      canvas: "#e7e3ee",
+      band: "#faf8fd",
+      footer: "#4d4d8d",
+      divider: "#d88aa6",
+      title: "#fff9fd",
+      subtitle: "#f4d3df",
+      domain: "#fff9fc",
+      number: "#fff5fb",
+    },
+    supportingColors: ["#7b5fc9", "#efb3c8", "#f1d7a2"],
+    typography: {
+      title: {
+        fontFamily: FONT_STACKS.display,
+        fontWeight: 600,
+        letterSpacing: "-0.008em",
+        lineHeight: 1.18,
+      },
+      subtitle: {
+        fontFamily: FONT_STACKS.sans,
+        fontWeight: 700,
+        letterSpacing: "0.16em",
+        lineHeight: 1.08,
+        textTransform: "uppercase",
+      },
+      number: {
+        fontFamily: FONT_STACKS.display,
+        fontWeight: 700,
+        letterSpacing: "-0.03em",
+        lineHeight: 1,
+      },
+      domain: {
+        fontFamily: FONT_STACKS.sans,
+        fontWeight: 700,
+        letterSpacing: "0.08em",
+        lineHeight: 1.04,
+        textTransform: "uppercase",
+      },
+    },
+    layout: {
+      bandPaddingX: 92,
+      bandHeightWithSubtitle: 434,
+      bandHeightWithoutSubtitle: 368,
+      titleBlockHeightWithSubtitle: 198,
+      titleBlockHeightWithoutSubtitle: 272,
+      titleMinSizeWithSubtitle: 62,
+      titleMaxSizeWithSubtitle: 94,
+      titleMinSizeWithoutSubtitle: 70,
+      titleMaxSizeWithoutSubtitle: 108,
+      titleMaxLinesWithSubtitle: 2,
+      titleMaxLinesWithoutSubtitle: 2,
+      titleTopGapWithSubtitle: 22,
+      subtitleMinSize: 28,
+      subtitleMaxSize: 36,
+      subtitleMaxLines: 1,
+      dividerWidth: 188,
+      dividerHeight: 3,
+      dividerGapTop: 16,
+      footerHeight: 122,
+      footerPaddingX: 54,
+      footerMinSize: 24,
+      footerMaxSize: 30,
+    },
+    recommendationTags: ["food", "dessert", "blueberry", "sweet", "bakery"],
+  },
+  "espresso-cherry": {
+    id: "espresso-cherry",
+    label: "Espresso Cherry",
+    description: "Dark espresso base with cherry highlights for rich indulgent food covers.",
+    palette: {
+      canvas: "#ddd4cf",
+      band: "#2a1f22",
+      footer: "#1c1416",
+      divider: "#c73f4c",
+      title: "#fff3ef",
+      subtitle: "#f0b3aa",
+      domain: "#fff7f2",
+      number: "#fff1ea",
+    },
+    supportingColors: ["#7a3a2f", "#d9635b", "#8d6e63"],
+    typography: {
+      title: {
+        fontFamily: FONT_STACKS.editorial,
+        fontWeight: 700,
+        letterSpacing: "-0.008em",
+        lineHeight: 1.18,
+      },
+      subtitle: {
+        fontFamily: FONT_STACKS.sans,
+        fontWeight: 700,
+        letterSpacing: "0.16em",
+        lineHeight: 1.08,
+        textTransform: "uppercase",
+      },
+      number: {
+        fontFamily: FONT_STACKS.display,
+        fontWeight: 700,
+        letterSpacing: "-0.02em",
+        lineHeight: 1,
+      },
+      domain: {
+        fontFamily: FONT_STACKS.sans,
+        fontWeight: 700,
+        letterSpacing: "0.08em",
+        lineHeight: 1.04,
+        textTransform: "uppercase",
+      },
+    },
+    layout: {
+      bandPaddingX: 92,
+      bandHeightWithSubtitle: 434,
+      bandHeightWithoutSubtitle: 368,
+      titleBlockHeightWithSubtitle: 198,
+      titleBlockHeightWithoutSubtitle: 272,
+      titleMinSizeWithSubtitle: 62,
+      titleMaxSizeWithSubtitle: 94,
+      titleMinSizeWithoutSubtitle: 70,
+      titleMaxSizeWithoutSubtitle: 108,
+      titleMaxLinesWithSubtitle: 2,
+      titleMaxLinesWithoutSubtitle: 2,
+      titleTopGapWithSubtitle: 22,
+      subtitleMinSize: 28,
+      subtitleMaxSize: 36,
+      subtitleMaxLines: 1,
+      dividerWidth: 188,
+      dividerHeight: 3,
+      dividerGapTop: 16,
+      footerHeight: 122,
+      footerPaddingX: 54,
+      footerMinSize: 24,
+      footerMaxSize: 30,
+    },
+    recommendationTags: ["food", "dark", "espresso", "cherry", "dessert"],
+  },
+  "citrus-mint": {
+    id: "citrus-mint",
+    label: "Citrus Mint",
+    description: "Bright citrus and mint contrast for salads, drinks, and fresh recipes.",
+    palette: {
+      canvas: "#e9f2e9",
+      band: "#fbfff6",
+      footer: "#147a64",
+      divider: "#f2b632",
+      title: "#fffdf4",
+      subtitle: "#ffe7a7",
+      domain: "#fffdf6",
+      number: "#fffef4",
+    },
+    supportingColors: ["#8bcf6a", "#f58a2e", "#2b9eb3"],
+    typography: {
+      title: {
+        fontFamily: FONT_STACKS.display,
+        fontWeight: 600,
+        letterSpacing: "-0.008em",
+        lineHeight: 1.18,
+      },
+      subtitle: {
+        fontFamily: FONT_STACKS.sans,
+        fontWeight: 700,
+        letterSpacing: "0.16em",
+        lineHeight: 1.08,
+        textTransform: "uppercase",
+      },
+      number: {
+        fontFamily: FONT_STACKS.display,
+        fontWeight: 700,
+        letterSpacing: "-0.03em",
+        lineHeight: 1,
+      },
+      domain: {
+        fontFamily: FONT_STACKS.sans,
+        fontWeight: 700,
+        letterSpacing: "0.08em",
+        lineHeight: 1.04,
+        textTransform: "uppercase",
+      },
+    },
+    layout: {
+      bandPaddingX: 92,
+      bandHeightWithSubtitle: 434,
+      bandHeightWithoutSubtitle: 368,
+      titleBlockHeightWithSubtitle: 198,
+      titleBlockHeightWithoutSubtitle: 272,
+      titleMinSizeWithSubtitle: 62,
+      titleMaxSizeWithSubtitle: 94,
+      titleMinSizeWithoutSubtitle: 70,
+      titleMaxSizeWithoutSubtitle: 108,
+      titleMaxLinesWithSubtitle: 2,
+      titleMaxLinesWithoutSubtitle: 2,
+      titleTopGapWithSubtitle: 22,
+      subtitleMinSize: 28,
+      subtitleMaxSize: 36,
+      subtitleMaxLines: 1,
+      dividerWidth: 188,
+      dividerHeight: 3,
+      dividerGapTop: 16,
+      footerHeight: 122,
+      footerPaddingX: 54,
+      footerMinSize: 24,
+      footerMaxSize: 30,
+    },
+    recommendationTags: ["food", "fresh", "citrus", "mint", "salad"],
+  },
+  "plum-fig": {
+    id: "plum-fig",
+    label: "Plum Fig",
+    description: "Moody plum and fig tones with warm jam accents for richer recipe covers.",
+    palette: {
+      canvas: "#e7dbe4",
+      band: "#fff6fb",
+      footer: "#5d3154",
+      divider: "#d98556",
+      title: "#fff6fa",
+      subtitle: "#ffd7c0",
+      domain: "#fff7f5",
+      number: "#fff0f7",
+    },
+    supportingColors: ["#8b4f9e", "#c06b3f", "#8a8c3b"],
+    typography: {
+      title: {
+        fontFamily: FONT_STACKS.editorial,
+        fontWeight: 700,
+        letterSpacing: "-0.008em",
+        lineHeight: 1.18,
+      },
+      subtitle: {
+        fontFamily: FONT_STACKS.sans,
+        fontWeight: 700,
+        letterSpacing: "0.16em",
+        lineHeight: 1.08,
+        textTransform: "uppercase",
+      },
+      number: {
+        fontFamily: FONT_STACKS.display,
+        fontWeight: 700,
+        letterSpacing: "-0.02em",
+        lineHeight: 1,
+      },
+      domain: {
+        fontFamily: FONT_STACKS.sans,
+        fontWeight: 700,
+        letterSpacing: "0.08em",
+        lineHeight: 1.04,
+        textTransform: "uppercase",
+      },
+    },
+    layout: {
+      bandPaddingX: 92,
+      bandHeightWithSubtitle: 434,
+      bandHeightWithoutSubtitle: 368,
+      titleBlockHeightWithSubtitle: 198,
+      titleBlockHeightWithoutSubtitle: 272,
+      titleMinSizeWithSubtitle: 62,
+      titleMaxSizeWithSubtitle: 94,
+      titleMinSizeWithoutSubtitle: 70,
+      titleMaxSizeWithoutSubtitle: 108,
+      titleMaxLinesWithSubtitle: 2,
+      titleMaxLinesWithoutSubtitle: 2,
+      titleTopGapWithSubtitle: 22,
+      subtitleMinSize: 28,
+      subtitleMaxSize: 36,
+      subtitleMaxLines: 1,
+      dividerWidth: 188,
+      dividerHeight: 3,
+      dividerGapTop: 16,
+      footerHeight: 122,
+      footerPaddingX: 54,
+      footerMinSize: 24,
+      footerMaxSize: 30,
+    },
+    recommendationTags: ["food", "plum", "fig", "moody", "holiday"],
+  },
 };
 
 export const splitVerticalBoldPresetIds: TemplateVisualPresetId[] = [
@@ -1985,6 +2399,12 @@ export const splitVerticalBoldPresetIds: TemplateVisualPresetId[] = [
   "scarlet-cream",
   "teal-flare",
   "sunset-punch",
+  "tomato-basil",
+  "honey-saffron",
+  "blueberry-cream",
+  "espresso-cherry",
+  "citrus-mint",
+  "plum-fig",
 ];
 
 export const splitVerticalFemininePresetIds: TemplateVisualPresetId[] = [
@@ -2048,6 +2468,11 @@ export const TEMPLATE_VISUAL_PRESET_CATEGORY_META: Record<
     label: "Feminine Bold",
     description: "Pink, magenta, berry, and cherry palettes designed to pop on feed.",
   },
+  "food-bold": {
+    id: "food-bold",
+    label: "Food Bold",
+    description: "Recipe-friendly palettes with richer analog and complementary color energy.",
+  },
 };
 
 export const TEMPLATE_VISUAL_PRESET_CATEGORY_MAP: Record<
@@ -2083,6 +2508,12 @@ export const TEMPLATE_VISUAL_PRESET_CATEGORY_MAP: Record<
   "scarlet-cream": "graphic-pop",
   "teal-flare": "fresh-vivid",
   "sunset-punch": "graphic-pop",
+  "tomato-basil": "food-bold",
+  "honey-saffron": "food-bold",
+  "blueberry-cream": "food-bold",
+  "espresso-cherry": "food-bold",
+  "citrus-mint": "food-bold",
+  "plum-fig": "food-bold",
 };
 
 export function getTemplateVisualPresetCategory(presetId: TemplateVisualPresetId) {
@@ -2136,7 +2567,7 @@ export function getPresetIdsForTemplate(
     return source;
   }
 
-  const allowed = new Set(allowedCategories);
+  const allowed = new Set<TemplateVisualPresetCategoryId>([...allowedCategories, "food-bold"]);
   const filtered = source.filter((presetId) =>
     allowed.has(TEMPLATE_VISUAL_PRESET_CATEGORY_MAP[presetId]),
   );
@@ -2148,6 +2579,25 @@ export function getSplitVerticalVisualPreset(
   presetId?: TemplateRenderProps["visualPreset"] | TemplateRenderProps["colorPreset"],
 ) {
   return SPLIT_VERTICAL_VISUAL_PRESETS[presetId ?? "plum-sand"] ?? SPLIT_VERTICAL_VISUAL_PRESETS["plum-sand"];
+}
+
+export function getTemplateVisualPresetSwatches(presetId: TemplateVisualPresetId) {
+  const preset = getSplitVerticalVisualPreset(presetId);
+  const core = [
+    preset.palette.canvas,
+    preset.palette.band,
+    preset.palette.footer,
+    preset.palette.divider,
+    preset.palette.title,
+    preset.palette.subtitle,
+    preset.palette.domain,
+    preset.palette.number,
+  ];
+  const supporting = preset.supportingColors?.length
+    ? preset.supportingColors
+    : buildDerivedSupportingColors(preset.palette.title, preset.palette.divider, preset.palette.band);
+
+  return [...new Set([...core, ...supporting])];
 }
 
 export function recommendSplitVerticalVisualPreset(input: {
@@ -2389,6 +2839,57 @@ const THEME_FAMILY_RULES: WeightedPresetRule[] = [
       ["scarlet-cream", 2],
       ["emerald-sun", 2],
       ["midnight-gold", 1],
+    ],
+  },
+];
+
+const FOOD_FAMILY_RULES: WeightedPresetRule[] = [
+  {
+    terms: ["recipe", "recipes", "dish", "meal", "dinner", "lunch", "breakfast", "brunch"],
+    scores: [
+      ["tomato-basil", 1.6],
+      ["honey-saffron", 1.3],
+      ["espresso-cherry", 0.8],
+    ],
+  },
+  {
+    terms: ["soup", "crockpot", "slow cooker", "stew", "chili", "comfort food"],
+    scores: [
+      ["tomato-basil", 2.2],
+      ["honey-saffron", 1.8],
+      ["plum-fig", 1.1],
+    ],
+  },
+  {
+    terms: ["dessert", "cookie", "cookies", "cake", "cupcake", "brownie", "frosting", "sweet"],
+    scores: [
+      ["blueberry-cream", 2.1],
+      ["espresso-cherry", 2],
+      ["plum-fig", 1.5],
+    ],
+  },
+  {
+    terms: ["christmas", "holiday", "festive", "thanksgiving"],
+    scores: [
+      ["espresso-cherry", 1.9],
+      ["plum-fig", 1.8],
+      ["honey-saffron", 1.4],
+    ],
+  },
+  {
+    terms: ["salad", "fresh", "healthy", "veggie", "vegetable", "vegan", "spring"],
+    scores: [
+      ["citrus-mint", 2.2],
+      ["tomato-basil", 1.4],
+      ["emerald-sun", 1.2],
+    ],
+  },
+  {
+    terms: ["berry", "blueberry", "strawberry", "raspberry", "cream", "cheesecake"],
+    scores: [
+      ["blueberry-cream", 2.3],
+      ["espresso-cherry", 1.2],
+      ["rosewater-satin", 0.8],
     ],
   },
 ];
@@ -2667,6 +3168,8 @@ function recommendPresetFromContext(
   applyPresetRuleSet(scores, imageMetadataContext, ROOM_FAMILY_RULES, 0.8);
   applyPresetRuleSet(scores, headlineContext, THEME_FAMILY_RULES, 1.15);
   applyPresetRuleSet(scores, imageMetadataContext, THEME_FAMILY_RULES, 0.7);
+  applyPresetRuleSet(scores, headlineContext, FOOD_FAMILY_RULES, 1.5);
+  applyPresetRuleSet(scores, imageMetadataContext, FOOD_FAMILY_RULES, 0.95);
 
   if (pixelSignals) {
     if (pixelSignals.brightness < 0.42 || pixelSignals.contrast > 0.24) {
@@ -2860,8 +3363,123 @@ function fallbackPresetFromText(
     "scarlet-cream",
     "teal-flare",
     "sunset-punch",
+    "tomato-basil",
+    "honey-saffron",
+    "blueberry-cream",
+    "espresso-cherry",
+    "citrus-mint",
+    "plum-fig",
   ],
 ): TemplateVisualPresetId {
   const hash = [...text].reduce((sum, character) => sum + character.charCodeAt(0), 0);
   return presetOrder[hash % presetOrder.length];
+}
+
+function buildDerivedSupportingColors(...sourceColors: string[]) {
+  const base = pickMostChromaticColor(sourceColors);
+  const analogousLeft = shiftHue(base, -24, 1.08, 1.02);
+  const analogousRight = shiftHue(base, 22, 1.06, 1.02);
+  const complement = shiftHue(base, 176, 0.92, 0.98);
+  return [analogousLeft, analogousRight, complement];
+}
+
+function pickMostChromaticColor(colors: string[]) {
+  return colors.reduce((best, current) => {
+    const bestHsl = hexToHsl(best);
+    const currentHsl = hexToHsl(current);
+    return currentHsl.s > bestHsl.s ? current : best;
+  }, colors[0] ?? "#8a5a3b");
+}
+
+function shiftHue(hex: string, degrees: number, saturationScale = 1, lightnessScale = 1) {
+  const hsl = hexToHsl(hex);
+  return hslToHex({
+    h: (hsl.h + degrees + 360) % 360,
+    s: clamp(hsl.s * saturationScale, 0.22, 0.82),
+    l: clamp(hsl.l * lightnessScale, 0.24, 0.78),
+  });
+}
+
+function hexToHsl(hex: string) {
+  const normalized = hex.replace("#", "");
+  const expanded =
+    normalized.length === 3
+      ? normalized
+          .split("")
+          .map((chunk) => `${chunk}${chunk}`)
+          .join("")
+      : normalized;
+  const safe = expanded.padEnd(6, "0").slice(0, 6);
+  const r = parseInt(safe.slice(0, 2), 16) / 255;
+  const g = parseInt(safe.slice(2, 4), 16) / 255;
+  const b = parseInt(safe.slice(4, 6), 16) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  let h = 0;
+  let s = 0;
+  const l = (max + min) / 2;
+  const delta = max - min;
+
+  if (delta !== 0) {
+    s = delta / (1 - Math.abs(2 * l - 1));
+    switch (max) {
+      case r:
+        h = 60 * (((g - b) / delta) % 6);
+        break;
+      case g:
+        h = 60 * ((b - r) / delta + 2);
+        break;
+      default:
+        h = 60 * ((r - g) / delta + 4);
+        break;
+    }
+  }
+
+  return {
+    h: h < 0 ? h + 360 : h,
+    s,
+    l,
+  };
+}
+
+function hslToHex(input: { h: number; s: number; l: number }) {
+  const { h, s, l } = input;
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = l - c / 2;
+
+  let rPrime = 0;
+  let gPrime = 0;
+  let bPrime = 0;
+
+  if (h < 60) {
+    rPrime = c;
+    gPrime = x;
+  } else if (h < 120) {
+    rPrime = x;
+    gPrime = c;
+  } else if (h < 180) {
+    gPrime = c;
+    bPrime = x;
+  } else if (h < 240) {
+    gPrime = x;
+    bPrime = c;
+  } else if (h < 300) {
+    rPrime = x;
+    bPrime = c;
+  } else {
+    rPrime = c;
+    bPrime = x;
+  }
+
+  const toHex = (value: number) =>
+    Math.round((value + m) * 255)
+      .toString(16)
+      .padStart(2, "0");
+
+  return `#${toHex(rPrime)}${toHex(gPrime)}${toHex(bPrime)}`;
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
 }

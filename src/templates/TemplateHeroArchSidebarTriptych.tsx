@@ -341,7 +341,8 @@ function resolveTemplateColors(
     | "dark-drama"
     | "graphic-pop"
     | "fresh-vivid"
-    | "feminine-bold",
+    | "feminine-bold"
+    | "food-bold",
   palette: {
     canvas: string;
     band: string;
@@ -354,13 +355,13 @@ function resolveTemplateColors(
   },
 ) {
   const canvasBackground =
-    category === "graphic-pop" || category === "fresh-vivid"
+    category === "graphic-pop" || category === "fresh-vivid" || category === "food-bold"
       ? tintTowardsWhite(mixHex(palette.canvas, palette.divider, 0.2), 0.18)
       : tintTowardsWhite(mixHex("#f6efe7", palette.canvas, 0.12), 0.08);
   const sidebarBackground =
     category === "dark-drama"
       ? tintTowardsWhite(mixHex(palette.footer, palette.canvas, 0.16), 0.08)
-      : category === "graphic-pop" || category === "fresh-vivid"
+      : category === "graphic-pop" || category === "fresh-vivid" || category === "food-bold"
         ? tintTowardsWhite(mixHex(palette.band, palette.canvas, 0.4), 0.28)
         : tintTowardsWhite(mixHex(palette.band, palette.canvas, 0.24), 0.42);
   const heroFrameColor =
@@ -398,12 +399,12 @@ function resolveTemplateColors(
     sidebarBackground,
     sidebarIsDark
       ? tintTowardsWhite(
-          category === "graphic-pop" || category === "fresh-vivid"
+          category === "graphic-pop" || category === "fresh-vivid" || category === "food-bold"
             ? mixHex(palette.divider, palette.domain, 0.36)
             : mixHex(palette.number, palette.domain, 0.34),
           0.74,
         )
-      : category === "graphic-pop" || category === "fresh-vivid"
+      : category === "graphic-pop" || category === "fresh-vivid" || category === "food-bold"
         ? deepenHex(mixHex(palette.number, palette.domain, 0.42), 0.12)
         : category === "feminine-bold"
           ? deepenHex(mixHex(palette.domain, palette.subtitle, 0.4), 0.1)
@@ -420,14 +421,14 @@ function resolveTemplateColors(
     sidebarBackground,
     sidebarIsDark
       ? tintTowardsWhite(
-          category === "graphic-pop" || category === "fresh-vivid"
+          category === "graphic-pop" || category === "fresh-vivid" || category === "food-bold"
             ? mixHex(palette.title, palette.divider, 0.28)
             : mixHex(palette.number, palette.title, 0.3),
           0.84,
         )
       : category === "feminine-bold"
         ? deepenHex(mixHex(palette.number, palette.title, 0.4), 0.08)
-        : category === "graphic-pop" || category === "fresh-vivid"
+        : category === "graphic-pop" || category === "fresh-vivid" || category === "food-bold"
           ? deepenHex(mixHex(palette.title, palette.divider, 0.34), 0.06)
           : deepenHex(mixHex(palette.number, palette.footer, 0.26), 0.12),
     sidebarIsDark
@@ -439,26 +440,26 @@ function resolveTemplateColors(
     5.2,
   );
   const domainRuleColor = ensureContrastColor(
-    category === "graphic-pop" || category === "fresh-vivid"
+    category === "graphic-pop" || category === "fresh-vivid" || category === "food-bold"
       ? tintTowardsWhite(mixHex(palette.domain, palette.divider, 0.52), 0.74)
       : category === "feminine-bold"
         ? tintTowardsWhite(mixHex(palette.subtitle, palette.domain, 0.48), 0.8)
         : tintTowardsWhite(mixHex(palette.domain, sidebarBackground, 0.24), 0.9),
-    category === "graphic-pop" || category === "fresh-vivid"
+    category === "graphic-pop" || category === "fresh-vivid" || category === "food-bold"
       ? deepenHex(mixHex(palette.divider, palette.domain, 0.3), 0.08)
       : mixHex(numberBadgeBorder, palette.divider, 0.28),
     [deepenHex(palette.domain, 0.14), "#b69b83"],
     1.8,
   );
   const domainPillBackground =
-    category === "graphic-pop" || category === "fresh-vivid"
+    category === "graphic-pop" || category === "fresh-vivid" || category === "food-bold"
       ? tintTowardsWhite(mixHex(palette.domain, palette.divider, 0.52), 0.74)
       : category === "feminine-bold"
         ? tintTowardsWhite(mixHex(palette.subtitle, palette.domain, 0.48), 0.8)
         : tintTowardsWhite(mixHex(palette.domain, sidebarBackground, 0.24), 0.9);
   const domainTextColor = ensureContrastColor(
     domainPillBackground,
-    category === "graphic-pop" || category === "fresh-vivid"
+    category === "graphic-pop" || category === "fresh-vivid" || category === "food-bold"
       ? deepenHex(mixHex(palette.footer, palette.domain, 0.24), 0.2)
       : deepenHex(mixHex(palette.domain, palette.footer, 0.24), 0.2),
     [deepenHex(palette.title, 0.2), "#372c25"],

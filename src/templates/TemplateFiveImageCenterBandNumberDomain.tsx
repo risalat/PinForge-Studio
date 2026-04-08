@@ -396,7 +396,8 @@ function resolveTemplateColors(
     | "dark-drama"
     | "graphic-pop"
     | "fresh-vivid"
-    | "feminine-bold",
+    | "feminine-bold"
+    | "food-bold",
   palette: {
     canvas: string;
     band: string;
@@ -412,11 +413,11 @@ function resolveTemplateColors(
   const bandBackground =
     category === "dark-drama"
       ? tintTowardsWhite(mixHex(palette.canvas, palette.divider, 0.28), 0.72)
-      : category === "graphic-pop" || category === "fresh-vivid" || category === "feminine-bold"
+      : category === "graphic-pop" || category === "fresh-vivid" || category === "feminine-bold" || category === "food-bold"
         ? tintTowardsWhite(mixHex(palette.canvas, palette.divider, 0.38), 0.44)
         : tintTowardsWhite(mixHex(palette.canvas, palette.footer, 0.22), 0.3);
   const bandRailColor =
-    category === "graphic-pop" || category === "fresh-vivid"
+    category === "graphic-pop" || category === "fresh-vivid" || category === "food-bold"
       ? deepenHex(mixHex(palette.divider, palette.title, 0.24), 0.1)
       : deepenHex(mixHex(palette.divider, palette.footer, 0.2), 0.1);
   const numberCardBackground = tintTowardsWhite(mixHex(bandBackground, palette.canvas, 0.12), 0.92);
@@ -450,7 +451,7 @@ function resolveTemplateColors(
   );
   const titleLineThreeColor = ensureContrastColor(
     bandBackground,
-    category === "graphic-pop" || category === "fresh-vivid"
+    category === "graphic-pop" || category === "fresh-vivid" || category === "food-bold"
       ? deepenHex(mixHex(palette.number, palette.divider, 0.52), 0.12)
       : category === "feminine-bold"
         ? deepenHex(mixHex(palette.number, palette.subtitle, 0.5), 0.14)
@@ -459,7 +460,7 @@ function resolveTemplateColors(
     4.8,
   );
   const domainPillBackground =
-    category === "graphic-pop" || category === "fresh-vivid"
+    category === "graphic-pop" || category === "fresh-vivid" || category === "food-bold"
       ? tintTowardsWhite(mixHex(palette.domain, palette.divider, 0.52), 0.74)
       : category === "feminine-bold"
         ? tintTowardsWhite(mixHex(palette.subtitle, palette.domain, 0.48), 0.8)
@@ -468,7 +469,7 @@ function resolveTemplateColors(
           : tintTowardsWhite(mixHex(palette.domain, bandBackground, 0.26), 0.9);
   const domainPillBorder = ensureContrastColor(
     domainPillBackground,
-    category === "graphic-pop" || category === "fresh-vivid"
+    category === "graphic-pop" || category === "fresh-vivid" || category === "food-bold"
       ? deepenHex(mixHex(palette.divider, palette.domain, 0.34), 0.08)
       : category === "feminine-bold"
         ? deepenHex(mixHex(palette.subtitle, palette.title, 0.34), 0.08)
@@ -478,7 +479,7 @@ function resolveTemplateColors(
   );
   const domainTextColor = ensureContrastColor(
     domainPillBackground,
-    category === "graphic-pop" || category === "fresh-vivid"
+    category === "graphic-pop" || category === "fresh-vivid" || category === "food-bold"
       ? deepenHex(mixHex(palette.footer, palette.domain, 0.24), 0.2)
       : category === "feminine-bold"
         ? deepenHex(mixHex(palette.title, palette.footer, 0.4), 0.16)

@@ -20,6 +20,7 @@ import {
   resolveRuntimeTextColor,
 } from "@/lib/runtime-templates/tokens";
 import {
+  getTemplateVisualPresetSwatches,
   getTemplateVisualPresetCategoryMeta,
 } from "@/lib/templates/visualPresets";
 import {
@@ -1490,19 +1491,7 @@ function getInspectorQuickColorTargets(
 }
 
 function getPresetPaletteSwatches(presetId: TemplateVisualPresetId) {
-  const palette = resolveRuntimeTemplateTokens(presetId).preset.palette;
-  const orderedColors = [
-    palette.canvas,
-    palette.band,
-    palette.footer,
-    palette.divider,
-    palette.title,
-    palette.subtitle,
-    palette.domain,
-    palette.number,
-  ];
-
-  return orderedColors.filter((value, index, values) => values.indexOf(value) === index);
+  return getTemplateVisualPresetSwatches(presetId);
 }
 
 function PresetPaletteTray(props: {

@@ -372,7 +372,8 @@ function resolveTemplateColors(
     | "dark-drama"
     | "graphic-pop"
     | "fresh-vivid"
-    | "feminine-bold",
+    | "feminine-bold"
+    | "food-bold",
   palette: {
     canvas: string;
     band: string;
@@ -388,7 +389,7 @@ function resolveTemplateColors(
   const badgeBackground =
     category === "dark-drama"
       ? tintTowardsWhite(mixHex(palette.canvas, palette.divider, 0.18), 0.08)
-      : category === "graphic-pop" || category === "fresh-vivid" || category === "feminine-bold"
+      : category === "graphic-pop" || category === "fresh-vivid" || category === "feminine-bold" || category === "food-bold"
         ? tintTowardsWhite(mixHex(palette.canvas, palette.divider, 0.36), 0.18)
         : tintTowardsWhite(mixHex(palette.canvas, palette.footer, 0.22), 0.16);
   const badgeBorderColor = ensureContrastColor(
@@ -412,7 +413,7 @@ function resolveTemplateColors(
           "#9a5f3f",
           "#8b5d3d",
         ]
-      : category === "graphic-pop" || category === "fresh-vivid"
+      : category === "graphic-pop" || category === "fresh-vivid" || category === "food-bold"
         ? [
             deepenHex(mixHex(palette.title, palette.divider, 0.34), 0.14),
             deepenHex(mixHex(palette.title, palette.footer, 0.22), 0.12),
@@ -479,7 +480,7 @@ function resolveTemplateColors(
     bandBackground,
     category === "dark-drama"
       ? tintTowardsWhite(mixHex(palette.footer, palette.canvas, 0.24), 0.18)
-      : category === "graphic-pop" || category === "fresh-vivid" || category === "feminine-bold"
+      : category === "graphic-pop" || category === "fresh-vivid" || category === "feminine-bold" || category === "food-bold"
         ? tintTowardsWhite(mixHex(palette.footer, palette.divider, 0.36), 0.12)
         : tintTowardsWhite(mixHex(palette.footer, palette.canvas, 0.28), 0.16),
     [tintTowardsWhite(mixHex(palette.band, palette.footer, 0.4), 0.14), tintTowardsWhite(palette.footer, 0.18)],

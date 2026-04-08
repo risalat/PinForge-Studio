@@ -30,6 +30,12 @@ export const templateVisualPresets = [
   "scarlet-cream",
   "teal-flare",
   "sunset-punch",
+  "tomato-basil",
+  "honey-saffron",
+  "blueberry-cream",
+  "espresso-cherry",
+  "citrus-mint",
+  "plum-fig",
 ] as const;
 
 export const templateVisualPresetCategories = [
@@ -40,6 +46,7 @@ export const templateVisualPresetCategories = [
   "graphic-pop",
   "fresh-vivid",
   "feminine-bold",
+  "food-bold",
 ] as const;
 
 export type TemplateVisualPresetId = (typeof templateVisualPresets)[number];
@@ -70,6 +77,7 @@ export type TemplateVisualPreset = {
     domain: string;
     number: string;
   };
+  supportingColors?: string[];
   typography: {
     title: TemplateTextRoleStyle;
     subtitle: TemplateTextRoleStyle;

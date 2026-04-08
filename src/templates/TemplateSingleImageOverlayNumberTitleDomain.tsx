@@ -184,7 +184,8 @@ function resolveOverlayColors(
     | "dark-drama"
     | "graphic-pop"
     | "fresh-vivid"
-    | "feminine-bold",
+    | "feminine-bold"
+    | "food-bold",
   palette: {
     canvas: string;
     band: string;
@@ -279,7 +280,7 @@ function resolveOverlayColors(
       [titleColor, numberColor, domainColor],
       1.6,
     ),
-    category === "graphic-pop" || category === "feminine-bold" ? 0.34 : 0.2,
+    category === "graphic-pop" || category === "feminine-bold" || category === "food-bold" ? 0.34 : 0.2,
   );
   const overlayShadowColor = withAlpha(
     deepenHex(mixHex(accentBase, palette.footer, 0.4), 0.38),
@@ -339,7 +340,8 @@ function presetCanvas(
     | "dark-drama"
     | "graphic-pop"
     | "fresh-vivid"
-    | "feminine-bold",
+    | "feminine-bold"
+    | "food-bold",
   canvas: string,
 ) {
   return category === "dark-drama" ? deepenHex(canvas, 0.2) : tintTowardsWhite(canvas, 0.08);
