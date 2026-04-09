@@ -628,7 +628,6 @@ export function JobPublishManager({
       return buildCapacityAwareSchedulePreview({
         pinIds: selectedPins.map((pin) => pin.id),
         firstPublishAt: firstPublishAtDate,
-        minimumFirstPublishAt: scheduleContext.spacingRecommendedFirstPublishAt,
         intervalMinutes: intervalDays * 24 * 60,
         jitterMinutes: Math.round(jitterDays * 24 * 60),
         targetPerDay: scheduleContext.dailyPublishTarget,
@@ -643,7 +642,6 @@ export function JobPublishManager({
     intervalDays,
     jitterDays,
     scheduleContext.dailyPublishTarget,
-    scheduleContext.spacingRecommendedFirstPublishAt,
     scheduleContext.scheduledCountsByDate,
     scheduleContext.occupiedMinutesByDate,
     selectedPins,
@@ -3279,14 +3277,14 @@ function formatDateLabel(value: string) {
                 Interval days
                 <input
                   type="number"
-                  min={15}
-                  step="1"
-                  value={intervalDays}
-                  onChange={(event) =>
-                    setIntervalDays(Math.max(15, Number(event.target.value) || 15))
-                  }
-                  className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-2"
-                />
+                    min={1}
+                    step="1"
+                    value={intervalDays}
+                    onChange={(event) =>
+                    setIntervalDays(Math.max(1, Number(event.target.value) || 1))
+                    }
+                    className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-2"
+                  />
               </label>
               <label className="block text-sm font-semibold text-[var(--dashboard-subtle)]">
                 Jitter days
@@ -3351,15 +3349,15 @@ function formatDateLabel(value: string) {
                     </p>
                   ) : null}
                   <p>
-                    <strong>Spacing-only earliest:</strong>{" "}
+                    <strong>15-day guideline:</strong>{" "}
                     {scheduleContext.spacingRecommendedFirstPublishAt
                       ? formatDateLabel(scheduleContext.spacingRecommendedFirstPublishAt)
-                      : "Ready for a first schedule"}
+                      : "No spacing recommendation yet"}
                   </p>
                 </div>
                 {isScheduleInsideSpacingGap ? (
                   <p className="mt-3 text-[var(--dashboard-warning-ink)]">
-                    Selected time is inside the 15-day minimum spacing gap.
+                    Selected time is earlier than the 15-day spacing guideline. Scheduling will still use your selected time.
                   </p>
                 ) : null}
                 {selectedScheduleDay ? (

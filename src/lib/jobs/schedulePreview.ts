@@ -5,7 +5,7 @@ import {
   DEFAULT_PUBLISH_WINDOW_START_MINUTE,
   getTimeZoneMinuteOfDay,
   mergeTimeZoneDateKeyWithMinuteOffset,
-  MIN_URL_SPACING_MINUTES,
+  MIN_SCHEDULE_INTERVAL_MINUTES,
   toTimeZoneDateKey,
 } from "@/lib/jobs/publishTiming";
 
@@ -28,7 +28,7 @@ export function buildSchedulePreview(input: {
 }) {
   const firstPublishAt = toDate(input.firstPublishAt);
   const effectiveIntervalMinutes = Math.max(
-    MIN_URL_SPACING_MINUTES,
+    MIN_SCHEDULE_INTERVAL_MINUTES,
     Math.round(input.intervalMinutes),
   );
   const effectiveJitterMinutes = Math.max(0, Math.round(input.jitterMinutes));
@@ -67,7 +67,7 @@ export function buildCapacityAwareSchedulePreview(input: {
     ? toDate(input.minimumFirstPublishAt)
     : null;
   const effectiveIntervalMinutes = Math.max(
-    MIN_URL_SPACING_MINUTES,
+    MIN_SCHEDULE_INTERVAL_MINUTES,
     Math.round(input.intervalMinutes),
   );
   const effectiveJitterMinutes = Math.max(0, Math.round(input.jitterMinutes));
