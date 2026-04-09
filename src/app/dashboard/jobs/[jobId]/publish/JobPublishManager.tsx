@@ -3460,7 +3460,7 @@ function formatDateLabel(value: string) {
                 ))}
               </div>
               <div className="grid grid-cols-[minmax(0,1fr)_240px_180px_120px] bg-[var(--dashboard-panel-alt)] px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
-                <span>Pin</span>
+                <span>Title</span>
                 <span>Board</span>
                 <span>Planned time</span>
                 <span>Jitter</span>
@@ -3472,12 +3472,22 @@ function formatDateLabel(value: string) {
               ) : (
                 schedulePreviewRows.map((item) => {
                   const pin = currentPins.find((candidate) => candidate.id === item.pinId);
+                  const currentTitle = copyByPinId.get(item.pinId)?.title?.trim() || pin?.title?.trim() || "";
+                  const titleLabel = currentTitle || "No publishing title selected";
+                  const templateLabel = pin?.templateId ?? item.pinId;
                   return (
                     <div
                       key={item.pinId}
                       className="grid grid-cols-[minmax(0,1fr)_240px_180px_120px] items-center gap-4 border-t border-[var(--dashboard-line)] px-4 py-3 text-sm text-[var(--dashboard-subtle)]"
                     >
-                      <span className="truncate">{pin?.templateId ?? item.pinId}</span>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-[var(--dashboard-text)]">
+                          {titleLabel}
+                        </p>
+                        <p className="mt-1 truncate text-xs text-[var(--dashboard-muted)]">
+                          {templateLabel}
+                        </p>
+                      </div>
                       {selectedBoards.length > 0 ? (
                         <select
                           value={item.assignedBoardId}
