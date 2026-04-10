@@ -20,7 +20,7 @@ const TEMPLATE_TYPOGRAPHY = {
     fontFamily: "var(--font-alata), var(--font-manrope), sans-serif",
     fontWeight: 400,
     letterSpacing: "0.03em",
-    lineHeight: 0.84,
+    lineHeight: 0.94,
     textTransform: "uppercase" as const,
   },
   number: {
@@ -71,10 +71,10 @@ export function TemplateTwoImageSlantBandNumberDomain({
   const scriptTop = 44;
   const scriptLeft = 426;
   const scriptWidth = 656;
-  const blockOneTop = 138;
+  const blockOneTop = 144;
   const blockOneLeft = 92;
   const blockOneWidth = 934;
-  const blockTwoTop = 292;
+  const blockTwoTop = 322;
   const blockTwoWidth = 742;
   const blockTwoLeft = Math.round((bandWidth - blockTwoWidth) / 2);
   const domainPillWidth = 456;
