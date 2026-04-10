@@ -311,3 +311,16 @@ export const sampleTemplateDataBookmarkRibbonCollageTitle: TemplateRenderProps =
   itemNumber: 18,
   visualPreset: "rosewater-satin",
 };
+
+export const sampleTemplateDataHeroBowlStack: TemplateRenderProps = {
+  title: "Crockpot Soup Recipes",
+  images: [
+    "/sample-images/8.jpg",
+    "/sample-images/1.jpg",
+    "/sample-images/2.jpg",
+    "/sample-images/7.jpg",
+  ],
+  domain: "homebites.com",
+  itemNumber: 27,
+  visualPreset: "tomato-basil",
+};

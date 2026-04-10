@@ -20,7 +20,7 @@ const TEMPLATE_TYPOGRAPHY = {
     fontFamily: "var(--font-alata), var(--font-manrope), sans-serif",
     fontWeight: 400,
     letterSpacing: "0.03em",
-    lineHeight: 0.94,
+    lineHeight: 1,
     textTransform: "uppercase" as const,
   },
   number: {
@@ -68,14 +68,14 @@ export function TemplateTwoImageSlantBandNumberDomain({
   const badgeSize = 268;
   const badgeLeft = 26;
   const badgeTop = 642;
-  const scriptTop = 44;
-  const scriptLeft = 426;
-  const scriptWidth = 656;
-  const blockOneTop = 144;
-  const blockOneLeft = 92;
-  const blockOneWidth = 934;
-  const blockTwoTop = 322;
-  const blockTwoWidth = 742;
+  const scriptTop = 54;
+  const scriptLeft = 382;
+  const scriptWidth = 604;
+  const blockOneTop = 166;
+  const blockOneLeft = 176;
+  const blockOneWidth = 770;
+  const blockTwoTop = 276;
+  const blockTwoWidth = 760;
   const blockTwoLeft = Math.round((bandWidth - blockTwoWidth) / 2);
   const domainPillWidth = 456;
   const domainPillHeight = 72;
@@ -124,8 +124,8 @@ export function TemplateTwoImageSlantBandNumberDomain({
           <AutoFitText
             as="p"
             text={titleLines.script}
-            minFontSize={82}
-            maxFontSize={174}
+            minFontSize={68}
+            maxFontSize={132}
             maxLines={1}
             lineHeight={TEMPLATE_TYPOGRAPHY.script.lineHeight}
             className="w-full text-left"
@@ -141,8 +141,8 @@ export function TemplateTwoImageSlantBandNumberDomain({
           <AutoFitText
             as="p"
             text={titleLines.blockOne}
-            minFontSize={72}
-            maxFontSize={146}
+            minFontSize={58}
+            maxFontSize={112}
             maxLines={1}
             lineHeight={TEMPLATE_TYPOGRAPHY.title.lineHeight}
             className="w-full text-center"
@@ -158,8 +158,8 @@ export function TemplateTwoImageSlantBandNumberDomain({
           <AutoFitText
             as="p"
             text={titleLines.blockTwo}
-            minFontSize={54}
-            maxFontSize={118}
+            minFontSize={48}
+            maxFontSize={92}
             maxLines={1}
             lineHeight={TEMPLATE_TYPOGRAPHY.title.lineHeight}
             className="w-full text-center"

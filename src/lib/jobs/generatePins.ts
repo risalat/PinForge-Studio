@@ -4361,6 +4361,8 @@ function getArtworkTitleRule(templateId: string) {
       return { maxWords: 4, maxChars: 30, maxLines: 3, singleLine: false };
     case "bookmark-ribbon-collage-title":
       return { maxWords: 6, maxChars: 34, maxLines: 3, singleLine: false };
+    case "hero-bowl-stack":
+      return { maxWords: 5, maxChars: 34, maxLines: 3, singleLine: false };
     case "hero-arch-sidebar-triptych":
       return { maxWords: 5, maxChars: 30, maxLines: 5, singleLine: false };
     case "three-image-center-poster-number-footer":
@@ -4414,6 +4416,10 @@ function getArtworkGoal(templateId: string, templateSupportsSubtitle: boolean) {
 
   if (templateId === "bookmark-ribbon-collage-title") {
     return "Create a number-aware Pinterest artwork headline for an editorial collage cover with a tall bookmark number ribbon and a bold lower title card. Use 4 to 6 strong words total, do not include the count in the headline itself, and make it feel premium, decor-editorial, and instantly scannable. Favor a softer opener followed by two punchier title phrases.";
+  }
+
+  if (templateId === "hero-bowl-stack") {
+    return "Create a number-aware Pinterest artwork headline for a food roundup cover with a dominant hero dish, three supporting food thumbnails, and a bold overlapping title block. Use 3 to 5 strong words total, do not include the count in the headline itself, and make it feel appetite-driven and instantly scannable. Favor concrete food roundup closers like Recipes, Dinners, Soups, Desserts, Meals, or Salads.";
   }
 
   if (templateId === "five-image-center-band-number-domain") {
@@ -4519,6 +4525,11 @@ function enforceArtworkTitleRule(templateId: string, title: string) {
 
   if (templateId === "split-vertical-title-number") {
     headline = ensureHeroNumberArtworkTitle(headline);
+  }
+
+  if (templateId === "hero-bowl-stack") {
+    headline = ensureHeroNumberArtworkTitle(headline);
+    headline = ensureThreeToFiveWordFoodRoundupTitle(headline);
   }
 
   if (templateId === "two-image-slant-band-number-domain") {
@@ -4653,6 +4664,54 @@ function ensureFourToSixWordCenterBandTitle(title: string) {
   }
 
   return toTitleCase([words[0] ?? "Lovely", "Bedroom", "Decor", "Ideas"].join(" "));
+}
+
+function ensureThreeToFiveWordFoodRoundupTitle(title: string) {
+  const safeTitle = normalizeRenderText(title);
+  if (!safeTitle) {
+    return "Crockpot Soup Recipes";
+  }
+
+  const closers = new Set([
+    "recipes",
+    "meals",
+    "dinners",
+    "desserts",
+    "soups",
+    "salads",
+    "breakfasts",
+    "appetizers",
+    "cookies",
+    "ideas",
+    "dishes",
+  ]);
+  const words = safeTitle.split(/\s+/).filter(Boolean).slice(0, 5);
+
+  if (words.length >= 4) {
+    const bounded = words.slice(0, 5);
+    const lastWord = bounded[bounded.length - 1]?.toLowerCase().replace(/[^a-z0-9]/g, "") ?? "";
+    if (closers.has(lastWord)) {
+      return toTitleCase(bounded.join(" "));
+    }
+
+    bounded[bounded.length - 1] = "Recipes";
+    return toTitleCase(bounded.join(" "));
+  }
+
+  if (words.length === 3) {
+    const lastWord = words[2]?.toLowerCase().replace(/[^a-z0-9]/g, "") ?? "";
+    if (closers.has(lastWord)) {
+      return toTitleCase(words.join(" "));
+    }
+
+    return toTitleCase([words[0], words[1], "Recipes"].join(" "));
+  }
+
+  if (words.length === 2) {
+    return toTitleCase([words[0], words[1], "Recipes"].join(" "));
+  }
+
+  return toTitleCase([words[0] ?? "Crockpot", "Soup", "Recipes"].join(" "));
 }
 
 function ensureFourToSixWordSlantBandTitle(title: string) {

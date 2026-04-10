@@ -24,6 +24,7 @@ import { TemplateHeroTwoSplitText } from "@/templates/TemplateHeroTwoSplitText";
 import { TemplateColorPopLadderNumberCard } from "@/templates/TemplateColorPopLadderNumberCard";
 import { TemplateHeroScrapbookTapeTag } from "@/templates/TemplateHeroScrapbookTapeTag";
 import { TemplateBookmarkRibbonCollageTitle } from "@/templates/TemplateBookmarkRibbonCollageTitle";
+import { TemplateHeroBowlStack } from "@/templates/TemplateHeroBowlStack";
 import type { JSX } from "react";
 import {
   sampleTemplateDataBookmarkRibbonCollageTitle,
@@ -41,6 +42,7 @@ import {
   sampleTemplateDataHeroTwoSplitText,
   sampleTemplateDataColorPopLadderNumberCard,
   sampleTemplateDataHeroScrapbookTapeTag,
+  sampleTemplateDataHeroBowlStack,
   sampleTemplateDataHeroTextTripleSplitFooter,
   sampleTemplateDataMasonryGridNumberTitleFooter,
   sampleTemplateDataNineImageGridOverlayNumberFooter,
@@ -446,6 +448,21 @@ export const TEMPLATE_CONFIGS: Record<string, TemplateConfig> = {
       footer: true,
     },
   },
+  "hero-bowl-stack": {
+    id: "hero-bowl-stack",
+    name: "Hero Bowl Stack",
+    componentKey: "TemplateHeroBowlStack",
+    previewPath: "/preview/hero-bowl-stack",
+    locked: true,
+    canvas: { width: 1080, height: 1920 },
+    imageSlotCount: 4,
+    textFields: ["title", "itemNumber", "domain", "visualPreset"],
+    features: {
+      overlay: true,
+      numberTreatment: "hero",
+      footer: true,
+    },
+  },
 };
 
 const TEMPLATE_COMPONENTS: Record<
@@ -478,6 +495,7 @@ const TEMPLATE_COMPONENTS: Record<
   "color-pop-ladder-number-card": TemplateColorPopLadderNumberCard,
   "hero-scrapbook-tape-tag": TemplateHeroScrapbookTapeTag,
   "bookmark-ribbon-collage-title": TemplateBookmarkRibbonCollageTitle,
+  "hero-bowl-stack": TemplateHeroBowlStack,
 };
 
 export function getTemplateConfig(templateId: string) {
@@ -597,6 +615,10 @@ export function getSampleTemplateProps(templateId: string) {
 
   if (templateId === "bookmark-ribbon-collage-title") {
     return sampleTemplateDataBookmarkRibbonCollageTitle;
+  }
+
+  if (templateId === "hero-bowl-stack") {
+    return sampleTemplateDataHeroBowlStack;
   }
 
   return sampleTemplateDataWithSubtitle;

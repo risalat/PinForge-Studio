@@ -2555,6 +2555,7 @@ const TEMPLATE_PRESET_CATEGORY_ALLOWLIST: Record<string, TemplateVisualPresetCat
   "nine-image-grid-overlay-number-footer": ["editorial-soft", "pastel-soft", "earthy-warm", "dark-drama", "graphic-pop", "feminine-bold"],
   "hero-two-split-text": ["editorial-soft", "pastel-soft", "earthy-warm", "dark-drama", "graphic-pop", "feminine-bold"],
   "color-pop-ladder-number-card": ["earthy-warm", "dark-drama", "graphic-pop", "fresh-vivid", "feminine-bold"],
+  "hero-bowl-stack": ["earthy-warm", "dark-drama", "graphic-pop", "fresh-vivid"],
 };
 
 export function getPresetIdsForTemplate(
