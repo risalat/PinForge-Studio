@@ -324,3 +324,16 @@ export const sampleTemplateDataHeroBowlStack: TemplateRenderProps = {
   itemNumber: 27,
   visualPreset: "tomato-basil",
 };
+
+export const sampleTemplateDataMenuBoardSplit: TemplateRenderProps = {
+  subtitle: "Recipe Roundup",
+  title: "Chicken Dinner Recipes",
+  images: [
+    "/sample-images/8.jpg",
+    "/sample-images/1.jpg",
+    "/sample-images/7.jpg",
+  ],
+  domain: "homebites.com",
+  itemNumber: 21,
+  visualPreset: "espresso-cherry",
+};

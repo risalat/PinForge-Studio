@@ -366,6 +366,8 @@ function getBuiltInArtworkRule(templateId: string) {
       return { maxWords: 6, maxChars: 34, maxLines: 3 };
     case "hero-bowl-stack":
       return { maxWords: 5, maxChars: 34, maxLines: 3 };
+    case "menu-board-split":
+      return { maxWords: 5, maxChars: 34, maxLines: 3 };
     case "hero-arch-sidebar-triptych":
       return { maxWords: 5, maxChars: 30, maxLines: 5 };
     case "three-image-center-poster-number-footer":

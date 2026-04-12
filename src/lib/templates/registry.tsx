@@ -25,6 +25,7 @@ import { TemplateColorPopLadderNumberCard } from "@/templates/TemplateColorPopLa
 import { TemplateHeroScrapbookTapeTag } from "@/templates/TemplateHeroScrapbookTapeTag";
 import { TemplateBookmarkRibbonCollageTitle } from "@/templates/TemplateBookmarkRibbonCollageTitle";
 import { TemplateHeroBowlStack } from "@/templates/TemplateHeroBowlStack";
+import { TemplateMenuBoardSplit } from "@/templates/TemplateMenuBoardSplit";
 import type { JSX } from "react";
 import {
   sampleTemplateDataBookmarkRibbonCollageTitle,
@@ -43,6 +44,7 @@ import {
   sampleTemplateDataColorPopLadderNumberCard,
   sampleTemplateDataHeroScrapbookTapeTag,
   sampleTemplateDataHeroBowlStack,
+  sampleTemplateDataMenuBoardSplit,
   sampleTemplateDataHeroTextTripleSplitFooter,
   sampleTemplateDataMasonryGridNumberTitleFooter,
   sampleTemplateDataNineImageGridOverlayNumberFooter,
@@ -463,6 +465,21 @@ export const TEMPLATE_CONFIGS: Record<string, TemplateConfig> = {
       footer: true,
     },
   },
+  "menu-board-split": {
+    id: "menu-board-split",
+    name: "Menu Board Split",
+    componentKey: "TemplateMenuBoardSplit",
+    previewPath: "/preview/menu-board-split",
+    locked: true,
+    canvas: { width: 1080, height: 1920 },
+    imageSlotCount: 3,
+    textFields: ["subtitle", "title", "itemNumber", "domain", "visualPreset"],
+    features: {
+      overlay: true,
+      numberTreatment: "hero",
+      footer: true,
+    },
+  },
 };
 
 const TEMPLATE_COMPONENTS: Record<
@@ -496,6 +513,7 @@ const TEMPLATE_COMPONENTS: Record<
   "hero-scrapbook-tape-tag": TemplateHeroScrapbookTapeTag,
   "bookmark-ribbon-collage-title": TemplateBookmarkRibbonCollageTitle,
   "hero-bowl-stack": TemplateHeroBowlStack,
+  "menu-board-split": TemplateMenuBoardSplit,
 };
 
 export function getTemplateConfig(templateId: string) {
@@ -619,6 +637,10 @@ export function getSampleTemplateProps(templateId: string) {
 
   if (templateId === "hero-bowl-stack") {
     return sampleTemplateDataHeroBowlStack;
+  }
+
+  if (templateId === "menu-board-split") {
+    return sampleTemplateDataMenuBoardSplit;
   }
 
   return sampleTemplateDataWithSubtitle;

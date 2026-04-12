@@ -4363,6 +4363,8 @@ function getArtworkTitleRule(templateId: string) {
       return { maxWords: 6, maxChars: 34, maxLines: 3, singleLine: false };
     case "hero-bowl-stack":
       return { maxWords: 5, maxChars: 34, maxLines: 3, singleLine: false };
+    case "menu-board-split":
+      return { maxWords: 5, maxChars: 34, maxLines: 3, singleLine: false };
     case "hero-arch-sidebar-triptych":
       return { maxWords: 5, maxChars: 30, maxLines: 5, singleLine: false };
     case "three-image-center-poster-number-footer":
@@ -4420,6 +4422,10 @@ function getArtworkGoal(templateId: string, templateSupportsSubtitle: boolean) {
 
   if (templateId === "hero-bowl-stack") {
     return "Create a number-aware Pinterest artwork headline for a food roundup cover with a dominant hero dish, three supporting food thumbnails, and a bold overlapping title block. Use 3 to 5 strong words total, do not include the count in the headline itself, and make it feel appetite-driven and instantly scannable. Favor concrete food roundup closers like Recipes, Dinners, Soups, Desserts, Meals, or Salads.";
+  }
+
+  if (templateId === "menu-board-split") {
+    return "Create a number-aware Pinterest artwork headline for a bold food roundup cover with a dark menu-board title panel. Use 3 to 5 strong words total, do not include the count in the headline itself, and make it feel like a strong restaurant-board feature rather than a sentence. Favor concrete food roundup closers like Recipes, Dinners, Meals, Soups, Desserts, or Ideas.";
   }
 
   if (templateId === "five-image-center-band-number-domain") {
@@ -4528,6 +4534,11 @@ function enforceArtworkTitleRule(templateId: string, title: string) {
   }
 
   if (templateId === "hero-bowl-stack") {
+    headline = ensureHeroNumberArtworkTitle(headline);
+    headline = ensureThreeToFiveWordFoodRoundupTitle(headline);
+  }
+
+  if (templateId === "menu-board-split") {
     headline = ensureHeroNumberArtworkTitle(headline);
     headline = ensureThreeToFiveWordFoodRoundupTitle(headline);
   }
