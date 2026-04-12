@@ -15,8 +15,13 @@ type CanvasEditorProps = {
   document: RuntimeTemplateDocument;
   payload: TemplateRenderProps;
   editorState: RuntimeTemplateEditorState;
-  selectedElementId: string | null;
-  onSelectElement: (elementId: string | null) => void;
+  selectedElementIds: string[];
+  primarySelectedElementId: string | null;
+  onChangeSelection: (
+    elementIds: string[],
+    primaryElementId: string | null,
+    options?: { persistPrimary?: boolean },
+  ) => void;
   onUpdateElement: (
     elementId: string,
     updater: (element: RuntimeTemplateElement) => RuntimeTemplateElement,
@@ -28,6 +33,8 @@ type CanvasEditorProps = {
   ) => void;
   onBeginHistoryAction: () => void;
   onChangeVisualPreset: (presetId: TemplateVisualPresetId) => void;
+  cropModeElementId: string | null;
+  onSetImageFrameFocalPoint: (elementId: string, point: { x: number; y: number }) => void;
 };
 
 const HANDLE_POSITIONS = ["nw", "n", "ne", "e", "se", "s", "sw", "w"] as const;
@@ -37,27 +44,47 @@ export function CanvasEditor(props: CanvasEditorProps) {
     document,
     payload,
     editorState,
-    selectedElementId,
-    onSelectElement,
+    selectedElementIds,
+    primarySelectedElementId,
+    onChangeSelection,
     onUpdateElement,
     onUpdateEditorState,
     onBeginHistoryAction,
     onChangeVisualPreset,
+    cropModeElementId,
+    onSetImageFrameFocalPoint,
   } = props;
 
-  const { stageRef, guides, beginMove, beginResize, clearSelection } = useCanvasInteractions({
+  const {
+    stageRef,
+    guides,
+    marqueeRect,
+    beginMove,
+    beginResize,
+    beginMarquee,
+    clearSelection,
+  } = useCanvasInteractions({
     zoom: editorState.zoom,
     canvasWidth: document.canvas.width,
     canvasHeight: document.canvas.height,
     safeInset: document.canvas.safeInset,
     showGuides: editorState.showGuides,
-    onSelectElement,
+    elements: document.elements,
+    selectedElementIds,
+    onChangeSelection,
     onUpdateElement,
     onBeginHistoryAction,
   });
 
+  const selectedElements = document.elements.filter((element) =>
+    selectedElementIds.includes(element.id),
+  );
   const selectedElement =
-    document.elements.find((element) => element.id === selectedElementId) ?? null;
+    selectedElements.length === 1
+      ? selectedElements[0]
+      : document.elements.find((element) => element.id === primarySelectedElementId) ?? null;
+  const selectionBounds =
+    selectedElements.length > 1 ? getSelectionBounds(selectedElements) : null;
   const overlayElements = [...document.elements]
     .filter((element) => element.visible)
     .sort((left, right) => right.zIndex - left.zIndex);
@@ -67,16 +94,14 @@ export function CanvasEditor(props: CanvasEditorProps) {
     if (event.target !== event.currentTarget) {
       return;
     }
-
-    clearSelection();
+    beginMarquee(event);
   };
 
   const handleCanvasSurfacePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.target !== event.currentTarget) {
       return;
     }
-
-    clearSelection();
+    beginMarquee(event);
   };
   const handleWorkspacePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     const targetNode = event.target as Node | null;
@@ -214,15 +239,9 @@ export function CanvasEditor(props: CanvasEditorProps) {
               {renderGuideLines(guides, document)}
               <RuntimeTemplateCanvas document={document} payload={payload} />
               {overlayElements.map((element) => (
-                <button
+                <div
                   key={element.id}
-                  type="button"
-                  onPointerDown={(event) => beginMove(event, element)}
-                  className={`absolute rounded-[10px] border text-left transition ${
-                    selectedElementId === element.id
-                      ? "border-[var(--dashboard-accent)] bg-[rgba(30,94,255,0.08)] shadow-[0_0_0_1px_rgba(30,94,255,0.18)]"
-                      : "border-transparent bg-transparent hover:border-[rgba(30,94,255,0.3)] hover:bg-[rgba(30,94,255,0.05)]"
-                  } ${element.locked ? "cursor-not-allowed" : "cursor-move"}`}
+                  className="absolute"
                   style={{
                     left: element.x,
                     top: element.y,
@@ -233,15 +252,50 @@ export function CanvasEditor(props: CanvasEditorProps) {
                     transformOrigin: "center center",
                   }}
                 >
-                  {selectedElementId === element.id ? (
-                    <span className="absolute left-2 top-2 rounded-full bg-[var(--dashboard-accent)] px-2 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-white">
-                      {element.name}
-                    </span>
+                  <button
+                    type="button"
+                    onPointerDown={(event) => beginMove(event, element)}
+                    className={`absolute inset-0 rounded-[10px] border text-left transition ${
+                      selectedElementIds.includes(element.id)
+                        ? "border-[var(--dashboard-accent)] bg-[rgba(30,94,255,0.08)] shadow-[0_0_0_1px_rgba(30,94,255,0.18)]"
+                        : "border-transparent bg-transparent hover:border-[rgba(30,94,255,0.3)] hover:bg-[rgba(30,94,255,0.05)]"
+                    } ${element.locked ? "cursor-not-allowed" : "cursor-move"}`}
+                  >
+                    {primarySelectedElementId === element.id ? (
+                      <span className="absolute left-2 top-2 rounded-full bg-[var(--dashboard-accent)] px-2 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-white">
+                        {element.name}
+                      </span>
+                    ) : null}
+                    {selectedElementIds.includes(element.id) ? renderSlotHelper(element) : null}
+                  </button>
+
+                  {element.type === "imageFrame" && cropModeElementId === element.id ? (
+                    <ImageFrameCropOverlay
+                      element={element}
+                      onChange={(point) => onSetImageFrameFocalPoint(element.id, point)}
+                    />
                   ) : null}
-                </button>
+                </div>
               ))}
 
-              {selectedElement ? (
+              {marqueeRect ? (
+                <div
+                  className="pointer-events-none absolute border border-dashed border-[var(--dashboard-accent)] bg-[rgba(30,94,255,0.08)]"
+                  style={{
+                    left: marqueeRect.x,
+                    top: marqueeRect.y,
+                    width: marqueeRect.width,
+                    height: marqueeRect.height,
+                    zIndex: 5300,
+                  }}
+                />
+              ) : null}
+
+              {selectionBounds ? (
+                <MultiSelectionBounds bounds={selectionBounds} count={selectedElements.length} />
+              ) : null}
+
+              {selectedElement && selectedElements.length === 1 ? (
                 <SelectionHandles element={selectedElement} onResize={beginResize} />
               ) : null}
             </div>
@@ -249,6 +303,113 @@ export function CanvasEditor(props: CanvasEditorProps) {
         </div>
       </div>
     </section>
+  );
+}
+
+function getSelectionBounds(elements: RuntimeTemplateElement[]) {
+  const left = Math.min(...elements.map((element) => element.x));
+  const top = Math.min(...elements.map((element) => element.y));
+  const right = Math.max(...elements.map((element) => element.x + element.width));
+  const bottom = Math.max(...elements.map((element) => element.y + element.height));
+  return {
+    x: left,
+    y: top,
+    width: right - left,
+    height: bottom - top,
+  };
+}
+
+function MultiSelectionBounds(props: {
+  bounds: { x: number; y: number; width: number; height: number };
+  count: number;
+}) {
+  return (
+    <>
+      <div
+        className="pointer-events-none absolute rounded-[14px] border-2 border-dashed border-[var(--dashboard-accent)] bg-[rgba(30,94,255,0.04)]"
+        style={{
+          left: props.bounds.x,
+          top: props.bounds.y,
+          width: props.bounds.width,
+          height: props.bounds.height,
+          zIndex: 5250,
+        }}
+      />
+      <span
+        className="pointer-events-none absolute rounded-full bg-[var(--dashboard-accent)] px-2 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-white"
+        style={{
+          left: props.bounds.x + 8,
+          top: Math.max(8, props.bounds.y + 8),
+          zIndex: 5260,
+        }}
+      >
+        {props.count} selected
+      </span>
+    </>
+  );
+}
+
+function renderSlotHelper(element: RuntimeTemplateElement) {
+  if (element.type === "imageFrame") {
+    return (
+      <span className="pointer-events-none absolute bottom-2 left-2 rounded-full bg-[rgba(15,23,42,0.78)] px-2 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-white">
+        Slot {element.slotIndex + 1}
+      </span>
+    );
+  }
+
+  if (element.type === "imageGrid") {
+    const endSlot = element.slotStartIndex + getGridSlotCount(element.layoutPreset);
+    return (
+      <span className="pointer-events-none absolute bottom-2 left-2 rounded-full bg-[rgba(15,23,42,0.78)] px-2 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-white">
+        Slots {element.slotStartIndex + 1}-{endSlot}
+      </span>
+    );
+  }
+
+  return null;
+}
+
+function ImageFrameCropOverlay(props: {
+  element: Extract<RuntimeTemplateElement, { type: "imageFrame" }>;
+  onChange: (point: { x: number; y: number }) => void;
+}) {
+  const handlePointer = (event: ReactPointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const rect = event.currentTarget.getBoundingClientRect();
+    const point = {
+      x: clamp((event.clientX - rect.left) / rect.width, 0, 1),
+      y: clamp((event.clientY - rect.top) / rect.height, 0, 1),
+    };
+    props.onChange(point);
+  };
+
+  return (
+    <div
+      className="absolute inset-0 cursor-crosshair rounded-[10px] border border-dashed border-white/85 bg-[rgba(15,23,42,0.08)]"
+      onPointerDown={handlePointer}
+      onPointerMove={(event) => {
+        if ((event.buttons & 1) !== 1) {
+          return;
+        }
+        handlePointer(event);
+      }}
+    >
+      <span className="pointer-events-none absolute right-2 top-2 rounded-full bg-[rgba(15,23,42,0.78)] px-2 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-white">
+        Crop mode
+      </span>
+      <div
+        className="pointer-events-none absolute h-6 w-6 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-[rgba(30,94,255,0.12)] shadow-[0_6px_16px_rgba(15,23,42,0.25)]"
+        style={{
+          left: `${props.element.focalPoint.x * 100}%`,
+          top: `${props.element.focalPoint.y * 100}%`,
+        }}
+      >
+        <div className="absolute inset-x-1/2 top-1 h-4 w-px -translate-x-1/2 bg-white" />
+        <div className="absolute inset-y-1/2 left-1 h-px w-4 -translate-y-1/2 bg-white" />
+      </div>
+    </div>
   );
 }
 
@@ -377,4 +538,30 @@ function resolveHandlePosition(
   } as const;
 
   return positions[handle];
+}
+
+function getGridSlotCount(layout: Extract<RuntimeTemplateElement, { type: "imageGrid" }>["layoutPreset"]) {
+  if (layout === "split-2-vertical" || layout === "split-2-horizontal") {
+    return 2;
+  }
+  if (layout === "stack-3") {
+    return 3;
+  }
+  if (layout === "grid-4") {
+    return 4;
+  }
+  if (layout === "collage-5") {
+    return 5;
+  }
+  if (layout === "split-6") {
+    return 6;
+  }
+  if (layout === "grid-8") {
+    return 8;
+  }
+  return 9;
+}
+
+function clamp(value: number, minimum: number, maximum: number) {
+  return Math.min(Math.max(value, minimum), maximum);
 }

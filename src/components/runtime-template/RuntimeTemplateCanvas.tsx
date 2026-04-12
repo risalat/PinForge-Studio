@@ -125,7 +125,12 @@ export function RuntimeTemplateCanvas({
                     src={src}
                     alt={payload.title}
                     className="h-full w-full"
-                    style={{ objectFit: element.fitMode }}
+                    style={{
+                      objectFit: element.fitMode,
+                      objectPosition: `${Math.round(element.focalPoint.x * 100)}% ${Math.round(
+                        element.focalPoint.y * 100,
+                      )}%`,
+                    }}
                   />
                 ) : null}
                 {renderOverlayFill({

@@ -68,6 +68,10 @@ export function createStarterRuntimeTemplateDocument(input?: {
         slotIndex: 0,
         shapeKind: "roundedRect",
         fitMode: "cover",
+        focalPoint: {
+          x: 0.5,
+          y: 0.5,
+        },
         styleTokens: {
           fillToken: "surface.secondary",
           borderToken: "border.primary",

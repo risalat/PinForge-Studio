@@ -11,6 +11,7 @@ import {
   useState,
 } from "react";
 import { CanvasEditor } from "@/components/template-builder/CanvasEditor";
+import { EditorWorkspaceShell } from "@/components/template-builder/EditorWorkspaceShell";
 import { ElementCatalog } from "@/components/template-builder/ElementCatalog";
 import {
   InspectorPanel,
@@ -30,6 +31,7 @@ import {
   runtimeTemplateBorderTokenValues,
   runtimeTemplateFillTokenValues,
   runtimeTemplateFontTokenValues,
+  runtimeTemplateImageFitModeValues,
   runtimeTemplateTextTokenValues,
 } from "@/lib/runtime-templates/types";
 import type {
@@ -75,6 +77,11 @@ type DraftUpdateOptions = {
   recordHistory?: boolean;
 };
 
+type ElementSelectionState = {
+  ids: string[];
+  primaryId: string | null;
+};
+
 export function TemplateDraftEditor(props: TemplateDraftEditorProps) {
   const {
     templateId,
@@ -109,10 +116,36 @@ export function TemplateDraftEditor(props: TemplateDraftEditorProps) {
     past: [] as DraftHistorySnapshot[],
     future: [] as DraftHistorySnapshot[],
   });
+  const [cropModeElementId, setCropModeElementId] = useState<string | null>(null);
+  const [selectionState, setSelectionState] = useState<ElementSelectionState>(() =>
+    createSelectionState(
+      initialEditorState.selectedElementId ? [initialEditorState.selectedElementId] : [],
+      initialEditorState.selectedElementId,
+    ),
+  );
 
+  const selectedElementIds = useMemo(
+    () =>
+      selectionState.ids.filter((id) =>
+        document.elements.some((element) => element.id === id),
+      ),
+    [document.elements, selectionState.ids],
+  );
+  const primarySelectedElementId = useMemo(
+    () =>
+      selectionState.primaryId && selectedElementIds.includes(selectionState.primaryId)
+        ? selectionState.primaryId
+        : selectedElementIds[0] ?? null,
+    [selectedElementIds, selectionState.primaryId],
+  );
+  const selectedElements = useMemo(
+    () =>
+      document.elements.filter((element) => selectedElementIds.includes(element.id)),
+    [document.elements, selectedElementIds],
+  );
   const selectedElement = useMemo(
-    () => document.elements.find((element) => element.id === editorState.selectedElementId) ?? null,
-    [document.elements, editorState.selectedElementId],
+    () => (selectedElements.length === 1 ? selectedElements[0] : null),
+    [selectedElements],
   );
   const validationResult = useMemo(
     () =>
@@ -169,6 +202,12 @@ export function TemplateDraftEditor(props: TemplateDraftEditorProps) {
     setDocument(next.document);
     setEditorState(next.editorState);
     setVisualPreset(next.visualPreset);
+    setSelectionState(
+      createSelectionState(
+        next.editorState.selectedElementId ? [next.editorState.selectedElementId] : [],
+        next.editorState.selectedElementId,
+      ),
+    );
   }, []);
 
   const pushHistorySnapshot = useCallback(() => {
@@ -299,6 +338,28 @@ export function TemplateDraftEditor(props: TemplateDraftEditorProps) {
     [pushHistorySnapshot],
   );
 
+  const updateSelection = useCallback(
+    (
+      elementIds: string[],
+      primaryElementId: string | null,
+      options?: { persistPrimary?: boolean },
+    ) => {
+      const next = createSelectionState(elementIds, primaryElementId);
+      setSelectionState(next);
+      if (options?.persistPrimary !== false) {
+        setEditorState((current) =>
+          current.selectedElementId === next.primaryId
+            ? current
+            : {
+                ...current,
+                selectedElementId: next.primaryId,
+              },
+        );
+      }
+    },
+    [],
+  );
+
   const saveDraft = useCallback(
     async (mode: "auto" | "manual") => {
       const documentForSave: RuntimeTemplateDocument = {
@@ -312,7 +373,7 @@ export function TemplateDraftEditor(props: TemplateDraftEditorProps) {
 
       setSaveStatus({
         state: "saving",
-        message: mode === "auto" ? "Autosaving draft…" : "Saving draft…",
+        message: mode === "auto" ? "Autosaving draft..." : "Saving draft...",
       });
 
       const response = await fetch(`/api/dashboard/templates/${templateId}/draft`, {
@@ -360,16 +421,35 @@ export function TemplateDraftEditor(props: TemplateDraftEditorProps) {
   );
 
   useEffect(() => {
+    const validIds = selectionState.ids.filter((id) =>
+      document.elements.some((element) => element.id === id),
+    );
+    const nextPrimary =
+      selectionState.primaryId && validIds.includes(selectionState.primaryId)
+        ? selectionState.primaryId
+        : validIds[0] ?? null;
+
     if (
-      editorState.selectedElementId &&
-      !document.elements.some((element) => element.id === editorState.selectedElementId)
+      validIds.length !== selectionState.ids.length ||
+      nextPrimary !== selectionState.primaryId
     ) {
-      setEditorState((current) => ({
-        ...current,
-        selectedElementId: null,
-      }));
+      updateSelection(validIds, nextPrimary);
     }
-  }, [document.elements, editorState.selectedElementId]);
+  }, [document.elements, selectionState, updateSelection]);
+
+  useEffect(() => {
+    if (
+      !selectedElement ||
+      selectedElement.type !== "imageFrame" ||
+      cropModeElementId !== selectedElement.id
+    ) {
+      setCropModeElementId((current) =>
+        current && current === selectedElement?.id && selectedElement?.type === "imageFrame"
+          ? current
+          : null,
+      );
+    }
+  }, [cropModeElementId, selectedElement]);
 
   useEffect(() => {
     if (snapshot === lastSavedSnapshotRef.current) {
@@ -557,73 +637,105 @@ export function TemplateDraftEditor(props: TemplateDraftEditorProps) {
         ...current,
         elements: [...current.elements, nextElement],
       }));
-      setEditorState((current) => ({
-        ...current,
-        selectedElementId: nextElement.id,
-      }));
+      updateSelection([nextElement.id], nextElement.id);
     },
-    [applyDocumentUpdate, document],
+    [applyDocumentUpdate, document, updateSelection],
+  );
+
+  const handleDeleteElements = useCallback(
+    (elementIds: string[]) => {
+      const targets = document.elements.filter((element) => elementIds.includes(element.id));
+      if (targets.length === 0) {
+        return;
+      }
+
+      applyDocumentUpdate((current) => ({
+        ...current,
+        elements: current.elements.filter((element) => !elementIds.includes(element.id)),
+      }));
+      updateSelection([], null);
+    },
+    [applyDocumentUpdate, document.elements, updateSelection],
   );
 
   const handleDeleteElement = useCallback(
     (elementId: string) => {
-      const target = document.elements.find((element) => element.id === elementId);
-      if (!target) {
+      handleDeleteElements([elementId]);
+    },
+    [handleDeleteElements],
+  );
+
+  const handleDuplicateElements = useCallback(
+    (elementIds: string[]) => {
+      const targets = document.elements.filter((element) => elementIds.includes(element.id));
+      if (targets.length === 0) {
         return;
       }
 
+      const groupMap = new Map<string, string>();
+      let workingElements = [...document.elements];
+      const duplicates = [...targets]
+        .sort((left, right) => left.zIndex - right.zIndex)
+        .map((target) => {
+          const duplicate = createDuplicatedElement(target, workingElements);
+          if (target.groupId) {
+            const mappedGroupId =
+              groupMap.get(target.groupId) ?? createElementGroupId(workingElements);
+            groupMap.set(target.groupId, mappedGroupId);
+            duplicate.groupId = mappedGroupId;
+          }
+          workingElements = [...workingElements, duplicate];
+          return duplicate;
+        });
+
       applyDocumentUpdate((current) => ({
         ...current,
-        elements: current.elements.filter((element) => element.id !== elementId),
+        elements: [...current.elements, ...duplicates],
       }));
-      setEditorState((current) => ({
-        ...current,
-        selectedElementId: current.selectedElementId === elementId ? null : current.selectedElementId,
-      }));
+      updateSelection(
+        duplicates.map((entry) => entry.id),
+        duplicates[0]?.id ?? null,
+      );
     },
-    [applyDocumentUpdate, document.elements],
+    [applyDocumentUpdate, document.elements, updateSelection],
   );
 
   const handleDuplicateElement = useCallback(
     (elementId: string) => {
-      const target = document.elements.find((element) => element.id === elementId);
-      if (!target) {
-        return;
-      }
-
-      const duplicate = createDuplicatedElement(target, document.elements);
-      applyDocumentUpdate((current) => ({
-        ...current,
-        elements: [...current.elements, duplicate],
-      }));
-      setEditorState((current) => ({
-        ...current,
-        selectedElementId: duplicate.id,
-      }));
+      handleDuplicateElements([elementId]);
     },
-    [applyDocumentUpdate, document.elements],
+    [handleDuplicateElements],
   );
 
-  const handleReorderElement = useCallback(
-    (elementId: string, direction: "forward" | "backward") => {
+  const handleReorderElements = useCallback(
+    (elementIds: string[], direction: "forward" | "backward") => {
       applyDocumentUpdate((current) => {
         const ordered = [...current.elements].sort((left, right) => left.zIndex - right.zIndex);
-        const index = ordered.findIndex((element) => element.id === elementId);
-        if (index === -1) {
-          return current;
-        }
-
-        const targetIndex =
-          direction === "forward"
-            ? Math.min(ordered.length - 1, index + 1)
-            : Math.max(0, index - 1);
-        if (targetIndex === index) {
+        const selectedSet = new Set(elementIds);
+        if (selectedSet.size === 0) {
           return current;
         }
 
         const next = [...ordered];
-        const [moved] = next.splice(index, 1);
-        next.splice(targetIndex, 0, moved);
+        if (direction === "forward") {
+          for (let index = next.length - 2; index >= 0; index -= 1) {
+            const currentElement = next[index];
+            const aboveElement = next[index + 1];
+            if (selectedSet.has(currentElement.id) && !selectedSet.has(aboveElement.id)) {
+              next[index] = aboveElement;
+              next[index + 1] = currentElement;
+            }
+          }
+        } else {
+          for (let index = 1; index < next.length; index += 1) {
+            const currentElement = next[index];
+            const belowElement = next[index - 1];
+            if (selectedSet.has(currentElement.id) && !selectedSet.has(belowElement.id)) {
+              next[index] = belowElement;
+              next[index - 1] = currentElement;
+            }
+          }
+        }
 
         return {
           ...current,
@@ -637,6 +749,13 @@ export function TemplateDraftEditor(props: TemplateDraftEditorProps) {
     [applyDocumentUpdate],
   );
 
+  const handleReorderElement = useCallback(
+    (elementId: string, direction: "forward" | "backward") => {
+      handleReorderElements([elementId], direction);
+    },
+    [handleReorderElements],
+  );
+
   const handleToggleVisibility = useCallback(
     (elementId: string) => {
       updateElement(elementId, (element) => ({
@@ -645,6 +764,23 @@ export function TemplateDraftEditor(props: TemplateDraftEditorProps) {
       }));
     },
     [updateElement],
+  );
+
+  const handleToggleVisibilityMany = useCallback(
+    (elementIds: string[]) => {
+      const targets = document.elements.filter((element) => elementIds.includes(element.id));
+      if (targets.length === 0) {
+        return;
+      }
+      const shouldShow = targets.some((element) => !element.visible);
+      applyDocumentUpdate((current) => ({
+        ...current,
+        elements: current.elements.map((element) =>
+          elementIds.includes(element.id) ? { ...element, visible: shouldShow } : element,
+        ),
+      }));
+    },
+    [applyDocumentUpdate, document.elements],
   );
 
   const handleToggleLocked = useCallback(
@@ -656,6 +792,170 @@ export function TemplateDraftEditor(props: TemplateDraftEditorProps) {
     },
     [updateElement],
   );
+
+  const handleToggleLockedMany = useCallback(
+    (elementIds: string[]) => {
+      const targets = document.elements.filter((element) => elementIds.includes(element.id));
+      if (targets.length === 0) {
+        return;
+      }
+      const shouldUnlock = targets.every((element) => element.locked);
+      applyDocumentUpdate((current) => ({
+        ...current,
+        elements: current.elements.map((element) =>
+          elementIds.includes(element.id)
+            ? { ...element, locked: !shouldUnlock }
+            : element,
+        ),
+      }));
+    },
+    [applyDocumentUpdate, document.elements],
+  );
+
+  const handleMoveElements = useCallback(
+    (elementIds: string[], delta: { x: number; y: number }) => {
+      applyDocumentUpdate((current) => ({
+        ...current,
+        elements: current.elements.map((element) =>
+          elementIds.includes(element.id) && !element.locked
+            ? { ...element, x: element.x + delta.x, y: element.y + delta.y }
+            : element,
+        ),
+      }));
+    },
+    [applyDocumentUpdate],
+  );
+
+  const handleGroupSelection = useCallback(() => {
+    if (selectedElementIds.length < 2) {
+      return;
+    }
+    const groupId = createElementGroupId(document.elements);
+    applyDocumentUpdate((current) => ({
+      ...current,
+      elements: current.elements.map((element) =>
+        selectedElementIds.includes(element.id)
+          ? { ...element, groupId }
+          : element,
+      ),
+    }));
+  }, [applyDocumentUpdate, document.elements, selectedElementIds]);
+
+  const handleUngroupSelection = useCallback(() => {
+    if (selectedElementIds.length === 0) {
+      return;
+    }
+    applyDocumentUpdate((current) => ({
+      ...current,
+      elements: current.elements.map((element) =>
+        selectedElementIds.includes(element.id)
+          ? { ...element, groupId: undefined }
+          : element,
+      ),
+    }));
+  }, [applyDocumentUpdate, selectedElementIds]);
+
+  const handleAlignSelection = useCallback(
+    (mode: "left" | "center" | "right" | "top" | "middle" | "bottom") => {
+      const movable = selectedElements.filter((element) => !element.locked);
+      if (movable.length < 2) {
+        return;
+      }
+      const bounds = getElementBounds(movable);
+      applyDocumentUpdate((current) => ({
+        ...current,
+        elements: current.elements.map((element) => {
+          if (!selectedElementIds.includes(element.id) || element.locked) {
+            return element;
+          }
+          if (mode === "left") {
+            return { ...element, x: bounds.x };
+          }
+          if (mode === "center") {
+            return { ...element, x: bounds.x + bounds.width / 2 - element.width / 2 };
+          }
+          if (mode === "right") {
+            return { ...element, x: bounds.x + bounds.width - element.width };
+          }
+          if (mode === "top") {
+            return { ...element, y: bounds.y };
+          }
+          if (mode === "middle") {
+            return { ...element, y: bounds.y + bounds.height / 2 - element.height / 2 };
+          }
+          return { ...element, y: bounds.y + bounds.height - element.height };
+        }),
+      }));
+    },
+    [applyDocumentUpdate, selectedElementIds, selectedElements],
+  );
+
+  const handleDistributeSelection = useCallback(
+    (axis: "horizontal" | "vertical") => {
+      const movable = [...selectedElements.filter((element) => !element.locked)];
+      if (movable.length < 3) {
+        return;
+      }
+      const ordered =
+        axis === "horizontal"
+          ? movable.sort((left, right) => left.x - right.x)
+          : movable.sort((left, right) => left.y - right.y);
+      const start = axis === "horizontal" ? ordered[0].x : ordered[0].y;
+      const end =
+        axis === "horizontal"
+          ? ordered[ordered.length - 1].x + ordered[ordered.length - 1].width
+          : ordered[ordered.length - 1].y + ordered[ordered.length - 1].height;
+      const occupied = ordered.reduce(
+        (total, element) => total + (axis === "horizontal" ? element.width : element.height),
+        0,
+      );
+      const gap = (end - start - occupied) / (ordered.length - 1);
+      let cursor = start;
+      const placements = new Map<string, number>();
+      ordered.forEach((element) => {
+        placements.set(element.id, cursor);
+        cursor += (axis === "horizontal" ? element.width : element.height) + gap;
+      });
+      applyDocumentUpdate((current) => ({
+        ...current,
+        elements: current.elements.map((element) => {
+          const placement = placements.get(element.id);
+          if (placement === undefined) {
+            return element;
+          }
+          return axis === "horizontal"
+            ? { ...element, x: placement }
+            : { ...element, y: placement };
+        }),
+      }));
+    },
+    [applyDocumentUpdate, selectedElements],
+  );
+
+  const handleSetImageFrameFocalPoint = useCallback(
+    (elementId: string, point: { x: number; y: number }) => {
+      updateElement(elementId, (element) => {
+        if (element.type !== "imageFrame") {
+          return element;
+        }
+        return {
+          ...element,
+          focalPoint: {
+            x: point.x,
+            y: point.y,
+          },
+        };
+      });
+    },
+    [updateElement],
+  );
+
+  const handleResetImageFrameCrop = useCallback(() => {
+    if (!selectedElement || selectedElement.type !== "imageFrame") {
+      return;
+    }
+    handleSetImageFrameFocalPoint(selectedElement.id, { x: 0.5, y: 0.5 });
+  }, [handleSetImageFrameFocalPoint, selectedElement]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -690,26 +990,20 @@ export function TemplateDraftEditor(props: TemplateDraftEditorProps) {
       }
 
       if (event.key === "Escape" && !isEditableTarget) {
-        if (selectedElement) {
+        if (selectedElementIds.length > 0) {
           event.preventDefault();
-          setEditorState((current) => ({
-            ...current,
-            selectedElementId: null,
-          }));
+          updateSelection([], null);
         }
         return;
       }
 
-      if (
-        !selectedElement ||
-        isEditableTarget
-      ) {
+      if (selectedElementIds.length === 0 || isEditableTarget) {
         return;
       }
 
       if (event.key === "Backspace" || event.key === "Delete") {
         event.preventDefault();
-        handleDeleteElement(selectedElement.id);
+        handleDeleteElements(selectedElementIds);
         return;
       }
 
@@ -728,153 +1022,173 @@ export function TemplateDraftEditor(props: TemplateDraftEditorProps) {
               ? { x: -step, y: 0 }
               : { x: step, y: 0 };
 
-      updateElement(selectedElement.id, (element) => ({
-        ...element,
-        x: element.x + delta.x,
-        y: element.y + delta.y,
-      }));
+      handleMoveElements(selectedElementIds, delta);
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleDeleteElement, redoDraftChange, selectedElement, undoDraftChange, updateElement]);
+  }, [
+    handleDeleteElements,
+    handleMoveElements,
+    redoDraftChange,
+    selectedElementIds,
+    undoDraftChange,
+    updateSelection,
+  ]);
 
   return (
-    <div className="space-y-4 text-[var(--dashboard-text)]">
-      <section className="sticky top-3 z-30 rounded-[24px] border border-[var(--dashboard-line)] bg-[color:var(--dashboard-panel-strong)]/96 px-4 py-3 shadow-[var(--dashboard-shadow-sm)] backdrop-blur">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="min-w-0 flex items-center gap-2">
-            <Link
-              href="/dashboard/templates"
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] text-[var(--dashboard-subtle)] transition hover:text-[var(--dashboard-text)]"
-              aria-label="Back to templates"
-            >
-              <BackIcon />
-            </Link>
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                {isRenamingTemplate ? (
-                  <input
-                    type="text"
-                    value={templateName}
-                    onChange={(event) => updateTemplateName(event.target.value)}
-                    onBlur={() => setIsRenamingTemplate(false)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault();
-                        setIsRenamingTemplate(false);
+    <EditorWorkspaceShell
+      commandBar={
+        <section className="sticky top-3 z-30 rounded-[24px] border border-[var(--dashboard-line)] bg-[color:var(--dashboard-panel-strong)]/96 px-4 py-3 shadow-[var(--dashboard-shadow-sm)] backdrop-blur">
+          {/* Phase 0 ownership note:
+              - this top surface owns document-level commands and high-frequency selection actions
+              - deep element/document configuration stays in InspectorPanel
+              - live issue visibility stays in ValidationSidebar
+          */}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0 flex items-center gap-2">
+              <Link
+                href="/dashboard/templates"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] text-[var(--dashboard-subtle)] transition hover:text-[var(--dashboard-text)]"
+                aria-label="Back to templates"
+              >
+                <BackIcon />
+              </Link>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  {isRenamingTemplate ? (
+                    <input
+                      type="text"
+                      value={templateName}
+                      onChange={(event) => updateTemplateName(event.target.value)}
+                      onBlur={() => setIsRenamingTemplate(false)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          setIsRenamingTemplate(false);
+                        }
+                        if (event.key === "Escape") {
+                          event.preventDefault();
+                          setIsRenamingTemplate(false);
+                        }
+                      }}
+                      autoFocus
+                      className="min-w-[240px] max-w-[420px] rounded-xl border border-[var(--dashboard-accent-border)] bg-white px-3 py-1.5 text-[1.35rem] font-black tracking-[-0.05em] text-[var(--dashboard-text)] outline-none focus:border-[var(--dashboard-accent)]"
+                    />
+                  ) : (
+                    <>
+                      <h1 className="truncate text-[1.7rem] font-black tracking-[-0.05em]">
+                        {templateName}
+                      </h1>
+                      <button
+                        type="button"
+                        onClick={() => setIsRenamingTemplate(true)}
+                        className="inline-flex items-center gap-2 rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] transition hover:text-[var(--dashboard-text)]"
+                        aria-label="Rename template"
+                        title="Rename template"
+                      >
+                        <EditIcon />
+                        <span>Rename</span>
+                      </button>
+                    </>
+                  )}
+                  <MetaChip>{`v${versionNumber}`}</MetaChip>
+                  <MetaChip>{versionLifecycleStatus}</MetaChip>
+                  <MetaChip>{versionLocked ? "Locked" : "Editable"}</MetaChip>
+                  {savedValidationResult ? (
+                    <MetaChip
+                      tone={
+                        savedValidationResult.blockingErrorCount > 0
+                          ? "warning"
+                          : "success"
                       }
-                      if (event.key === "Escape") {
-                        event.preventDefault();
-                        setIsRenamingTemplate(false);
-                      }
-                    }}
-                    autoFocus
-                    className="min-w-[240px] max-w-[420px] rounded-xl border border-[var(--dashboard-accent-border)] bg-white px-3 py-1.5 text-[1.35rem] font-black tracking-[-0.05em] text-[var(--dashboard-text)] outline-none focus:border-[var(--dashboard-accent)]"
-                  />
-                ) : (
-                  <>
-                    <h1 className="truncate text-[1.7rem] font-black tracking-[-0.05em]">
-                      {templateName}
-                    </h1>
-                    <button
-                      type="button"
-                      onClick={() => setIsRenamingTemplate(true)}
-                      className="inline-flex items-center gap-2 rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] transition hover:text-[var(--dashboard-text)]"
-                      aria-label="Rename template"
-                      title="Rename template"
                     >
-                      <EditIcon />
-                      <span>Rename</span>
-                    </button>
-                  </>
-                )}
-                <MetaChip>{`v${versionNumber}`}</MetaChip>
-                <MetaChip>{versionLifecycleStatus}</MetaChip>
-                <MetaChip>{versionLocked ? "Locked" : "Editable"}</MetaChip>
-                {savedValidationResult ? (
-                  <MetaChip
-                    tone={
-                      savedValidationResult.blockingErrorCount > 0
-                        ? "warning"
-                        : "success"
-                    }
-                  >
-                    {savedValidationResult.blockingErrorCount > 0
-                      ? `${savedValidationResult.blockingErrorCount} issue(s)`
-                      : "Validation clean"}
-                  </MetaChip>
-                ) : null}
-                <span className={getSaveStatusClassName(saveStatus)}>{saveStatus.message}</span>
+                      {savedValidationResult.blockingErrorCount > 0
+                        ? `${savedValidationResult.blockingErrorCount} issue(s)`
+                        : "Validation clean"}
+                    </MetaChip>
+                  ) : null}
+                  <span className={getSaveStatusClassName(saveStatus)}>{saveStatus.message}</span>
+                </div>
               </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <IconToolbarButton
+                label="Undo"
+                onClick={undoDraftChange}
+                disabled={historyState.past.length === 0 || actionState !== "idle"}
+                icon={<UndoIcon />}
+              />
+              <IconToolbarButton
+                label="Redo"
+                onClick={redoDraftChange}
+                disabled={historyState.future.length === 0 || actionState !== "idle"}
+                icon={<RedoIcon />}
+              />
+              <IconToolbarButton
+                label="Duplicate draft"
+                onClick={() => void handleDuplicateDraft()}
+                icon={<DuplicateIcon />}
+              />
+              <EditorActionButton label="Preview" onClick={() => void handlePreview()} />
+              <EditorActionButton
+                label="Fix preset"
+                onClick={handleAutoFixCurrentPreset}
+                disabled={actionState !== "idle"}
+              />
+              <EditorActionButton
+                label="Fix all"
+                onClick={handleAutoFixPresets}
+                disabled={actionState !== "idle"}
+              />
+              <EditorActionButton
+                label={actionState === "validating" ? "Validating..." : "Validate"}
+                onClick={() => void handleRunValidation()}
+                disabled={actionState !== "idle"}
+              />
+              <EditorActionButton
+                label="Save"
+                onClick={() => void handleManualSave()}
+                disabled={actionState !== "idle"}
+                primary
+              />
+              <EditorActionButton
+                label={actionState === "finalizing" ? "Finalizing..." : "Finalize"}
+                onClick={() => void handleFinalize()}
+                disabled={actionState !== "idle"}
+              />
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <IconToolbarButton
-              label="Undo"
-              onClick={undoDraftChange}
-              disabled={historyState.past.length === 0 || actionState !== "idle"}
-              icon={<UndoIcon />}
-            />
-            <IconToolbarButton
-              label="Redo"
-              onClick={redoDraftChange}
-              disabled={historyState.future.length === 0 || actionState !== "idle"}
-              icon={<RedoIcon />}
-            />
-            <IconToolbarButton
-              label="Duplicate draft"
-              onClick={() => void handleDuplicateDraft()}
-              icon={<DuplicateIcon />}
-            />
-            <EditorActionButton label="Preview" onClick={() => void handlePreview()} />
-            <EditorActionButton
-              label="Fix preset"
-              onClick={handleAutoFixCurrentPreset}
-              disabled={actionState !== "idle"}
-            />
-            <EditorActionButton
-              label="Fix all"
-              onClick={handleAutoFixPresets}
-              disabled={actionState !== "idle"}
-            />
-            <EditorActionButton
-              label={actionState === "validating" ? "Validating..." : "Validate"}
-              onClick={() => void handleRunValidation()}
-              disabled={actionState !== "idle"}
-            />
-            <EditorActionButton
-              label="Save"
-              onClick={() => void handleManualSave()}
-              disabled={actionState !== "idle"}
-              primary
-            />
-            <EditorActionButton
-              label={actionState === "finalizing" ? "Finalizing..." : "Finalize"}
-              onClick={() => void handleFinalize()}
-              disabled={actionState !== "idle"}
+          <div className="mt-3 border-t border-[var(--dashboard-line)] pt-3">
+            <QuickControlBar
+              document={document}
+              selectedElements={selectedElements}
+              primarySelectedElementId={primarySelectedElementId}
+              onUpdateDocument={applyDocumentUpdate}
+              onUpdateElement={updateElement}
+              onDeleteElements={handleDeleteElements}
+              onDuplicateElements={handleDuplicateElements}
+              onBringForward={(elementIds) => handleReorderElements(elementIds, "forward")}
+              onSendBackward={(elementIds) => handleReorderElements(elementIds, "backward")}
+              onToggleVisibility={handleToggleVisibilityMany}
+              onToggleLocked={handleToggleLockedMany}
+              onGroupSelection={handleGroupSelection}
+              onUngroupSelection={handleUngroupSelection}
+              onAlignSelection={handleAlignSelection}
+              onDistributeSelection={handleDistributeSelection}
+              cropModeElementId={cropModeElementId}
+              onToggleCropMode={(elementId) =>
+                setCropModeElementId((current) => (current === elementId ? null : elementId))
+              }
+              onResetImageFrameCrop={handleResetImageFrameCrop}
+              onSetImageFrameFocalPoint={handleSetImageFrameFocalPoint}
             />
           </div>
-        </div>
-
-        <div className="mt-3 border-t border-[var(--dashboard-line)] pt-3">
-          <QuickControlBar
-            document={document}
-            selectedElement={selectedElement}
-            onUpdateDocument={applyDocumentUpdate}
-            onUpdateElement={updateElement}
-            onDeleteElement={handleDeleteElement}
-            onDuplicateElement={handleDuplicateElement}
-            onBringForward={(elementId) => handleReorderElement(elementId, "forward")}
-            onSendBackward={(elementId) => handleReorderElement(elementId, "backward")}
-            onToggleVisibility={handleToggleVisibility}
-            onToggleLocked={handleToggleLocked}
-          />
-        </div>
-      </section>
-
-      <div className="grid items-start gap-4 xl:grid-cols-[300px_minmax(0,1fr)_340px_340px]">
+        </section>
+      }
+      leftWorkspace={
         <aside className="sticky top-[7.5rem] grid h-[calc(100vh-8.25rem)] min-h-0 gap-3 overflow-hidden xl:grid-cols-[64px_minmax(0,1fr)]">
           <nav className="rounded-[24px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-2 shadow-[var(--dashboard-shadow-sm)]">
             <div className="flex flex-col gap-2">
@@ -912,10 +1226,8 @@ export function TemplateDraftEditor(props: TemplateDraftEditorProps) {
             {leftPanel === "layers" ? (
               <LayerPanel
                 elements={document.elements}
-                selectedElementId={editorState.selectedElementId}
-                onSelectElement={(elementId) =>
-                  setEditorState((current) => ({ ...current, selectedElementId: elementId }))
-                }
+                selectedElementIds={selectedElementIds}
+                onSelectElement={updateSelection}
                 onToggleVisibility={handleToggleVisibility}
                 onToggleLocked={handleToggleLocked}
                 onDuplicateElement={handleDuplicateElement}
@@ -967,33 +1279,38 @@ export function TemplateDraftEditor(props: TemplateDraftEditorProps) {
             ) : null}
           </div>
         </aside>
-
+      }
+      canvasWorkspace={
         <div className="sticky top-[7.5rem] h-[calc(100vh-8.25rem)] min-h-0">
           <CanvasEditor
             document={document}
             payload={previewPayload}
             editorState={editorState}
-            selectedElementId={editorState.selectedElementId}
-            onSelectElement={(elementId) =>
-              setEditorState((current) => ({ ...current, selectedElementId: elementId }))
-            }
+            selectedElementIds={selectedElementIds}
+            primarySelectedElementId={primarySelectedElementId}
+            onChangeSelection={updateSelection}
             onUpdateElement={updateElement}
             onUpdateEditorState={updateEditorState}
             onBeginHistoryAction={pushHistorySnapshot}
             onChangeVisualPreset={updateVisualPreset}
+            cropModeElementId={cropModeElementId}
+            onSetImageFrameFocalPoint={handleSetImageFrameFocalPoint}
           />
         </div>
-
+      }
+      inspectorWorkspace={
         <div className="sticky top-[7.5rem] h-[calc(100vh-8.25rem)] min-h-0">
           <InspectorPanel
             document={document}
             selectedElement={selectedElement}
+            selectionCount={selectedElementIds.length}
             currentPreset={visualPreset}
             onUpdateDocument={applyDocumentUpdate}
             onUpdateElement={updateElement}
           />
         </div>
-
+      }
+      validationWorkspace={
         <div className="sticky top-[7.5rem] h-[calc(100vh-8.25rem)] min-h-0">
           <ValidationSidebar
             document={document}
@@ -1003,8 +1320,8 @@ export function TemplateDraftEditor(props: TemplateDraftEditorProps) {
             onUpdateDocument={applyDocumentUpdate}
           />
         </div>
-      </div>
-    </div>
+      }
+    />
   );
 }
 
@@ -1224,40 +1541,70 @@ function SidebarTabButton(props: {
 
 function QuickControlBar(props: {
   document: RuntimeTemplateDocument;
-  selectedElement: RuntimeTemplateElement | null;
+  selectedElements: RuntimeTemplateElement[];
+  primarySelectedElementId: string | null;
   onUpdateDocument: (updater: (document: RuntimeTemplateDocument) => RuntimeTemplateDocument) => void;
   onUpdateElement: (
     elementId: string,
     updater: (element: RuntimeTemplateElement) => RuntimeTemplateElement,
   ) => void;
-  onDeleteElement: (elementId: string) => void;
-  onDuplicateElement: (elementId: string) => void;
-  onBringForward: (elementId: string) => void;
-  onSendBackward: (elementId: string) => void;
-  onToggleVisibility: (elementId: string) => void;
-  onToggleLocked: (elementId: string) => void;
+  onDeleteElements: (elementIds: string[]) => void;
+  onDuplicateElements: (elementIds: string[]) => void;
+  onBringForward: (elementIds: string[]) => void;
+  onSendBackward: (elementIds: string[]) => void;
+  onToggleVisibility: (elementIds: string[]) => void;
+  onToggleLocked: (elementIds: string[]) => void;
+  onGroupSelection: () => void;
+  onUngroupSelection: () => void;
+  onAlignSelection: (mode: "left" | "center" | "right" | "top" | "middle" | "bottom") => void;
+  onDistributeSelection: (axis: "horizontal" | "vertical") => void;
+  cropModeElementId: string | null;
+  onToggleCropMode: (elementId: string) => void;
+  onResetImageFrameCrop: () => void;
+  onSetImageFrameFocalPoint: (elementId: string, point: { x: number; y: number }) => void;
 }) {
   const {
     document,
-    selectedElement,
+    selectedElements,
+    primarySelectedElementId,
     onUpdateDocument,
     onUpdateElement,
-    onDeleteElement,
-    onDuplicateElement,
+    onDeleteElements,
+    onDuplicateElements,
     onBringForward,
     onSendBackward,
     onToggleVisibility,
     onToggleLocked,
+    onGroupSelection,
+    onUngroupSelection,
+    onAlignSelection,
+    onDistributeSelection,
+    cropModeElementId,
+    onToggleCropMode,
+    onResetImageFrameCrop,
+    onSetImageFrameFocalPoint,
   } = props;
   const [showGeometry, setShowGeometry] = useState(false);
+  const selectedElementIds = selectedElements.map((element) => element.id);
+  const selectedElement =
+    selectedElements.length === 1
+      ? selectedElements[0]
+      : selectedElements.find((element) => element.id === primarySelectedElementId) ?? null;
+  const hasSelection = selectedElements.length > 0;
+  const allVisible = hasSelection && selectedElements.every((element) => element.visible);
+  const allLocked = hasSelection && selectedElements.every((element) => element.locked);
+  const groupedIds = new Set(
+    selectedElements.map((element) => element.groupId).filter((value): value is string => Boolean(value)),
+  );
+  const canUngroup = groupedIds.size > 0;
 
-  if (!selectedElement) {
+  if (!hasSelection) {
     return (
-      <div className="space-y-2">
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="shrink-0">
           <MetaChip>Document</MetaChip>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex min-w-0 flex-1 flex-wrap gap-2">
           <CompactNumberField
             label="Inset"
             value={document.canvas.safeInset}
@@ -1319,6 +1666,57 @@ function QuickControlBar(props: {
     );
   }
 
+  if (selectedElements.length > 1) {
+    return (
+      <div className="space-y-2">
+        <div className="overflow-x-auto">
+          <div className="flex min-w-max items-center gap-2">
+            <MetaChip>{`${selectedElements.length} selected`}</MetaChip>
+            {canUngroup ? <MetaChip>{`${groupedIds.size} group${groupedIds.size === 1 ? "" : "s"}`}</MetaChip> : null}
+            <div className="flex items-center gap-2 rounded-full border border-[color:color-mix(in_srgb,var(--dashboard-accent)_16%,var(--dashboard-line))] bg-[color:color-mix(in_srgb,var(--dashboard-accent)_7%,white)] px-2 py-1">
+              <ToolbarActionButton icon={<DuplicateIcon />} label="Duplicate" onClick={() => onDuplicateElements(selectedElementIds)} accent />
+              <ToolbarActionButton icon={<BringForwardIcon />} label="Front" onClick={() => onBringForward(selectedElementIds)} accent />
+              <ToolbarActionButton icon={<SendBackwardIcon />} label="Back" onClick={() => onSendBackward(selectedElementIds)} accent />
+              <ToolbarActionButton
+                icon={allVisible ? <HideIcon /> : <ShowIcon />}
+                label={allVisible ? "Hide" : "Show"}
+                onClick={() => onToggleVisibility(selectedElementIds)}
+                accent
+              />
+              <ToolbarActionButton
+                icon={allLocked ? <UnlockIcon /> : <LockIcon />}
+                label={allLocked ? "Unlock" : "Lock"}
+                onClick={() => onToggleLocked(selectedElementIds)}
+                accent
+              />
+              <ToolbarActionButton label="Delete" icon={<DeleteIcon />} destructive onClick={() => onDeleteElements(selectedElementIds)} />
+            </div>
+            <div className="flex items-center gap-2 rounded-full border border-[color:color-mix(in_srgb,var(--dashboard-accent)_16%,var(--dashboard-line))] bg-[color:color-mix(in_srgb,var(--dashboard-accent)_7%,white)] px-2 py-1">
+              <ToolbarActionButton label="Group" onClick={onGroupSelection} accent />
+              <ToolbarActionButton label="Ungroup" onClick={onUngroupSelection} disabled={!canUngroup} accent />
+            </div>
+            <div className="flex items-center gap-2 rounded-full border border-[color:color-mix(in_srgb,var(--dashboard-accent)_16%,var(--dashboard-line))] bg-[color:color-mix(in_srgb,var(--dashboard-accent)_7%,white)] px-2 py-1">
+              <ToolbarActionButton label="Left" onClick={() => onAlignSelection("left")} accent />
+              <ToolbarActionButton label="Center" onClick={() => onAlignSelection("center")} accent />
+              <ToolbarActionButton label="Right" onClick={() => onAlignSelection("right")} accent />
+              <ToolbarActionButton label="Top" onClick={() => onAlignSelection("top")} accent />
+              <ToolbarActionButton label="Middle" onClick={() => onAlignSelection("middle")} accent />
+              <ToolbarActionButton label="Bottom" onClick={() => onAlignSelection("bottom")} accent />
+            </div>
+            <div className="flex items-center gap-2 rounded-full border border-[color:color-mix(in_srgb,var(--dashboard-accent)_16%,var(--dashboard-line))] bg-[color:color-mix(in_srgb,var(--dashboard-accent)_7%,white)] px-2 py-1">
+              <ToolbarActionButton label="Distribute X" onClick={() => onDistributeSelection("horizontal")} accent />
+              <ToolbarActionButton label="Distribute Y" onClick={() => onDistributeSelection("vertical")} accent />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!selectedElement) {
+    return null;
+  }
+
   return (
     <div className="space-y-2">
       <div className="overflow-x-auto">
@@ -1344,29 +1742,82 @@ function QuickControlBar(props: {
             </button>
           </div>
           <div className="flex items-center gap-2 rounded-full border border-[color:color-mix(in_srgb,var(--dashboard-accent)_16%,var(--dashboard-line))] bg-[color:color-mix(in_srgb,var(--dashboard-accent)_7%,white)] px-2 py-1">
-          <ToolbarActionButton icon={<DuplicateIcon />} label="Duplicate" onClick={() => onDuplicateElement(selectedElement.id)} accent />
-          <ToolbarActionButton icon={<BringForwardIcon />} label="Front" onClick={() => onBringForward(selectedElement.id)} accent />
-          <ToolbarActionButton icon={<SendBackwardIcon />} label="Back" onClick={() => onSendBackward(selectedElement.id)} accent />
+          <ToolbarActionButton icon={<DuplicateIcon />} label="Duplicate" onClick={() => onDuplicateElements(selectedElementIds)} accent />
+          <ToolbarActionButton icon={<BringForwardIcon />} label="Front" onClick={() => onBringForward(selectedElementIds)} accent />
+          <ToolbarActionButton icon={<SendBackwardIcon />} label="Back" onClick={() => onSendBackward(selectedElementIds)} accent />
           <ToolbarActionButton
             icon={selectedElement.visible ? <HideIcon /> : <ShowIcon />}
             label={selectedElement.visible ? "Hide" : "Show"}
-            onClick={() => onToggleVisibility(selectedElement.id)}
+            onClick={() => onToggleVisibility(selectedElementIds)}
             accent
           />
           <ToolbarActionButton
             icon={selectedElement.locked ? <UnlockIcon /> : <LockIcon />}
             label={selectedElement.locked ? "Unlock" : "Lock"}
-            onClick={() => onToggleLocked(selectedElement.id)}
+            onClick={() => onToggleLocked(selectedElementIds)}
             accent
           />
           <ToolbarActionButton
             label="Delete"
             icon={<DeleteIcon />}
             destructive
-            onClick={() => onDeleteElement(selectedElement.id)}
+            onClick={() => onDeleteElements(selectedElementIds)}
           />
           </div>
           {renderQuickBindingFields(selectedElement, onUpdateElement)}
+          {selectedElement.type === "imageFrame" ? (
+            <div className="flex items-center gap-2 rounded-full border border-[color:color-mix(in_srgb,var(--dashboard-accent)_16%,var(--dashboard-line))] bg-[color:color-mix(in_srgb,var(--dashboard-accent)_7%,white)] px-2 py-1">
+              <CompactSelectField
+                label="Fit"
+                value={selectedElement.fitMode}
+                options={runtimeTemplateImageFitModeValues}
+                onChange={(value) =>
+                  onUpdateElement(selectedElement.id, (element) => ({
+                    ...(element as Extract<RuntimeTemplateElement, { type: "imageFrame" }>),
+                    fitMode: value as Extract<RuntimeTemplateElement, { type: "imageFrame" }>["fitMode"],
+                  }))
+                }
+              />
+              <button
+                type="button"
+                onClick={() => onToggleCropMode(selectedElement.id)}
+                className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] ${
+                  cropModeElementId === selectedElement.id
+                    ? "border-[color:color-mix(in_srgb,#0f766e_28%,var(--dashboard-line))] bg-white text-[#0f766e]"
+                    : "border-[color:color-mix(in_srgb,#0f766e_18%,var(--dashboard-line))] bg-[color:color-mix(in_srgb,#0f766e_9%,white)] text-[#0f766e]"
+                }`}
+              >
+                {cropModeElementId === selectedElement.id ? "Done crop" : "Crop image"}
+              </button>
+              <CompactNumberField
+                label="Focus X"
+                value={Number(selectedElement.focalPoint.x.toFixed(2))}
+                minimum={0}
+                maximum={1}
+                step={0.01}
+                onChange={(value) =>
+                  onSetImageFrameFocalPoint(selectedElement.id, {
+                    x: Math.min(Math.max(value, 0), 1),
+                    y: selectedElement.focalPoint.y,
+                  })
+                }
+              />
+              <CompactNumberField
+                label="Focus Y"
+                value={Number(selectedElement.focalPoint.y.toFixed(2))}
+                minimum={0}
+                maximum={1}
+                step={0.01}
+                onChange={(value) =>
+                  onSetImageFrameFocalPoint(selectedElement.id, {
+                    x: selectedElement.focalPoint.x,
+                    y: Math.min(Math.max(value, 0), 1),
+                  })
+                }
+              />
+              <ToolbarActionButton label="Reset crop" onClick={onResetImageFrameCrop} accent />
+            </div>
+          ) : null}
         </div>
       </div>
       {showGeometry ? (
@@ -1755,12 +2206,14 @@ function ToolbarActionButton(props: {
   destructive?: boolean;
   icon?: ReactNode;
   accent?: boolean;
+  disabled?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={props.onClick}
-      className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] ${
+      disabled={props.disabled}
+      className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] disabled:cursor-not-allowed disabled:opacity-50 ${
         props.destructive
           ? "border-[var(--dashboard-danger-border)] bg-[var(--dashboard-danger-soft)] text-[var(--dashboard-danger-ink)]"
           : props.accent
@@ -2126,6 +2579,10 @@ function createRuntimeElement(
         slotIndex: getNextAvailableImageSlot(document),
         shapeKind: "roundedRect",
         fitMode: "cover",
+        focalPoint: {
+          x: 0.5,
+          y: 0.5,
+        },
         styleTokens: {
           fillToken: "surface.secondary",
           borderToken: "border.primary",
@@ -2372,6 +2829,54 @@ function createDuplicatedElement(
     x: Math.min(1080 - element.width, element.x + 24),
     y: Math.min(1920 - element.height, element.y + 24),
     zIndex: (allElements.length + 1) * 10,
+    groupId: undefined,
+  };
+}
+
+function createSelectionState(
+  elementIds: string[],
+  primaryElementId: string | null,
+): ElementSelectionState {
+  const ids = [...new Set(elementIds.filter(Boolean))];
+  const primaryId =
+    primaryElementId && ids.includes(primaryElementId)
+      ? primaryElementId
+      : ids[0] ?? null;
+
+  return {
+    ids,
+    primaryId,
+  };
+}
+
+function createElementGroupId(elements: RuntimeTemplateElement[]) {
+  const existing = new Set(
+    elements
+      .map((element) => element.groupId)
+      .filter((value): value is string => Boolean(value)),
+  );
+
+  let index = existing.size + 1;
+  let candidate = `group-${index}`;
+  while (existing.has(candidate)) {
+    index += 1;
+    candidate = `group-${index}`;
+  }
+
+  return candidate;
+}
+
+function getElementBounds(elements: RuntimeTemplateElement[]) {
+  const left = Math.min(...elements.map((element) => element.x));
+  const top = Math.min(...elements.map((element) => element.y));
+  const right = Math.max(...elements.map((element) => element.x + element.width));
+  const bottom = Math.max(...elements.map((element) => element.y + element.height));
+
+  return {
+    x: left,
+    y: top,
+    width: right - left,
+    height: bottom - top,
   };
 }
 

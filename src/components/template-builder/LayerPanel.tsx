@@ -4,8 +4,12 @@ import type { RuntimeTemplateElement } from "@/lib/runtime-templates/schema";
 
 type LayerPanelProps = {
   elements: RuntimeTemplateElement[];
-  selectedElementId: string | null;
-  onSelectElement: (elementId: string) => void;
+  selectedElementIds: string[];
+  onSelectElement: (
+    elementIds: string[],
+    primaryElementId: string | null,
+    options?: { persistPrimary?: boolean },
+  ) => void;
   onToggleVisibility: (elementId: string) => void;
   onToggleLocked: (elementId: string) => void;
   onDuplicateElement: (elementId: string) => void;
@@ -17,7 +21,7 @@ type LayerPanelProps = {
 export function LayerPanel(props: LayerPanelProps) {
   const {
     elements,
-    selectedElementId,
+    selectedElementIds,
     onSelectElement,
     onToggleVisibility,
     onToggleLocked,
@@ -41,7 +45,7 @@ export function LayerPanel(props: LayerPanelProps) {
       </div>
       <div className="mt-3 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
         {layers.map((element) => {
-          const selected = element.id === selectedElementId;
+          const selected = selectedElementIds.includes(element.id);
           return (
             <div
               key={element.id}
@@ -53,7 +57,19 @@ export function LayerPanel(props: LayerPanelProps) {
             >
               <button
                 type="button"
-                onClick={() => onSelectElement(element.id)}
+                onClick={(event) =>
+                  onSelectElement(
+                    event.shiftKey || event.metaKey || event.ctrlKey
+                      ? selected
+                        ? selectedElementIds.filter((id) => id !== element.id)
+                        : [...selectedElementIds, element.id]
+                      : [element.id],
+                    event.shiftKey || event.metaKey || event.ctrlKey
+                      ? element.id
+                      : element.id,
+                    { persistPrimary: true },
+                  )
+                }
                 className="w-full text-left"
               >
                 <p className="text-sm font-semibold text-[var(--dashboard-text)]">{element.name}</p>

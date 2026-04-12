@@ -25,13 +25,24 @@ type ResizeHandle =
   | "w"
   | "nw";
 
+type SelectionChangeOptions = {
+  additive?: boolean;
+  preferGroup?: boolean;
+};
+
 type UseCanvasInteractionsOptions = {
   zoom: number;
   canvasWidth: number;
   canvasHeight: number;
   safeInset: number;
   showGuides: boolean;
-  onSelectElement: (elementId: string | null) => void;
+  elements: RuntimeTemplateElement[];
+  selectedElementIds: string[];
+  onChangeSelection: (
+    elementIds: string[],
+    primaryElementId: string | null,
+    options?: { persistPrimary?: boolean },
+  ) => void;
   onUpdateElement: (
     elementId: string,
     updater: (element: RuntimeTemplateElement) => RuntimeTemplateElement,
@@ -40,21 +51,52 @@ type UseCanvasInteractionsOptions = {
   onBeginHistoryAction: () => void;
 };
 
-type InteractionState = {
-  mode: "move" | "resize";
-  elementId: string;
-  handle: ResizeHandle | null;
-  originPointer: {
-    x: number;
-    y: number;
-  };
-  originRect: {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  };
-};
+type InteractionState =
+  | {
+      mode: "move";
+      elementIds: string[];
+      originPointer: {
+        x: number;
+        y: number;
+      };
+      originRects: Array<{
+        id: string;
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+      }>;
+      originBounds: {
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+      };
+    }
+  | {
+      mode: "resize";
+      elementId: string;
+      handle: ResizeHandle | null;
+      originPointer: {
+        x: number;
+        y: number;
+      };
+      originRect: {
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+      };
+    }
+  | {
+      mode: "marquee";
+      originPointer: {
+        x: number;
+        y: number;
+      };
+      additive: boolean;
+      baselineSelection: string[];
+    };
 
 const SNAP_TOLERANCE = 12;
 const MIN_ELEMENT_SIZE = 24;
@@ -66,13 +108,21 @@ export function useCanvasInteractions(options: UseCanvasInteractionsOptions) {
     canvasHeight,
     safeInset,
     showGuides,
-    onSelectElement,
+    elements,
+    selectedElementIds,
+    onChangeSelection,
     onUpdateElement,
     onBeginHistoryAction,
   } = options;
   const stageRef = useRef<HTMLDivElement | null>(null);
   const interactionRef = useRef<InteractionState | null>(null);
   const [guides, setGuides] = useState<CanvasGuide[]>([]);
+  const [marqueeRect, setMarqueeRect] = useState<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null>(null);
 
   const getCanvasPoint = useCallback(
     (event: PointerEvent | ReactPointerEvent<HTMLElement>) => {
@@ -90,6 +140,43 @@ export function useCanvasInteractions(options: UseCanvasInteractionsOptions) {
     [canvasHeight, canvasWidth, zoom],
   );
 
+  const changeSelection = useCallback(
+    (elementId: string | null, selectionOptions?: SelectionChangeOptions) => {
+      if (!elementId) {
+        onChangeSelection([], null, { persistPrimary: true });
+        return;
+      }
+
+      const target = elements.find((element) => element.id === elementId);
+      if (!target) {
+        return;
+      }
+
+      const targetIds =
+        selectionOptions?.preferGroup && target.groupId
+          ? elements
+              .filter(
+                (element) => element.visible && element.groupId === target.groupId,
+              )
+              .map((element) => element.id)
+          : [target.id];
+
+      if (selectionOptions?.additive) {
+        const existing = new Set(selectedElementIds);
+        const everySelected = targetIds.every((id) => existing.has(id));
+        const next = everySelected
+          ? selectedElementIds.filter((id) => !targetIds.includes(id))
+          : [...selectedElementIds, ...targetIds.filter((id) => !existing.has(id))];
+        const nextPrimary = next.includes(target.id) ? target.id : next[0] ?? null;
+        onChangeSelection(next, nextPrimary, { persistPrimary: true });
+        return;
+      }
+
+      onChangeSelection(targetIds, target.id, { persistPrimary: true });
+    },
+    [elements, onChangeSelection, selectedElementIds],
+  );
+
   const commitInteraction = useCallback(
     (event: PointerEvent) => {
       const interaction = interactionRef.current;
@@ -98,8 +185,66 @@ export function useCanvasInteractions(options: UseCanvasInteractionsOptions) {
       }
 
       const point = getCanvasPoint(event);
+      if (interaction.mode === "marquee") {
+        const nextRect = normalizeRect(interaction.originPointer, point);
+        setMarqueeRect(nextRect);
+        const hitIds = expandSelectionForGroups(
+          elements
+            .filter((element) => element.visible)
+            .filter((element) =>
+              rectsIntersect(nextRect, {
+                x: element.x,
+                y: element.y,
+                width: element.width,
+                height: element.height,
+              }),
+            )
+            .map((element) => element.id),
+          elements,
+        );
+        const nextSelection = interaction.additive
+          ? unionSelection(interaction.baselineSelection, hitIds)
+          : hitIds;
+        onChangeSelection(nextSelection, nextSelection[0] ?? null, {
+          persistPrimary: false,
+        });
+        return;
+      }
+
       const deltaX = point.x - interaction.originPointer.x;
       const deltaY = point.y - interaction.originPointer.y;
+
+      if (interaction.mode === "move") {
+        const movedBounds = {
+          x: interaction.originBounds.x + deltaX,
+          y: interaction.originBounds.y + deltaY,
+          width: interaction.originBounds.width,
+          height: interaction.originBounds.height,
+        };
+        const snapped = applySnapGuides({
+          rect: movedBounds,
+          canvasWidth,
+          canvasHeight,
+          safeInset,
+          enabled: showGuides,
+        });
+        setGuides(snapped.guides);
+        const offsetX = snapped.rect.x - interaction.originBounds.x;
+        const offsetY = snapped.rect.y - interaction.originBounds.y;
+        interaction.originRects.forEach((entry) => {
+          onUpdateElement(
+            entry.id,
+            (element) => ({
+              ...element,
+              x: entry.x + offsetX,
+              y: entry.y + offsetY,
+            }),
+            { recordHistory: false },
+          );
+        });
+        return;
+      }
+
       const nextRect = resolveNextRect({
         interaction,
         deltaX,
@@ -114,20 +259,34 @@ export function useCanvasInteractions(options: UseCanvasInteractionsOptions) {
       });
 
       setGuides(snapped.guides);
-      onUpdateElement(interaction.elementId, (element) => ({
-        ...element,
-        x: snapped.rect.x,
-        y: snapped.rect.y,
-        width: snapped.rect.width,
-        height: snapped.rect.height,
-      }), { recordHistory: false });
+      onUpdateElement(
+        interaction.elementId,
+        (element) => ({
+          ...element,
+          x: snapped.rect.x,
+          y: snapped.rect.y,
+          width: snapped.rect.width,
+          height: snapped.rect.height,
+        }),
+        { recordHistory: false },
+      );
     },
-    [canvasHeight, canvasWidth, getCanvasPoint, onUpdateElement, safeInset, showGuides],
+    [
+      canvasHeight,
+      canvasWidth,
+      elements,
+      getCanvasPoint,
+      onChangeSelection,
+      onUpdateElement,
+      safeInset,
+      showGuides,
+    ],
   );
 
   const stopInteraction = useCallback(() => {
     interactionRef.current = null;
     setGuides([]);
+    setMarqueeRect(null);
   }, []);
 
   useEffect(() => {
@@ -155,29 +314,58 @@ export function useCanvasInteractions(options: UseCanvasInteractionsOptions) {
 
   const beginMove = useCallback(
     (event: ReactPointerEvent<HTMLElement>, element: RuntimeTemplateElement) => {
-      if (element.locked) {
-        onSelectElement(element.id);
+      if (event.shiftKey || event.metaKey || event.ctrlKey) {
+        event.preventDefault();
+        event.stopPropagation();
+        changeSelection(element.id, { additive: true, preferGroup: true });
         return;
       }
 
+      const nextSelectionIds =
+        selectedElementIds.includes(element.id)
+          ? selectedElementIds
+          : getSelectionIdsForElement(element, elements);
+      const movableIds = nextSelectionIds.filter((id) => {
+        const current = elements.find((entry) => entry.id === id);
+        return current && !current.locked;
+      });
+
       event.preventDefault();
       event.stopPropagation();
-      onSelectElement(element.id);
+      onChangeSelection(nextSelectionIds, element.id, { persistPrimary: true });
+
+      if (element.locked || movableIds.length === 0) {
+        return;
+      }
+
+      const originRects = movableIds
+        .map((id) => elements.find((entry) => entry.id === id))
+        .filter((entry): entry is RuntimeTemplateElement => Boolean(entry))
+        .map((entry) => ({
+          id: entry.id,
+          x: entry.x,
+          y: entry.y,
+          width: entry.width,
+          height: entry.height,
+        }));
+
       onBeginHistoryAction();
       interactionRef.current = {
         mode: "move",
-        elementId: element.id,
-        handle: null,
+        elementIds: movableIds,
         originPointer: getCanvasPoint(event),
-        originRect: {
-          x: element.x,
-          y: element.y,
-          width: element.width,
-          height: element.height,
-        },
+        originRects,
+        originBounds: getSelectionBounds(originRects),
       };
     },
-    [getCanvasPoint, onBeginHistoryAction, onSelectElement],
+    [
+      changeSelection,
+      elements,
+      getCanvasPoint,
+      onBeginHistoryAction,
+      onChangeSelection,
+      selectedElementIds,
+    ],
   );
 
   const beginResize = useCallback(
@@ -187,13 +375,13 @@ export function useCanvasInteractions(options: UseCanvasInteractionsOptions) {
       handle: ResizeHandle,
     ) => {
       if (element.locked) {
-        onSelectElement(element.id);
+        changeSelection(element.id, { preferGroup: true });
         return;
       }
 
       event.preventDefault();
       event.stopPropagation();
-      onSelectElement(element.id);
+      onChangeSelection([element.id], element.id, { persistPrimary: true });
       onBeginHistoryAction();
       interactionRef.current = {
         mode: "resize",
@@ -208,39 +396,57 @@ export function useCanvasInteractions(options: UseCanvasInteractionsOptions) {
         },
       };
     },
-    [getCanvasPoint, onBeginHistoryAction, onSelectElement],
+    [changeSelection, getCanvasPoint, onBeginHistoryAction, onChangeSelection],
+  );
+
+  const beginMarquee = useCallback(
+    (event: ReactPointerEvent<HTMLElement>) => {
+      event.preventDefault();
+      const additive = event.shiftKey || event.metaKey || event.ctrlKey;
+      const origin = getCanvasPoint(event);
+      interactionRef.current = {
+        mode: "marquee",
+        originPointer: origin,
+        additive,
+        baselineSelection: additive ? selectedElementIds : [],
+      };
+      setMarqueeRect({
+        x: origin.x,
+        y: origin.y,
+        width: 0,
+        height: 0,
+      });
+      if (!additive) {
+        onChangeSelection([], null, { persistPrimary: false });
+      }
+    },
+    [getCanvasPoint, onChangeSelection, selectedElementIds],
   );
 
   const clearSelection = useCallback(() => {
-    onSelectElement(null);
+    onChangeSelection([], null, { persistPrimary: true });
     stopInteraction();
-  }, [onSelectElement, stopInteraction]);
+  }, [onChangeSelection, stopInteraction]);
 
   return {
     stageRef,
     guides,
+    marqueeRect,
     beginMove,
     beginResize,
+    beginMarquee,
     clearSelection,
+    changeSelection,
   };
 }
 
 function resolveNextRect(input: {
-  interaction: InteractionState;
+  interaction: Extract<InteractionState, { mode: "resize" }>;
   deltaX: number;
   deltaY: number;
 }) {
   const { interaction, deltaX, deltaY } = input;
   const { originRect } = interaction;
-
-  if (interaction.mode === "move") {
-    return {
-      x: originRect.x + deltaX,
-      y: originRect.y + deltaY,
-      width: originRect.width,
-      height: originRect.height,
-    };
-  }
 
   const handle = interaction.handle ?? "se";
   let x = originRect.x;
@@ -404,6 +610,82 @@ function boundRect(
     y: clamp(rect.y, 0, Math.max(0, canvasHeight - rect.height)),
     width: clamp(rect.width, MIN_ELEMENT_SIZE, canvasWidth),
     height: clamp(rect.height, MIN_ELEMENT_SIZE, canvasHeight),
+  };
+}
+
+function getSelectionBounds(
+  rects: Array<{ x: number; y: number; width: number; height: number }>,
+) {
+  const left = Math.min(...rects.map((entry) => entry.x));
+  const top = Math.min(...rects.map((entry) => entry.y));
+  const right = Math.max(...rects.map((entry) => entry.x + entry.width));
+  const bottom = Math.max(...rects.map((entry) => entry.y + entry.height));
+  return {
+    x: left,
+    y: top,
+    width: right - left,
+    height: bottom - top,
+  };
+}
+
+function getSelectionIdsForElement(
+  element: RuntimeTemplateElement,
+  elements: RuntimeTemplateElement[],
+) {
+  if (!element.groupId) {
+    return [element.id];
+  }
+  return elements
+    .filter((entry) => entry.visible && entry.groupId === element.groupId)
+    .map((entry) => entry.id);
+}
+
+function unionSelection(left: string[], right: string[]) {
+  return [...new Set([...left, ...right])];
+}
+
+function expandSelectionForGroups(
+  elementIds: string[],
+  elements: RuntimeTemplateElement[],
+) {
+  const initial = new Set(elementIds);
+  const groupIds = new Set(
+    elements
+      .filter((entry) => initial.has(entry.id))
+      .map((entry) => entry.groupId)
+      .filter((value): value is string => Boolean(value)),
+  );
+  if (groupIds.size === 0) {
+    return elementIds;
+  }
+  return elements
+    .filter(
+      (entry) => initial.has(entry.id) || (entry.visible && entry.groupId && groupIds.has(entry.groupId)),
+    )
+    .map((entry) => entry.id);
+}
+
+function rectsIntersect(
+  left: { x: number; y: number; width: number; height: number },
+  right: { x: number; y: number; width: number; height: number },
+) {
+  return !(
+    left.x + left.width < right.x ||
+    right.x + right.width < left.x ||
+    left.y + left.height < right.y ||
+    right.y + right.height < left.y
+  );
+}
+
+function normalizeRect(
+  origin: { x: number; y: number },
+  point: { x: number; y: number },
+) {
+  return {
+    x: Math.min(origin.x, point.x),
+    y: Math.min(origin.y, point.y),
+    width: Math.abs(point.x - origin.x),
+    height: Math.abs(point.y - origin.y),
   };
 }
 

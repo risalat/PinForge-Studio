@@ -65,6 +65,12 @@ const elementBaseSchema = z.object({
     .min(1)
     .regex(/^[a-z0-9-]+$/),
   name: z.string().trim().min(1),
+  groupId: z
+    .string()
+    .trim()
+    .min(1)
+    .regex(/^[a-z0-9-]+$/)
+    .optional(),
   ...layoutRectSchema.shape,
 });
 
@@ -105,6 +111,15 @@ const imageFrameElementSchema = elementBaseSchema.extend({
   slotIndex: z.number().int().min(0).max(24),
   shapeKind: z.enum(runtimeTemplateShapeKindValues).default("roundedRect"),
   fitMode: z.enum(runtimeTemplateImageFitModeValues).default("cover"),
+  focalPoint: z
+    .object({
+      x: finiteNumber.min(0).max(1).default(0.5),
+      y: finiteNumber.min(0).max(1).default(0.5),
+    })
+    .default({
+      x: 0.5,
+      y: 0.5,
+    }),
   styleTokens: z.object({
     fillToken: z.enum(runtimeTemplateFillTokenValues).optional(),
     borderToken: z.enum(runtimeTemplateBorderTokenValues).optional(),

@@ -26,6 +26,9 @@ export default async function RuntimeTemplateEditPage({
   params,
   searchParams,
 }: RuntimeTemplateEditPageProps) {
+  // Route note for the editor roadmap:
+  // this page is the current runtime-template editor entry point and renders
+  // inside DashboardLayout -> DashboardShell in editor workspace mode.
   await requireAuthenticatedDashboardUser();
   const user = await getOrCreateDashboardUser();
   const { templateId } = await params;
