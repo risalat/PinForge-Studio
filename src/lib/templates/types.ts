@@ -36,6 +36,10 @@ export const templateVisualPresets = [
   "espresso-cherry",
   "citrus-mint",
   "plum-fig",
+  "scarlet-vanilla",
+  "crimson-custard",
+  "ember-clementine",
+  "garnet-biscuit",
 ] as const;
 
 export const templateVisualPresetCategories = [
