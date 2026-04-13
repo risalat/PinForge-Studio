@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
 import { isDatabaseConfigured } from "@/lib/env";
 import { finalizeRuntimeTemplateVersionForUser } from "@/lib/runtime-templates/db";
+import { enqueueTemplateQaPackForUser } from "@/lib/template-qa/db";
 
 export const runtime = "nodejs";
 
@@ -30,6 +31,11 @@ export async function POST(request: Request, { params }: RouteProps) {
       templateId,
       versionId: payload.versionId,
     });
+    await enqueueTemplateQaPackForUser({
+      userId: user.id,
+      templateId,
+      versionId: payload.versionId,
+    }).catch(() => null);
 
     return NextResponse.json({
       ok: true,

@@ -1,0 +1,4 @@
+ALTER TYPE "BackgroundTaskKind" ADD VALUE IF NOT EXISTS 'GENERATE_TEMPLATE_QA';
+
+ALTER TABLE "TemplateVersion"
+ADD COLUMN "qaArtifactJson" JSONB;

@@ -2,9 +2,15 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
 import { requireAuthenticatedDashboardUser } from "@/lib/auth/dashboardSession";
+import { generateTemplateQaPackAction } from "@/app/dashboard/templates/actions";
 import { getTemplateWithVersionsForUser } from "@/lib/runtime-templates/db";
 import { renderRuntimeTemplate } from "@/lib/runtime-templates/renderRuntimeTemplate";
 import { getSampleRuntimeTemplateRenderProps } from "@/lib/runtime-templates/sampleData";
+import { getTemplateVersionAnalyticsForUser } from "@/lib/template-analytics/db";
+import {
+  getTemplateQaReviewForUser,
+  type TemplateQaArtifactEntry,
+} from "@/lib/template-qa/db";
 import { templateVisualPresets, type TemplateVisualPresetId } from "@/lib/templates/types";
 
 const PREVIEW_WIDTH = 420;
@@ -30,11 +36,17 @@ export default async function RuntimeTemplatePreviewPage({
   const user = await getOrCreateDashboardUser();
   const { templateId } = await params;
   const { preset, versionId, compareVersionId } = await searchParams;
-  const template = await getTemplateWithVersionsForUser({
-    userId: user.id,
-    templateId,
-    versionId: versionId ?? null,
-  });
+  const [template, versionAnalytics] = await Promise.all([
+    getTemplateWithVersionsForUser({
+      userId: user.id,
+      templateId,
+      versionId: versionId ?? null,
+    }),
+    getTemplateVersionAnalyticsForUser({
+      userId: user.id,
+      templateId,
+    }),
+  ]);
 
   if (!template?.selectedVersion) {
     notFound();
@@ -68,6 +80,11 @@ export default async function RuntimeTemplatePreviewPage({
   };
 
   const version = template.selectedVersion;
+  const qaReview = await getTemplateQaReviewForUser({
+    userId: user.id,
+    templateId,
+    versionId: version.id,
+  });
   const compareVersion =
     compareVersionId && compareVersionId !== version.id
       ? template.versions.find((entry) => entry.id === compareVersionId) ?? null
@@ -85,6 +102,24 @@ export default async function RuntimeTemplatePreviewPage({
   const preferredCompareVersion =
     compareVersion ??
     getPreferredCompareVersion(template.versions, version.id, version.lifecycleStatus);
+  const qaManifest = qaReview?.manifest ?? null;
+  const qaTask = qaReview?.task ?? null;
+  const qaStateLabel = qaTask
+    ? qaTask.status === "RUNNING" || qaTask.status === "QUEUED"
+      ? "QA generating"
+      : qaTask.status === "FAILED"
+        ? "QA failed"
+        : qaManifest
+          ? qaManifest.failedCaptureCount > 0
+            ? "QA partial"
+            : "QA ready"
+          : "QA queued"
+    : qaManifest
+      ? qaManifest.failedCaptureCount > 0
+        ? "QA partial"
+        : "QA ready"
+      : "No QA pack";
+  const returnTo = `/dashboard/templates/${template.id}/preview?versionId=${version.id}${compareVersion ? `&compareVersionId=${compareVersion.id}` : ""}${preset ? `&preset=${preset}` : ""}`;
 
   return (
     <div className="space-y-6 text-[var(--dashboard-text)]">
@@ -166,6 +201,20 @@ export default async function RuntimeTemplatePreviewPage({
                 Compare versions
               </Link>
             ) : null}
+            {version.lifecycleStatus === "FINALIZED" ? (
+              <form action={generateTemplateQaPackAction}>
+                <input type="hidden" name="templateId" value={template.id} />
+                <input type="hidden" name="versionId" value={version.id} />
+                <input type="hidden" name="preset" value={preset ?? ""} />
+                <input type="hidden" name="returnTo" value={returnTo} />
+                <button
+                  type="submit"
+                  className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-5 py-3 text-sm font-semibold text-[var(--dashboard-subtle)]"
+                >
+                  {qaManifest ? "Refresh QA pack" : "Generate QA pack"}
+                </button>
+              </form>
+            ) : null}
           </div>
         </div>
       </section>
@@ -211,6 +260,7 @@ export default async function RuntimeTemplatePreviewPage({
               {template.versions.map((entry) => {
                 const isSelected = entry.id === version.id;
                 const isCompared = entry.id === compareVersion?.id;
+                const analytics = versionAnalytics.find((item) => item.versionId === entry.id) ?? null;
 
                 return (
                   <div
@@ -228,6 +278,7 @@ export default async function RuntimeTemplatePreviewPage({
                         <span>v{entry.versionNumber}</span>
                         <span>{entry.lifecycleStatus}</span>
                         {entry.id === template.activeVersion?.id ? <span>Active</span> : null}
+                        {entry.qaArtifactJson ? <span>QA pack</span> : null}
                       </div>
                       <div className="flex flex-wrap gap-2">
                         <Link
@@ -246,10 +297,114 @@ export default async function RuntimeTemplatePreviewPage({
                         ) : null}
                       </div>
                     </div>
+                    {analytics ? (
+                      <div className="mt-2 flex flex-wrap gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-muted)]">
+                        <span className="rounded-full bg-[var(--dashboard-panel-strong)] px-2.5 py-1">
+                          {analytics.planCount} plans
+                        </span>
+                        <span className="rounded-full bg-[var(--dashboard-panel-strong)] px-2.5 py-1">
+                          {analytics.generatedPinCount} pins
+                        </span>
+                        <span className="rounded-full bg-[var(--dashboard-panel-strong)] px-2.5 py-1">
+                          {analytics.publishedCount} published
+                        </span>
+                      </div>
+                    ) : null}
                   </div>
                 );
               })}
             </div>
+          </div>
+
+          <div className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-5 shadow-[var(--dashboard-shadow-sm)]">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
+                Release confidence
+              </p>
+              <span className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-subtle)]">
+                {qaStateLabel}
+              </span>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-muted)]">
+              <span className="rounded-full bg-[var(--dashboard-panel)] px-2.5 py-1">
+                {validation?.blockingErrorCount ?? 0} blockers
+              </span>
+              <span className="rounded-full bg-[var(--dashboard-panel)] px-2.5 py-1">
+                {validation?.warnings?.length ?? 0} warnings
+              </span>
+              <span className="rounded-full bg-[var(--dashboard-panel)] px-2.5 py-1">
+                {qaManifest?.matrixCount ?? 0} presets
+              </span>
+              <span className="rounded-full bg-[var(--dashboard-panel)] px-2.5 py-1">
+                {qaManifest?.stressCaseCount ?? 0} stress cases
+              </span>
+              <span className="rounded-full bg-[var(--dashboard-panel)] px-2.5 py-1">
+                {qaManifest?.failedCaptureCount ?? 0} failed captures
+              </span>
+            </div>
+            {qaTask && (qaTask.status === "QUEUED" || qaTask.status === "RUNNING") ? (
+              <p className="mt-3 text-xs leading-5 text-[var(--dashboard-muted)]">
+                QA pack generation is running in the background. Refresh this page after it completes.
+              </p>
+            ) : null}
+            {qaTask?.status === "FAILED" ? (
+              <p className="mt-3 text-xs leading-5 text-[#8d4f43]">
+                {qaTask.lastError || "QA generation failed."}
+              </p>
+            ) : null}
+            {!qaManifest ? (
+              <p className="mt-3 text-xs leading-5 text-[var(--dashboard-muted)]">
+                No stored QA screenshots yet for this version.
+              </p>
+            ) : (
+              <div className="mt-4 space-y-4">
+                {qaManifest.compareEntry ? (
+                  <details open className="rounded-[18px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-3">
+                    <summary className="cursor-pointer list-none text-sm font-semibold text-[var(--dashboard-text)]">
+                      Compare screenshots
+                    </summary>
+                    <div className="mt-3 grid gap-3">
+                      <QaImageLink href={qaManifest.compareEntry.previewUrl} label="Preview screenshot" />
+                      <QaImageLink href={qaManifest.compareEntry.renderUrl} label="Render screenshot" />
+                    </div>
+                  </details>
+                ) : null}
+                <details className="rounded-[18px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-3">
+                  <summary className="cursor-pointer list-none text-sm font-semibold text-[var(--dashboard-text)]">
+                    Preset matrix previews
+                  </summary>
+                  <div className="mt-3 space-y-3">
+                    {qaManifest.presetMatrix.map((entry) => (
+                      <QaPackRow key={entry.id} entry={entry} />
+                    ))}
+                  </div>
+                </details>
+                <details className="rounded-[18px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-3">
+                  <summary className="cursor-pointer list-none text-sm font-semibold text-[var(--dashboard-text)]">
+                    Stress-case screenshot pack
+                  </summary>
+                  <div className="mt-3 space-y-3">
+                    {qaManifest.stressPack.map((entry) => (
+                      <QaPackRow key={entry.id} entry={entry} />
+                    ))}
+                  </div>
+                </details>
+                {qaManifest.failedCaptureCount > 0 ? (
+                  <details className="rounded-[18px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-3">
+                    <summary className="cursor-pointer list-none text-sm font-semibold text-[var(--dashboard-text)]">
+                      Failed-preview diagnostics
+                    </summary>
+                    <ul className="mt-3 space-y-2 text-xs leading-5 text-[#8d4f43]">
+                      {[qaManifest.compareEntry, ...qaManifest.presetMatrix, ...qaManifest.stressPack]
+                        .flatMap((entry) => entry?.diagnostics ?? [])
+                        .map((diagnostic, index) => (
+                          <li key={`${index}-${diagnostic}`}>{diagnostic}</li>
+                        ))}
+                    </ul>
+                  </details>
+                ) : null}
+              </div>
+            )}
           </div>
 
           <div className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-5 shadow-[var(--dashboard-shadow-sm)]">
@@ -315,7 +470,7 @@ export default async function RuntimeTemplatePreviewPage({
               <div>
                 <dt className="font-semibold text-[var(--dashboard-muted)]">Where used</dt>
                 <dd className="mt-1">
-                  {template._count.generationPlans} plan(s) • {template._count.generatedPins} pin(s)
+                  {template._count.generationPlans} plan(s) | {template._count.generatedPins} pin(s)
                 </dd>
               </div>
               {validation?.generatedAt ? (
@@ -375,6 +530,75 @@ function CompareCanvasCard({
         </span>
       </div>
       <PreviewCanvas>{children}</PreviewCanvas>
+    </div>
+  );
+}
+
+function QaImageLink({
+  href,
+  label,
+}: {
+  href: string | null;
+  label: string;
+}) {
+  if (!href) {
+    return (
+      <div className="rounded-[14px] border border-dashed border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-3 py-2 text-xs text-[var(--dashboard-muted)]">
+        {label} unavailable
+      </div>
+    );
+  }
+
+  return (
+    <Link
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className="rounded-[14px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-3 py-2 text-xs font-semibold text-[var(--dashboard-subtle)] transition hover:border-[var(--dashboard-accent-border)] hover:text-[var(--dashboard-accent-strong)]"
+    >
+      {label}
+    </Link>
+  );
+}
+
+function QaPackRow({ entry }: { entry: TemplateQaArtifactEntry }) {
+  return (
+    <div className="rounded-[16px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-[var(--dashboard-text)]">{entry.label}</p>
+          <div className="mt-1 flex flex-wrap gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-muted)]">
+            <span className="rounded-full bg-[var(--dashboard-panel)] px-2.5 py-1">
+              {entry.presetId}
+            </span>
+            {entry.stressCaseLabel ? (
+              <span className="rounded-full bg-[var(--dashboard-panel)] px-2.5 py-1">
+                {entry.stressCaseLabel}
+              </span>
+            ) : null}
+            <span
+              className={`rounded-full px-2.5 py-1 ${
+                entry.status === "ready"
+                  ? "bg-[#e8f4ea] text-[#2e6f45]"
+                  : "bg-[#f7e8e5] text-[#8d4f43]"
+              }`}
+            >
+              {entry.status}
+            </span>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <QaImageLink href={entry.previewUrl} label="Preview" />
+          <QaImageLink href={entry.renderUrl} label="Render" />
+        </div>
+      </div>
+      {entry.diagnostics.length > 0 ? (
+        <ul className="mt-3 space-y-1 text-xs leading-5 text-[#8d4f43]">
+          {entry.diagnostics.map((diagnostic, index) => (
+            <li key={`${entry.id}-${index}`}>{diagnostic}</li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   );
 }

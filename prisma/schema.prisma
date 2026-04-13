@@ -65,6 +65,7 @@ enum BackgroundTaskKind {
   RENDER_PLANS
   RERENDER_PLAN
   RECOMMEND_PLAN_PRESETS
+  GENERATE_TEMPLATE_QA
   UPLOAD_MEDIA_BATCH
   GENERATE_TITLE_BATCH
   GENERATE_DESCRIPTION_BATCH
@@ -438,6 +439,7 @@ model TemplateVersion {
   editorStateJson   Json?
   summaryJson       Json?
   validationJson    Json?
+  qaArtifactJson    Json?
   isActive          Boolean                 @default(false)
   isLocked          Boolean                 @default(false)
   createdByUserId   String?

@@ -1,11 +1,13 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { TemplateGroupsManager } from "@/components/dashboard/TemplateGroupsManager";
+import { TemplateAnalyticsOverview } from "@/components/dashboard/TemplateAnalyticsOverview";
 import { TemplatesLifecycleManager } from "@/components/dashboard/TemplatesLifecycleManager";
 import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
 import { requireAuthenticatedDashboardUser } from "@/lib/auth/dashboardSession";
 import { isDatabaseConfigured } from "@/lib/env";
 import { listCustomTemplatesForUser } from "@/lib/runtime-templates/db";
+import { getTemplateAnalyticsSnapshotForUser } from "@/lib/template-analytics/db";
 import {
   getTemplateGroupDetailsForUser,
   listAssignableTemplatesForUser,
@@ -102,9 +104,10 @@ export default async function DashboardTemplatesPage({
       />
     );
   } else {
-    const [templates, builtIns] = await Promise.all([
+    const [templates, builtIns, analytics] = await Promise.all([
       listCustomTemplatesForUser(user.id),
       Promise.resolve(getTemplateLibraryEntries()),
+      getTemplateAnalyticsSnapshotForUser(user.id),
     ]);
     const filteredTemplates = filterTemplates(templates, {
       query: templateQuery,
@@ -114,15 +117,18 @@ export default async function DashboardTemplatesPage({
     });
 
     content = (
-      <TemplatesLifecycleManager
-        builtInCount={builtIns.length}
-        templates={filteredTemplates}
-        totalTemplateCount={templates.length}
-        query={templateQuery}
-        statusFilter={statusFilter}
-        usageFilter={usageFilter}
-        familyFilter={familyFilter}
-      />
+      <>
+        <TemplateAnalyticsOverview analytics={analytics} />
+        <TemplatesLifecycleManager
+          builtInCount={builtIns.length}
+          templates={filteredTemplates}
+          totalTemplateCount={templates.length}
+          query={templateQuery}
+          statusFilter={statusFilter}
+          usageFilter={usageFilter}
+          familyFilter={familyFilter}
+        />
+      </>
     );
   }
 

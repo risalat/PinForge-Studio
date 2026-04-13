@@ -2,9 +2,13 @@ import { notFound } from "next/navigation";
 import { isDatabaseConfigured } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
 import { getRuntimeTemplateForRender } from "@/lib/runtime-templates/db";
+import { buildRuntimeTemplatePreviewPayload } from "@/lib/runtime-templates/previewPayload";
 import { renderRuntimeTemplate } from "@/lib/runtime-templates/renderRuntimeTemplate";
 import { getRenderPayload } from "@/lib/templates/getRenderPayload";
 import { getTemplateConfig, renderTemplate } from "@/lib/templates/registry";
+import { getSampleRuntimeTemplateRenderProps } from "@/lib/runtime-templates/sampleData";
+import { runtimeTemplateDocumentSchema } from "@/lib/runtime-templates/schema";
+import { templateVisualPresets, type TemplateVisualPresetId } from "@/lib/templates/types";
 
 type RenderPageProps = {
   params: Promise<{
@@ -14,6 +18,8 @@ type RenderPageProps = {
     jobId?: string;
     planId?: string;
     versionId?: string;
+    preset?: string;
+    stressCase?: string;
   }>;
 };
 
@@ -22,7 +28,7 @@ export default async function RenderTemplatePage({
   searchParams,
 }: RenderPageProps) {
   const { templateId } = await params;
-  const { jobId, planId, versionId } = await searchParams;
+  const { jobId, planId, versionId, preset, stressCase } = await searchParams;
   const config = getTemplateConfig(templateId);
 
   if (config) {
@@ -63,11 +69,25 @@ export default async function RenderTemplatePage({
     notFound();
   }
 
-  const payload = await getRenderPayload(templateId, jobId, planId);
+  const activePreset: TemplateVisualPresetId = templateVisualPresets.includes(
+    preset as TemplateVisualPresetId,
+  )
+    ? (preset as TemplateVisualPresetId)
+    : (getSampleRuntimeTemplateRenderProps().visualPreset ?? "teal-flare");
+  const document = runtimeTemplateDocumentSchema.parse(runtimeTemplate.version.schemaJson);
+  const payload =
+    !jobId && !planId
+      ? buildRuntimeTemplatePreviewPayload({
+          document,
+          editorStateJson: runtimeTemplate.version.editorStateJson,
+          presetId: activePreset,
+          stressCaseId: stressCase ?? null,
+        }).payload
+      : await getRenderPayload(templateId, jobId, planId);
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#d9d1c7] p-8">
-      {renderRuntimeTemplate(runtimeTemplate.version.schemaJson, payload)}
+      {renderRuntimeTemplate(document, payload)}
     </main>
   );
 }

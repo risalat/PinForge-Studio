@@ -15,6 +15,7 @@ import {
   getTemplateWithVersionsForUser,
   runRuntimeTemplateValidationForUser,
 } from "@/lib/runtime-templates/db";
+import { enqueueTemplateQaPackForUser } from "@/lib/template-qa/db";
 import {
   assignTemplatesToGroupForUser,
   createTemplateGroupForUser,
@@ -268,10 +269,46 @@ export async function finalizeRuntimeTemplateAction(formData: FormData) {
     versionId,
   });
 
+  await enqueueTemplateQaPackForUser({
+    userId: user.id,
+    templateId,
+    versionId,
+  }).catch(() => null);
+
   revalidatePath("/dashboard/templates");
   revalidatePath("/dashboard/library");
   revalidatePath(`/dashboard/templates/${templateId}/edit`);
   revalidatePath(`/dashboard/templates/${templateId}/preview`);
+}
+
+export async function generateTemplateQaPackAction(formData: FormData) {
+  if (!isDatabaseConfigured()) {
+    throw new Error("DATABASE_URL is not configured.");
+  }
+
+  const user = await getOrCreateDashboardUser();
+  const templateId = String(formData.get("templateId") ?? "").trim();
+  const versionId = String(formData.get("versionId") ?? "").trim();
+  const preset = String(formData.get("preset") ?? "").trim();
+  const returnTo = String(formData.get("returnTo") ?? "").trim();
+
+  if (!templateId || !versionId) {
+    throw new Error("Template version is missing.");
+  }
+
+  await enqueueTemplateQaPackForUser({
+    userId: user.id,
+    templateId,
+    versionId,
+  });
+
+  revalidatePath("/dashboard/templates");
+  revalidatePath(`/dashboard/templates/${templateId}/preview`);
+
+  redirect(
+    returnTo ||
+      `/dashboard/templates/${templateId}/preview?versionId=${versionId}${preset ? `&preset=${preset}` : ""}`,
+  );
 }
 
 export async function duplicateRuntimeTemplateAction(formData: FormData) {

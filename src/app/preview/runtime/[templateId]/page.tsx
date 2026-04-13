@@ -1,7 +1,9 @@
 import { notFound } from "next/navigation";
 import { getRuntimeTemplateForRender } from "@/lib/runtime-templates/db";
+import { buildRuntimeTemplatePreviewPayload } from "@/lib/runtime-templates/previewPayload";
 import { renderRuntimeTemplate } from "@/lib/runtime-templates/renderRuntimeTemplate";
 import { getSampleRuntimeTemplateRenderProps } from "@/lib/runtime-templates/sampleData";
+import { runtimeTemplateDocumentSchema } from "@/lib/runtime-templates/schema";
 import { templateVisualPresets, type TemplateVisualPresetId } from "@/lib/templates/types";
 
 const PREVIEW_WIDTH = 420;
@@ -15,6 +17,7 @@ type RuntimePreviewPageProps = {
   searchParams: Promise<{
     preset?: string;
     versionId?: string;
+    stressCase?: string;
   }>;
 };
 
@@ -23,7 +26,7 @@ export default async function RuntimePreviewPage({
   searchParams,
 }: RuntimePreviewPageProps) {
   const { templateId } = await params;
-  const { preset, versionId } = await searchParams;
+  const { preset, versionId, stressCase } = await searchParams;
   const template = await getRuntimeTemplateForRender({
     templateId,
     versionId: versionId ?? null,
@@ -33,13 +36,18 @@ export default async function RuntimePreviewPage({
     notFound();
   }
 
-  const activePreset = templateVisualPresets.includes(preset as TemplateVisualPresetId)
+  const activePreset: TemplateVisualPresetId = templateVisualPresets.includes(
+    preset as TemplateVisualPresetId,
+  )
     ? (preset as TemplateVisualPresetId)
-    : getSampleRuntimeTemplateRenderProps().visualPreset;
-  const payload = {
-    ...getSampleRuntimeTemplateRenderProps(),
-    visualPreset: activePreset,
-  };
+    : (getSampleRuntimeTemplateRenderProps().visualPreset ?? "teal-flare");
+  const document = runtimeTemplateDocumentSchema.parse(template.version.schemaJson);
+  const { payload, stressCaseLabel } = buildRuntimeTemplatePreviewPayload({
+    document,
+    editorStateJson: template.version.editorStateJson,
+    presetId: activePreset,
+    stressCaseId: stressCase ?? null,
+  });
 
   return (
     <main className="min-h-screen bg-[#efe7db] px-6 py-10 text-[#24180f]">
@@ -52,6 +60,11 @@ export default async function RuntimePreviewPage({
           <p className="mt-2 text-sm text-[#6f6255]">
             Public preview route for runtime-template QA and preview/render parity checks.
           </p>
+          {stressCaseLabel ? (
+            <p className="mt-2 text-xs font-semibold uppercase tracking-[0.16em] text-[#9d7445]">
+              Stress case: {stressCaseLabel}
+            </p>
+          ) : null}
         </div>
 
         <div
@@ -63,13 +76,13 @@ export default async function RuntimePreviewPage({
         >
           <div
             style={{
-              width: 1080,
-              height: 1920,
-              transform: `scale(${PREVIEW_SCALE})`,
-              transformOrigin: "top left",
-            }}
-          >
-            {renderRuntimeTemplate(template.version.schemaJson, payload)}
+            width: 1080,
+            height: 1920,
+            transform: `scale(${PREVIEW_SCALE})`,
+            transformOrigin: "top left",
+          }}
+        >
+            {renderRuntimeTemplate(document, payload)}
           </div>
         </div>
       </div>

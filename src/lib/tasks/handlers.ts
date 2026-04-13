@@ -16,6 +16,7 @@ import {
 } from "@/lib/jobs/generatePins";
 import { MIN_SCHEDULE_INTERVAL_MINUTES } from "@/lib/jobs/publishTiming";
 import { normalizeErrorForLogging } from "@/lib/observability/operationContext";
+import { generateTemplateQaArtifactsForVersionTask } from "@/lib/template-qa/db";
 
 const cleanTempAssetsPayloadSchema = z.object({
   days: z.number().int().positive().max(365).optional(),
@@ -87,6 +88,12 @@ const syncPublicationsPayloadSchema = z.object({
   workspaceId: z.string().min(1),
 });
 
+const generateTemplateQaPayloadSchema = z.object({
+  userId: z.string().min(1),
+  templateId: z.string().min(1),
+  versionId: z.string().min(1),
+});
+
 export type BackgroundTaskExecutionResult = {
   progressJson?: Prisma.InputJsonValue;
 };
@@ -106,6 +113,8 @@ export async function executeBackgroundTask(
       return executeRenderPlansTask(task, context);
     case BackgroundTaskKind.RECOMMEND_PLAN_PRESETS:
       return executeRecommendPlanPresetsTask(task, context);
+    case BackgroundTaskKind.GENERATE_TEMPLATE_QA:
+      return executeGenerateTemplateQaTask(task, context);
     case BackgroundTaskKind.UPLOAD_MEDIA_BATCH:
       return executeUploadMediaBatchTask(task, context);
     case BackgroundTaskKind.GENERATE_TITLE_BATCH:
@@ -208,6 +217,46 @@ async function executeRecommendPlanPresetsTask(
     ...result,
     workerId: context.workerId,
     finishedAt: new Date().toISOString(),
+  } satisfies Prisma.InputJsonValue;
+
+  await context.reportProgress(progressJson);
+
+  return {
+    progressJson,
+  };
+}
+
+async function executeGenerateTemplateQaTask(
+  task: BackgroundTask,
+  context: BackgroundTaskHandlerContext,
+): Promise<BackgroundTaskExecutionResult> {
+  const payload = generateTemplateQaPayloadSchema.parse(task.payloadJson);
+
+  await context.reportProgress({
+    stage: "running",
+    workerId: context.workerId,
+    templateId: payload.templateId,
+    versionId: payload.versionId,
+    startedAt: new Date().toISOString(),
+  });
+
+  const manifest = await generateTemplateQaArtifactsForVersionTask({
+    templateId: payload.templateId,
+    versionId: payload.versionId,
+  });
+
+  const progressJson = {
+    stage: manifest.failedCaptureCount > 0 ? "completed_with_failures" : "completed",
+    workerId: context.workerId,
+    templateId: payload.templateId,
+    versionId: payload.versionId,
+    finishedAt: new Date().toISOString(),
+    result: {
+      generatedAt: manifest.generatedAt,
+      matrixCount: manifest.matrixCount,
+      stressCaseCount: manifest.stressCaseCount,
+      failedCaptureCount: manifest.failedCaptureCount,
+    },
   } satisfies Prisma.InputJsonValue;
 
   await context.reportProgress(progressJson);

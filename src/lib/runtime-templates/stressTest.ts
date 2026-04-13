@@ -35,13 +35,15 @@ const TEXT_ROLE_LABELS: Partial<Record<RuntimeTextElement["semanticRole"], strin
 export function buildRuntimeTemplateStressCases(
   document: RuntimeTemplateDocument,
 ): RuntimeTemplateStressCaseResult[] {
+  return getRuntimeTemplateStressCaseDefinitions().map((testCase) =>
+    evaluateStressCase(document, testCase.id, testCase.label, testCase.payload),
+  );
+}
+
+export function getRuntimeTemplateStressCaseDefinitions() {
   const base = getSampleRuntimeTemplateRenderProps();
 
-  const cases: Array<{
-    id: string;
-    label: string;
-    payload: TemplateRenderProps;
-  }> = [
+  return [
     {
       id: "short-title",
       label: "Short title",
@@ -106,9 +108,11 @@ export function buildRuntimeTemplateStressCases(
         images: base.images.slice(0, 1),
       },
     },
-  ];
-
-  return cases.map((testCase) => evaluateStressCase(document, testCase.id, testCase.label, testCase.payload));
+  ] satisfies Array<{
+    id: string;
+    label: string;
+    payload: TemplateRenderProps;
+  }>;
 }
 
 function evaluateStressCase(
