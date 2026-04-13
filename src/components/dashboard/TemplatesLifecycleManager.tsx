@@ -6,6 +6,7 @@ import {
   createStarterTemplateDraftAction,
   deleteRuntimeTemplateAction,
   duplicateRuntimeTemplateAction,
+  duplicateRuntimeTemplateAsVariantAction,
   finalizeRuntimeTemplateAction,
   validateRuntimeTemplateAction,
 } from "@/app/dashboard/templates/actions";
@@ -125,6 +126,12 @@ export function TemplatesLifecycleManager({
                 <InlineActionForm action={duplicateRuntimeTemplateAction} buttonLabel="Duplicate">
                   <input type="hidden" name="templateId" value={template.id} />
                 </InlineActionForm>
+                <InlineActionForm
+                  action={duplicateRuntimeTemplateAsVariantAction}
+                  buttonLabel="Variant"
+                >
+                  <input type="hidden" name="templateId" value={template.id} />
+                </InlineActionForm>
                 <InlineActionForm action={archiveRuntimeTemplateAction} buttonLabel="Archive" tone="danger">
                   <input type="hidden" name="templateId" value={template.id} />
                 </InlineActionForm>
@@ -168,6 +175,12 @@ export function TemplatesLifecycleManager({
                 <InlineActionForm action={duplicateRuntimeTemplateAction} buttonLabel="Duplicate">
                   <input type="hidden" name="templateId" value={template.id} />
                 </InlineActionForm>
+                <InlineActionForm
+                  action={duplicateRuntimeTemplateAsVariantAction}
+                  buttonLabel="Variant"
+                >
+                  <input type="hidden" name="templateId" value={template.id} />
+                </InlineActionForm>
                 <InlineActionForm action={archiveRuntimeTemplateAction} buttonLabel="Archive" tone="danger">
                   <input type="hidden" name="templateId" value={template.id} />
                 </InlineActionForm>
@@ -200,6 +213,12 @@ export function TemplatesLifecycleManager({
                   label="Manage groups"
                 />
                 <InlineActionForm action={duplicateRuntimeTemplateAction} buttonLabel="Duplicate">
+                  <input type="hidden" name="templateId" value={template.id} />
+                </InlineActionForm>
+                <InlineActionForm
+                  action={duplicateRuntimeTemplateAsVariantAction}
+                  buttonLabel="Variant"
+                >
                   <input type="hidden" name="templateId" value={template.id} />
                 </InlineActionForm>
               </>
@@ -275,6 +294,13 @@ function TemplateCard({
       <div className="mt-3 flex flex-wrap gap-2">
         <MiniChip label={template.slug || "No slug"} />
         {activeVersion ? <MiniChip label={`v${activeVersion.versionNumber}`} /> : null}
+        {template.isVariant ? <MiniChip label="Variant" /> : null}
+        {template.variantFamilyTemplate ? (
+          <MiniChip label={`Family: ${template.variantFamilyTemplate.name}`} />
+        ) : null}
+        {!template.isVariant && template.variantCount > 0 ? (
+          <MiniChip label={`${template.variantCount} variants`} />
+        ) : null}
       </div>
 
       <div className="mt-4 rounded-[20px] bg-[var(--dashboard-panel-strong)] px-3 py-3">

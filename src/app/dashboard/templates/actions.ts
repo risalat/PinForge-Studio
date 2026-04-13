@@ -271,6 +271,27 @@ export async function duplicateRuntimeTemplateAction(formData: FormData) {
   revalidatePath("/dashboard/templates");
 }
 
+export async function duplicateRuntimeTemplateAsVariantAction(formData: FormData) {
+  if (!isDatabaseConfigured()) {
+    throw new Error("DATABASE_URL is not configured.");
+  }
+
+  const user = await getOrCreateDashboardUser();
+  const templateId = String(formData.get("templateId") ?? "").trim();
+
+  if (!templateId) {
+    throw new Error("Template draft is missing.");
+  }
+
+  await duplicateRuntimeTemplateDraftForUser({
+    userId: user.id,
+    templateId,
+    asVariant: true,
+  });
+
+  revalidatePath("/dashboard/templates");
+}
+
 export async function archiveRuntimeTemplateAction(formData: FormData) {
   if (!isDatabaseConfigured()) {
     throw new Error("DATABASE_URL is not configured.");

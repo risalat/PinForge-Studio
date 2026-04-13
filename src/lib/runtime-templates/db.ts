@@ -156,6 +156,17 @@ export async function listCustomTemplatesForUser(userId: string) {
           },
         },
       },
+      variantFamily: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+      variants: {
+        select: {
+          id: true,
+        },
+      },
       versions: {
         select: {
           id: true,
@@ -185,6 +196,16 @@ export async function listCustomTemplatesForUser(userId: string) {
     return {
       ...template,
       ...groupingMetadata,
+      variantFamilyTemplate:
+        template.variantFamily ??
+        (template.variants.length > 0
+          ? {
+              id: template.id,
+              name: template.name,
+            }
+          : null),
+      variantCount: template.variants.length,
+      isVariant: Boolean(template.variantFamilyId),
       templateCategories: groupingMetadata.systemCategories,
     };
   });
@@ -247,6 +268,17 @@ export async function getEditableRuntimeTemplateDraftForUser(input: {
     },
     include: {
       activeVersion: true,
+      variantFamily: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+      variants: {
+        select: {
+          id: true,
+        },
+      },
       templateGroupAssignments: {
         select: {
           group: {
@@ -281,6 +313,17 @@ export async function getTemplateWithVersionsForUser(input: {
     },
     include: {
       activeVersion: true,
+      variantFamily: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+      variants: {
+        select: {
+          id: true,
+        },
+      },
       templateGroupAssignments: {
         select: {
           group: {
@@ -319,6 +362,16 @@ export async function getTemplateWithVersionsForUser(input: {
   return {
     ...template,
     ...groupingMetadata,
+    variantFamilyTemplate:
+      template.variantFamily ??
+      (template.variants.length > 0
+        ? {
+            id: template.id,
+            name: template.name,
+          }
+        : null),
+    variantCount: template.variants.length,
+    isVariant: Boolean(template.variantFamilyId),
     templateCategories: groupingMetadata.systemCategories,
     selectedVersion,
   };
@@ -645,6 +698,7 @@ export async function createEditableDraftFromFinalizedTemplateForUser(input: {
 export async function duplicateRuntimeTemplateDraftForUser(input: {
   userId: string;
   templateId: string;
+  asVariant?: boolean;
 }) {
   const source = await getEditableRuntimeTemplateDraftForUser(input);
   if (!source?.activeVersion) {
@@ -659,7 +713,19 @@ export async function duplicateRuntimeTemplateDraftForUser(input: {
   const summary = summarizeRuntimeTemplateDocument(validation.document ?? schemaDocument);
 
   return prisma.$transaction(async (tx) => {
-    const name = `${source.name} Copy`;
+    const variantFamilyId = input.asVariant
+      ? source.variantFamilyId ?? source.id
+      : null;
+    const variantFamilyName = variantFamilyId
+      ? await getVariantFamilyName(tx, variantFamilyId, source.name)
+      : null;
+    const variantName = input.asVariant
+      ? await buildNextVariantName(tx, variantFamilyId as string)
+      : null;
+    const name =
+      input.asVariant && variantFamilyName && variantName
+        ? `${variantFamilyName} ${variantName}`
+        : `${source.name} Copy`;
     const slug = await buildUniqueTemplateSlug(tx, name);
     const componentKey = `runtime:${slug}`;
 
@@ -678,6 +744,11 @@ export async function duplicateRuntimeTemplateDraftForUser(input: {
         rendererKind: TemplateRendererKind.RUNTIME_SCHEMA,
         lifecycleStatus: TemplateLifecycleStatus.DRAFT,
         createdByUserId: input.userId,
+        variantFamilyId,
+        variantName,
+        variantSortOrder: input.asVariant
+          ? await buildNextVariantSortOrder(tx, variantFamilyId as string)
+          : 0,
         canvasWidth: source.canvasWidth,
         canvasHeight: source.canvasHeight,
       },
@@ -708,6 +779,8 @@ export async function duplicateRuntimeTemplateDraftForUser(input: {
     return {
       templateId: template.id,
       versionId: version.id,
+      variantFamilyId,
+      variantName,
     };
   }, runtimeTemplateTransactionOptions);
 }
@@ -949,6 +1022,75 @@ async function buildUniqueTemplateSlug(
   }
 
   return slug;
+}
+
+async function buildNextVariantName(
+  tx: Prisma.TransactionClient,
+  variantFamilyId: string,
+) {
+  const family = await tx.template.findUnique({
+    where: {
+      id: variantFamilyId,
+    },
+    select: {
+      variants: {
+        select: {
+          variantName: true,
+        },
+      },
+    },
+  });
+
+  const existing = new Set(
+    (family?.variants ?? [])
+      .map((variant) => variant.variantName)
+      .filter((value): value is string => Boolean(value)),
+  );
+
+  let index = existing.size + 1;
+  let candidate = `Variant ${index}`;
+  while (existing.has(candidate)) {
+    index += 1;
+    candidate = `Variant ${index}`;
+  }
+
+  return candidate;
+}
+
+async function getVariantFamilyName(
+  tx: Prisma.TransactionClient,
+  variantFamilyId: string,
+  fallbackTemplateName: string,
+) {
+  const family = await tx.template.findUnique({
+    where: {
+      id: variantFamilyId,
+    },
+    select: {
+      name: true,
+    },
+  });
+
+  return family?.name ?? fallbackTemplateName;
+}
+
+async function buildNextVariantSortOrder(
+  tx: Prisma.TransactionClient,
+  variantFamilyId: string,
+) {
+  const current = await tx.template.findFirst({
+    where: {
+      variantFamilyId,
+    },
+    orderBy: {
+      variantSortOrder: "desc",
+    },
+    select: {
+      variantSortOrder: true,
+    },
+  });
+
+  return (current?.variantSortOrder ?? 0) + 1;
 }
 
 function slugifyTemplateName(input: string) {

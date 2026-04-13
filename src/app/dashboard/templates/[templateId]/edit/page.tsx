@@ -11,6 +11,7 @@ import {
   runtimeTemplateEditorStateSchema,
 } from "@/lib/runtime-templates/schema.zod";
 import type { RuntimeTemplateValidationResult } from "@/lib/runtime-templates/types";
+import { listTemplateBlocksForUser } from "@/lib/template-blocks/db";
 import type { TemplateVisualPresetId } from "@/lib/templates/types";
 
 type RuntimeTemplateEditPageProps = {
@@ -72,6 +73,7 @@ export default async function RuntimeTemplateEditPage({
     template.activeVersion.validationJson && typeof template.activeVersion.validationJson === "object"
       ? (template.activeVersion.validationJson as RuntimeTemplateValidationResult<typeof document>)
       : null;
+  const blocks = await listTemplateBlocksForUser(user.id);
 
   return (
     <TemplateDraftEditor
@@ -86,6 +88,15 @@ export default async function RuntimeTemplateEditPage({
       initialEditorState={editorState}
       initialPreset={(editorState.visualPreset as TemplateVisualPresetId | null) ?? "teal-flare"}
       initialValidationResult={validation}
+      initialBlocks={blocks.map((block) => ({
+        id: block.id,
+        name: block.name,
+        description: block.description,
+        elementCount: block.elementCount,
+        imageSlotCount: block.imageSlotCount,
+        sourceTemplateName: block.sourceTemplate?.name ?? null,
+        block: block.block,
+      }))}
     />
   );
 }

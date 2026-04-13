@@ -11,6 +11,10 @@ import {
   useState,
 } from "react";
 import { CanvasEditor } from "@/components/template-builder/CanvasEditor";
+import {
+  BlocksPanel,
+  type EditorTemplateBlock,
+} from "@/components/template-builder/BlocksPanel";
 import { EditorWorkspaceShell } from "@/components/template-builder/EditorWorkspaceShell";
 import { ElementCatalog } from "@/components/template-builder/ElementCatalog";
 import {
@@ -27,6 +31,8 @@ import type {
 } from "@/lib/runtime-templates/schema";
 import { getSampleRuntimeTemplateRenderProps } from "@/lib/runtime-templates/sampleData";
 import { validateRuntimeTemplateDocument } from "@/lib/runtime-templates/validate";
+import { insertTemplateBlockContent } from "@/lib/template-blocks/normalize";
+import type { TemplateBlockContent } from "@/lib/template-blocks/schema";
 import {
   runtimeTemplateBorderTokenValues,
   runtimeTemplateFillTokenValues,
@@ -57,6 +63,7 @@ type TemplateDraftEditorProps = {
   initialEditorState: RuntimeTemplateEditorState;
   initialPreset: TemplateVisualPresetId;
   initialValidationResult: RuntimeTemplateValidationResult<RuntimeTemplateDocument> | null;
+  initialBlocks: EditorTemplateBlock[];
 };
 
 type SaveStatus =
@@ -95,6 +102,7 @@ export function TemplateDraftEditor(props: TemplateDraftEditorProps) {
     initialEditorState,
     initialPreset,
     initialValidationResult,
+    initialBlocks,
   } = props;
   const router = useRouter();
   const [templateName, setTemplateName] = useState(initialName);
@@ -102,7 +110,9 @@ export function TemplateDraftEditor(props: TemplateDraftEditorProps) {
   const [document, setDocument] = useState<RuntimeTemplateDocument>(initialDocument);
   const [editorState, setEditorState] = useState<RuntimeTemplateEditorState>(initialEditorState);
   const [visualPreset, setVisualPreset] = useState<TemplateVisualPresetId>(initialPreset);
-  const [leftPanel, setLeftPanel] = useState<"elements" | "layers" | "template">("elements");
+  const [leftPanel, setLeftPanel] = useState<"elements" | "blocks" | "layers" | "template">(
+    "elements",
+  );
   const [isRenamingTemplate, setIsRenamingTemplate] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>({
     state: "saved",
@@ -112,6 +122,9 @@ export function TemplateDraftEditor(props: TemplateDraftEditorProps) {
     RuntimeTemplateValidationResult<RuntimeTemplateDocument> | null
   >(initialValidationResult);
   const [actionState, setActionState] = useState<"idle" | "validating" | "finalizing">("idle");
+  const [savedBlocks, setSavedBlocks] = useState<EditorTemplateBlock[]>(initialBlocks);
+  const [blockStatus, setBlockStatus] = useState<string | null>(null);
+  const [isSavingBlock, setIsSavingBlock] = useState(false);
   const [historyState, setHistoryState] = useState({
     past: [] as DraftHistorySnapshot[],
     future: [] as DraftHistorySnapshot[],
@@ -525,6 +538,111 @@ export function TemplateDraftEditor(props: TemplateDraftEditorProps) {
       });
     }
   }, [router, saveDraft, templateId]);
+
+  const handleDuplicateAsVariant = useCallback(async () => {
+    try {
+      await saveDraft("manual");
+      const response = await fetch(`/api/dashboard/templates/${templateId}/duplicate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          asVariant: true,
+        }),
+      });
+      const payload = (await response.json().catch(() => null)) as
+        | { editPath?: string; error?: string }
+        | null;
+      if (!response.ok || !payload?.editPath) {
+        throw new Error(payload?.error || "Failed to create template variant.");
+      }
+      router.push(payload.editPath);
+    } catch (error) {
+      setSaveStatus({
+        state: "error",
+        message: error instanceof Error ? error.message : "Failed to create variant.",
+      });
+    }
+  }, [router, saveDraft, templateId]);
+
+  const handleSaveSelectionAsBlock = useCallback(
+    async (input: { name: string; description?: string }) => {
+      if (selectedElementIds.length === 0) {
+        setBlockStatus("Select at least one element first.");
+        return;
+      }
+
+      try {
+        setIsSavingBlock(true);
+        setBlockStatus("Saving block...");
+        await saveDraft("manual");
+        const response = await fetch("/api/dashboard/template-blocks", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            name: input.name,
+            description: input.description,
+            sourceTemplateId: templateId,
+            document,
+            elementIds: selectedElementIds,
+          }),
+        });
+        const payload = (await response.json().catch(() => null)) as
+          | {
+              ok?: boolean;
+              error?: string;
+              block?: {
+                id: string;
+                name: string;
+                description: string | null;
+                elementCount: number;
+                imageSlotCount: number;
+                sourceTemplate?: { name: string } | null;
+                block: TemplateBlockContent;
+              };
+            }
+          | null;
+        if (!response.ok || !payload?.block) {
+          throw new Error(payload?.error || "Failed to save block.");
+        }
+        setSavedBlocks((current) => [
+          {
+            id: payload.block!.id,
+            name: payload.block!.name,
+            description: payload.block!.description,
+            elementCount: payload.block!.elementCount,
+            imageSlotCount: payload.block!.imageSlotCount,
+            sourceTemplateName: payload.block!.sourceTemplate?.name ?? null,
+            block: payload.block!.block,
+          },
+          ...current,
+        ]);
+        setBlockStatus(`Saved '${payload.block.name}'.`);
+        setLeftPanel("blocks");
+      } catch (error) {
+        setBlockStatus(error instanceof Error ? error.message : "Failed to save block.");
+      } finally {
+        setIsSavingBlock(false);
+      }
+    },
+    [document, saveDraft, selectedElementIds, templateId],
+  );
+
+  const handleInsertBlock = useCallback(
+    (content: TemplateBlockContent) => {
+      const result = insertTemplateBlockContent({
+        document,
+        content,
+      });
+      applyDocumentUpdate(() => result.document);
+      updateSelection(result.insertedElementIds, result.insertedElementIds[0] ?? null);
+      setBlockStatus("Block inserted.");
+    },
+    [applyDocumentUpdate, document, updateSelection],
+  );
 
   const handleAutoFixPresets = useCallback(() => {
     pushHistorySnapshot();
@@ -1131,6 +1249,10 @@ export function TemplateDraftEditor(props: TemplateDraftEditorProps) {
                 onClick={() => void handleDuplicateDraft()}
                 icon={<DuplicateIcon />}
               />
+              <EditorActionButton
+                label="Duplicate as variant"
+                onClick={() => void handleDuplicateAsVariant()}
+              />
               <EditorActionButton label="Preview" onClick={() => void handlePreview()} />
               <EditorActionButton
                 label="Fix preset"
@@ -1179,6 +1301,7 @@ export function TemplateDraftEditor(props: TemplateDraftEditorProps) {
               onAlignSelection={handleAlignSelection}
               onDistributeSelection={handleDistributeSelection}
               cropModeElementId={cropModeElementId}
+              onSaveSelectionAsBlock={() => setLeftPanel("blocks")}
               onToggleCropMode={(elementId) =>
                 setCropModeElementId((current) => (current === elementId ? null : elementId))
               }
@@ -1203,6 +1326,12 @@ export function TemplateDraftEditor(props: TemplateDraftEditorProps) {
                 active={leftPanel === "layers"}
                 onClick={() => setLeftPanel("layers")}
                 icon={<LayersIcon />}
+              />
+              <SidebarTabButton
+                label="Blocks"
+                active={leftPanel === "blocks"}
+                onClick={() => setLeftPanel("blocks")}
+                icon={<BlocksIcon />}
               />
               <SidebarTabButton
                 label="Template"
@@ -1234,6 +1363,16 @@ export function TemplateDraftEditor(props: TemplateDraftEditorProps) {
                 onDeleteElement={handleDeleteElement}
                 onBringForward={(elementId) => handleReorderElement(elementId, "forward")}
                 onSendBackward={(elementId) => handleReorderElement(elementId, "backward")}
+              />
+            ) : null}
+            {leftPanel === "blocks" ? (
+              <BlocksPanel
+                selectionCount={selectedElementIds.length}
+                blocks={savedBlocks}
+                onSaveSelection={handleSaveSelectionAsBlock}
+                onInsertBlock={handleInsertBlock}
+                statusMessage={blockStatus}
+                isSaving={isSavingBlock}
               />
             ) : null}
             {leftPanel === "template" ? (
@@ -1559,6 +1698,7 @@ function QuickControlBar(props: {
   onAlignSelection: (mode: "left" | "center" | "right" | "top" | "middle" | "bottom") => void;
   onDistributeSelection: (axis: "horizontal" | "vertical") => void;
   cropModeElementId: string | null;
+  onSaveSelectionAsBlock: () => void;
   onToggleCropMode: (elementId: string) => void;
   onResetImageFrameCrop: () => void;
   onSetImageFrameFocalPoint: (elementId: string, point: { x: number; y: number }) => void;
@@ -1580,6 +1720,7 @@ function QuickControlBar(props: {
     onAlignSelection,
     onDistributeSelection,
     cropModeElementId,
+    onSaveSelectionAsBlock,
     onToggleCropMode,
     onResetImageFrameCrop,
     onSetImageFrameFocalPoint,
@@ -1694,6 +1835,7 @@ function QuickControlBar(props: {
             <div className="flex items-center gap-2 rounded-full border border-[color:color-mix(in_srgb,var(--dashboard-accent)_16%,var(--dashboard-line))] bg-[color:color-mix(in_srgb,var(--dashboard-accent)_7%,white)] px-2 py-1">
               <ToolbarActionButton label="Group" onClick={onGroupSelection} accent />
               <ToolbarActionButton label="Ungroup" onClick={onUngroupSelection} disabled={!canUngroup} accent />
+              <ToolbarActionButton label="Save block" onClick={onSaveSelectionAsBlock} accent />
             </div>
             <div className="flex items-center gap-2 rounded-full border border-[color:color-mix(in_srgb,var(--dashboard-accent)_16%,var(--dashboard-line))] bg-[color:color-mix(in_srgb,var(--dashboard-accent)_7%,white)] px-2 py-1">
               <ToolbarActionButton label="Left" onClick={() => onAlignSelection("left")} accent />
@@ -1763,6 +1905,7 @@ function QuickControlBar(props: {
             destructive
             onClick={() => onDeleteElements(selectedElementIds)}
           />
+          <ToolbarActionButton label="Save block" onClick={onSaveSelectionAsBlock} accent />
           </div>
           {renderQuickBindingFields(selectedElement, onUpdateElement)}
           {selectedElement.type === "imageFrame" ? (
@@ -2286,6 +2429,17 @@ function LayersIcon() {
       <path d="m12 4 8 4-8 4-8-4 8-4Z" />
       <path d="m4 12 8 4 8-4" />
       <path d="m4 16 8 4 8-4" />
+    </svg>
+  );
+}
+
+function BlocksIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current stroke-[1.8]">
+      <rect x="4" y="4" width="7" height="7" rx="1.5" />
+      <rect x="13" y="4" width="7" height="7" rx="1.5" />
+      <rect x="4" y="13" width="7" height="7" rx="1.5" />
+      <rect x="13" y="13" width="7" height="7" rx="1.5" />
     </svg>
   );
 }
