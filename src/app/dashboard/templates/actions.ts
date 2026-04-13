@@ -6,6 +6,7 @@ import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
 import { isDatabaseConfigured } from "@/lib/env";
 import {
   archiveRuntimeTemplateForUser,
+  createCustomTemplateDraftFromBuiltInForUser,
   createEditableDraftFromFinalizedTemplateForUser,
   createStarterCustomTemplateDraft,
   deleteRuntimeTemplateForUser,
@@ -38,6 +39,28 @@ export async function createStarterTemplateDraftAction(formData: FormData) {
   });
 
   revalidatePath("/dashboard/templates");
+}
+
+export async function createCustomDraftFromBuiltInTemplateAction(formData: FormData) {
+  if (!isDatabaseConfigured()) {
+    throw new Error("DATABASE_URL is not configured.");
+  }
+
+  const user = await getOrCreateDashboardUser();
+  const builtInTemplateId = String(formData.get("builtInTemplateId") ?? "").trim();
+
+  if (!builtInTemplateId) {
+    throw new Error("Built-in template is missing.");
+  }
+
+  const result = await createCustomTemplateDraftFromBuiltInForUser({
+    userId: user.id,
+    builtInTemplateId,
+  });
+
+  revalidatePath("/dashboard/templates");
+  revalidatePath("/dashboard/library");
+  redirect(`/dashboard/templates/${result.templateId}/edit`);
 }
 
 export async function createTemplateGroupAction(formData: FormData) {

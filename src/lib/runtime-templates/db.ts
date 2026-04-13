@@ -24,7 +24,12 @@ import {
   buildTemplateGroupingMetadata,
   resolveTemplateUserGroupsFromAssignments,
 } from "@/lib/templates/templateGroupMetadata";
-import { getPresetIdsForCategories } from "@/lib/templates/visualPresets";
+import { TEMPLATE_CONFIGS } from "@/lib/templates/registry";
+import {
+  getPresetIdsForCategories,
+  getPresetIdsForTemplate,
+  getTemplateVisualPresetCategory,
+} from "@/lib/templates/visualPresets";
 
 const runtimeTemplateTransactionOptions = {
   maxWait: 10_000,
@@ -111,6 +116,97 @@ export async function createStarterCustomTemplateDraft(input: {
     return {
       template: updatedTemplate,
       version,
+    };
+  }, runtimeTemplateTransactionOptions);
+}
+
+export async function createCustomTemplateDraftFromBuiltInForUser(input: {
+  userId: string;
+  builtInTemplateId: string;
+}) {
+  const builtIn = TEMPLATE_CONFIGS[input.builtInTemplateId];
+  if (!builtIn) {
+    throw new Error("Built-in template not found.");
+  }
+
+  const name = `${builtIn.name} Custom`;
+  const description = `Editable custom draft started from built-in template "${builtIn.name}".`;
+  const document = buildStarterRuntimeTemplateDocumentFromBuiltIn({
+    builtInTemplateId: builtIn.id,
+    name,
+    description,
+  });
+  const parsedDraft = runtimeTemplateDocumentDraftSchema.safeParse(document);
+  const schemaValidation = validateRuntimeTemplateDocument(document, { mode: "schema" });
+  const fullValidation = validateRuntimeTemplateDocument(document, { mode: "full" });
+  const editorState =
+    createDefaultRuntimeTemplateEditorState() as unknown as Prisma.InputJsonValue;
+
+  if (!parsedDraft.success || !schemaValidation.document) {
+    const details = [...schemaValidation.errors, ...schemaValidation.warnings]
+      .slice(0, 3)
+      .map((entry) => entry.message)
+      .join(" | ");
+    throw new Error(
+      details
+        ? `Built-in custom draft failed validation. ${details}`
+        : "Built-in custom draft failed validation.",
+    );
+  }
+
+  const summary = summarizeRuntimeTemplateDocument(parsedDraft.data);
+
+  return prisma.$transaction(async (tx) => {
+    const slug = await buildUniqueTemplateSlug(tx, name);
+    const componentKey = `runtime:${slug}`;
+
+    const template = await tx.template.create({
+      data: {
+        name,
+        slug,
+        description,
+        componentKey,
+        configJson: {
+          runtimeTemplate: true,
+          schemaVersion: document.schemaVersion,
+          sourceBuiltInTemplateId: builtIn.id,
+        } satisfies Prisma.InputJsonValue,
+        isActive: true,
+        sourceKind: TemplateSourceKind.CUSTOM,
+        rendererKind: TemplateRendererKind.RUNTIME_SCHEMA,
+        lifecycleStatus: TemplateLifecycleStatus.DRAFT,
+        createdByUserId: input.userId,
+        canvasWidth: document.canvas.width,
+        canvasHeight: document.canvas.height,
+      },
+    });
+
+    const version = await tx.templateVersion.create({
+      data: {
+        templateId: template.id,
+        versionNumber: 1,
+        lifecycleStatus: TemplateLifecycleStatus.DRAFT,
+        schemaJson: schemaValidation.document as unknown as Prisma.InputJsonValue,
+        editorStateJson: editorState,
+        summaryJson: summary as unknown as Prisma.InputJsonValue,
+        validationJson: toValidationJson(fullValidation),
+        isActive: true,
+        isLocked: false,
+        createdByUserId: input.userId,
+      },
+    });
+
+    await tx.template.update({
+      where: { id: template.id },
+      data: {
+        activeVersionId: version.id,
+      },
+    });
+
+    return {
+      templateId: template.id,
+      versionId: version.id,
+      builtInTemplateId: builtIn.id,
     };
   }, runtimeTemplateTransactionOptions);
 }
@@ -267,6 +363,12 @@ export async function getEditableRuntimeTemplateDraftForUser(input: {
       isActive: true,
     },
     include: {
+      _count: {
+        select: {
+          generationPlans: true,
+          generatedPins: true,
+        },
+      },
       activeVersion: true,
       variantFamily: {
         select: {
@@ -312,6 +414,12 @@ export async function getTemplateWithVersionsForUser(input: {
       createdByUserId: input.userId,
     },
     include: {
+      _count: {
+        select: {
+          generationPlans: true,
+          generatedPins: true,
+        },
+      },
       activeVersion: true,
       variantFamily: {
         select: {
@@ -881,6 +989,345 @@ export function createRuntimeTemplateVersionSnapshot(input: {
     summaryJson: summarizeRuntimeTemplateDocument(validatedDocument),
     validationJson: validation,
   };
+}
+
+function buildStarterRuntimeTemplateDocumentFromBuiltIn(input: {
+  builtInTemplateId: string;
+  name: string;
+  description: string;
+}): RuntimeTemplateDocument {
+  const builtIn = TEMPLATE_CONFIGS[input.builtInTemplateId];
+  if (!builtIn) {
+    throw new Error("Built-in template not found.");
+  }
+
+  const supportsSubtitle = builtIn.textFields.includes("subtitle");
+  const supportsDomain = builtIn.textFields.includes("domain");
+  const supportsItemNumber = builtIn.textFields.includes("itemNumber");
+  const presetIds = getPresetIdsForTemplate(builtIn.id);
+  const allowedPresetCategories = Array.from(
+    new Set(presetIds.map((presetId) => getTemplateVisualPresetCategory(presetId))),
+  );
+  const heroBottom = 1100;
+  const imageElement =
+    builtIn.imageSlotCount === 1
+      ? {
+          id: "image-hero",
+          type: "imageFrame" as const,
+          name: "Hero image",
+          x: 36,
+          y: 36,
+          width: 1008,
+          height: heroBottom - 36,
+          rotation: 0,
+          zIndex: 10,
+          visible: true,
+          locked: false,
+          opacity: 1,
+          semanticRole: "backgroundImage" as const,
+          slotIndex: 0,
+          shapeKind: "roundedRect" as const,
+          fitMode: "cover" as const,
+          focalPoint: { x: 0.5, y: 0.5 },
+          styleTokens: {
+            fillToken: "surface.secondary" as const,
+            borderToken: "border.primary" as const,
+            shadowToken: "shadow.none" as const,
+            borderRadius: 28,
+            overlayGradient: builtIn.features.overlay ? ("topFade" as const) : ("none" as const),
+            overlayOpacity: builtIn.features.overlay ? 0.14 : 0,
+          },
+        }
+      : {
+          id: "image-grid",
+          type: "imageGrid" as const,
+          name: "Hero grid",
+          x: 36,
+          y: 36,
+          width: 1008,
+          height: heroBottom - 36,
+          rotation: 0,
+          zIndex: 10,
+          visible: true,
+          locked: false,
+          opacity: 1,
+          semanticRole: "imageSlot" as const,
+          slotStartIndex: 0,
+          layoutPreset: resolveStarterGridLayoutPreset(builtIn.imageSlotCount),
+          gap: builtIn.imageSlotCount >= 4 ? 14 : 18,
+          fitMode: "cover" as const,
+          styleTokens: {
+            fillToken: "surface.secondary" as const,
+            borderToken: "border.primary" as const,
+            shadowToken: "shadow.none" as const,
+            borderRadius: 22,
+            overlayGradient: "none" as const,
+            overlayOpacity: 0,
+          },
+        };
+
+  const elements: RuntimeTemplateDocument["elements"] = [
+    imageElement,
+    {
+      id: "shape-title-card",
+      type: "shapeBlock",
+      name: "Title card",
+      x: 56,
+      y: 1146,
+      width: 968,
+      height: 560,
+      rotation: 0,
+      zIndex: 20,
+      visible: true,
+      locked: false,
+      opacity: 1,
+      semanticRole: "decorative",
+      shapeKind: "roundedRect",
+      styleTokens: {
+        fillToken: "surface.primary",
+        borderToken: "border.primary",
+        shadowToken: "shadow.soft",
+        borderRadius: 30,
+      },
+    },
+  ];
+
+  if (supportsItemNumber) {
+    elements.push(
+      {
+        id: "shape-number-badge",
+        type: "shapeBlock",
+        name: "Number badge",
+        x: 110,
+        y: 1184,
+        width: 210,
+        height: 210,
+        rotation: 0,
+        zIndex: 30,
+        visible: true,
+        locked: false,
+        opacity: 1,
+        semanticRole: "decorative",
+        shapeKind: "circle",
+        styleTokens: {
+          fillToken: "surface.badge",
+          borderToken: "border.primary",
+          shadowToken: "shadow.soft",
+          borderRadius: 999,
+        },
+      },
+      {
+        id: "number-main",
+        type: "numberText",
+        name: "Hero number",
+        x: 140,
+        y: 1222,
+        width: 150,
+        height: 134,
+        rotation: 0,
+        zIndex: 40,
+        visible: true,
+        locked: false,
+        opacity: 1,
+        semanticRole: "itemNumber",
+        hideWhenEmpty: true,
+        text: "",
+        styleTokens: {
+          textToken: "text.number",
+          fontToken: "font.number",
+          textAlign: "center",
+          textTransform: "none",
+          minFontSize: 82,
+          maxFontSize: 120,
+          maxLines: 1,
+          lineHeight: 0.9,
+          letterSpacing: -0.05,
+          autoFit: true,
+        },
+      },
+    );
+  }
+
+  if (supportsSubtitle) {
+    elements.push({
+      id: "subtitle-main",
+      type: "subtitleText",
+      name: "Kicker",
+      x: 372,
+      y: 1218,
+      width: 516,
+      height: 46,
+      rotation: 0,
+      zIndex: 40,
+      visible: true,
+      locked: false,
+      opacity: 1,
+      semanticRole: "subtitle",
+      hideWhenEmpty: true,
+      text: "",
+      styleTokens: {
+        textToken: "text.subtitle",
+        fontToken: "font.subtitle",
+        textAlign: "left",
+        textTransform: "uppercase",
+        minFontSize: 18,
+        maxFontSize: 30,
+        maxLines: 1,
+        lineHeight: 1.02,
+        letterSpacing: 0.16,
+        autoFit: true,
+      },
+    });
+  }
+
+  elements.push({
+    id: "title-main",
+    type: "titleText",
+    name: "Main title",
+    x: supportsItemNumber ? 352 : 132,
+    y: supportsSubtitle ? 1288 : 1238,
+    width: supportsItemNumber ? 536 : 816,
+    height: 236,
+    rotation: 0,
+    zIndex: 40,
+    visible: true,
+    locked: false,
+    opacity: 1,
+    semanticRole: "title",
+    text: "",
+    hideWhenEmpty: false,
+    styleTokens: {
+      textToken: "text.title",
+      fontToken: "font.title",
+      textAlign: supportsItemNumber ? "left" : "center",
+      textTransform: "none",
+      minFontSize: 42,
+      maxFontSize: 86,
+      maxLines: 3,
+      lineHeight: 1.04,
+      letterSpacing: -0.02,
+      autoFit: true,
+    },
+  });
+
+  if (supportsDomain) {
+    elements.push(
+      {
+        id: "shape-domain-pill",
+        type: "shapeBlock",
+        name: "Domain pill",
+        x: 274,
+        y: 1596,
+        width: 532,
+        height: 76,
+        rotation: 0,
+        zIndex: 30,
+        visible: true,
+        locked: false,
+        opacity: 1,
+        semanticRole: "decorative",
+        shapeKind: "pill",
+        styleTokens: {
+          fillToken: "surface.badge",
+          borderToken: "border.primary",
+          shadowToken: "shadow.soft",
+          borderRadius: 999,
+        },
+      },
+      {
+        id: "domain-main",
+        type: "domainText",
+        name: "Domain label",
+        x: 320,
+        y: 1611,
+        width: 440,
+        height: 42,
+        rotation: 0,
+        zIndex: 40,
+        visible: true,
+        locked: false,
+        opacity: 1,
+        semanticRole: "domain",
+        sanitizeDomain: true,
+        hideWhenEmpty: false,
+        text: "",
+        styleTokens: {
+          textToken: "text.cta",
+          fontToken: "font.meta",
+          textAlign: "center",
+          textTransform: "uppercase",
+          minFontSize: 18,
+          maxFontSize: 28,
+          maxLines: 1,
+          lineHeight: 1,
+          letterSpacing: 0.08,
+          autoFit: true,
+        },
+      },
+    );
+  }
+
+  return {
+    schemaVersion: 1,
+    templateKind: "custom-runtime",
+    canvas: {
+      width: 1080,
+      height: 1920,
+      safeInset: 36,
+    },
+    metadata: {
+      name: input.name,
+      description: input.description,
+      category: "custom",
+      tags: ["starter", "runtime", "built-in-clone", builtIn.id],
+    },
+    capabilities: {
+      supportsSubtitle,
+      supportsItemNumber,
+      supportsDomain,
+      imageSlotCount: builtIn.imageSlotCount,
+    },
+    presetPolicy: {
+      allowVisualPresetOverride: true,
+      allowedPresetIds: presetIds,
+      allowedPresetCategories,
+      tokenMode: "preset-bound",
+    },
+    background: {
+      fillToken: "surface.canvas",
+    },
+    presetOverrides: {},
+    elements,
+    validationRules: {
+      imagePolicy: {
+        minSlotsRequired: Math.max(1, Math.min(2, builtIn.imageSlotCount)),
+        mode: "ALLOW_FEWER_DUPLICATE_LAST",
+      },
+      ignoredIssues: [],
+    },
+  };
+}
+
+function resolveStarterGridLayoutPreset(imageSlotCount: number) {
+  if (imageSlotCount <= 2) {
+    return "split-2-vertical" as const;
+  }
+  if (imageSlotCount === 3) {
+    return "stack-3" as const;
+  }
+  if (imageSlotCount === 4) {
+    return "grid-4" as const;
+  }
+  if (imageSlotCount === 5) {
+    return "collage-5" as const;
+  }
+  if (imageSlotCount === 6) {
+    return "split-6" as const;
+  }
+  if (imageSlotCount >= 9) {
+    return "grid-9" as const;
+  }
+  return "grid-8" as const;
 }
 
 async function getOwnedRuntimeTemplateVersion(input: {

@@ -15,6 +15,9 @@ import { getTemplateLibraryEntries } from "@/lib/templates/library";
 
 type TemplatesView = "templates" | "groups";
 type TemplateSourceFilter = "all" | "builtin" | "custom";
+type TemplateStatusFilter = "all" | "draft" | "finalized" | "archived";
+type TemplateUsageFilter = "all" | "used" | "unused";
+type TemplateFamilyFilter = "all" | "family" | "variant" | "standalone";
 
 export default async function DashboardTemplatesPage({
   searchParams,
@@ -26,6 +29,10 @@ export default async function DashboardTemplatesPage({
       templateSearch?: string;
       source?: string;
       notice?: string;
+      q?: string;
+      status?: string;
+      usage?: string;
+      family?: string;
     }>;
 }) {
   await requireAuthenticatedDashboardUser();
@@ -45,6 +52,10 @@ export default async function DashboardTemplatesPage({
   const templateSearch = resolvedSearchParams.templateSearch?.trim() ?? "";
   const sourceFilter = normalizeTemplateSourceFilter(resolvedSearchParams.source);
   const actionNotice = normalizeTemplateGroupsNotice(resolvedSearchParams.notice);
+  const templateQuery = resolvedSearchParams.q?.trim() ?? "";
+  const statusFilter = normalizeTemplateStatusFilter(resolvedSearchParams.status);
+  const usageFilter = normalizeTemplateUsageFilter(resolvedSearchParams.usage);
+  const familyFilter = normalizeTemplateFamilyFilter(resolvedSearchParams.family);
 
   let content: ReactNode = null;
 
@@ -95,11 +106,22 @@ export default async function DashboardTemplatesPage({
       listCustomTemplatesForUser(user.id),
       Promise.resolve(getTemplateLibraryEntries()),
     ]);
+    const filteredTemplates = filterTemplates(templates, {
+      query: templateQuery,
+      status: statusFilter,
+      usage: usageFilter,
+      family: familyFilter,
+    });
 
     content = (
       <TemplatesLifecycleManager
         builtInCount={builtIns.length}
-        templates={templates}
+        templates={filteredTemplates}
+        totalTemplateCount={templates.length}
+        query={templateQuery}
+        statusFilter={statusFilter}
+        usageFilter={usageFilter}
+        familyFilter={familyFilter}
       />
     );
   }
@@ -188,6 +210,73 @@ function normalizeTemplateSourceFilter(value: string | undefined): TemplateSourc
   }
 
   return "all";
+}
+
+function normalizeTemplateStatusFilter(value: string | undefined): TemplateStatusFilter {
+  if (value === "draft" || value === "finalized" || value === "archived") {
+    return value;
+  }
+
+  return "all";
+}
+
+function normalizeTemplateUsageFilter(value: string | undefined): TemplateUsageFilter {
+  if (value === "used" || value === "unused") {
+    return value;
+  }
+
+  return "all";
+}
+
+function normalizeTemplateFamilyFilter(value: string | undefined): TemplateFamilyFilter {
+  if (value === "family" || value === "variant" || value === "standalone") {
+    return value;
+  }
+
+  return "all";
+}
+
+function filterTemplates(
+  templates: Awaited<ReturnType<typeof listCustomTemplatesForUser>>,
+  input: {
+    query: string;
+    status: TemplateStatusFilter;
+    usage: TemplateUsageFilter;
+    family: TemplateFamilyFilter;
+  },
+) {
+  const needle = input.query.trim().toLowerCase();
+
+  return templates.filter((template) => {
+    const matchesQuery =
+      !needle ||
+      [
+        template.name,
+        template.slug ?? "",
+        template.description ?? "",
+        template.variantFamilyTemplate?.name ?? "",
+        ...template.userGroups.map((group) => group.name),
+      ].some((value) => value.toLowerCase().includes(needle));
+
+    const matchesStatus =
+      input.status === "all" ||
+      template.lifecycleStatus.toLowerCase() === input.status;
+
+    const used = template._count.generationPlans > 0 || template._count.generatedPins > 0;
+    const matchesUsage =
+      input.usage === "all" ||
+      (input.usage === "used" ? used : !used);
+
+    const matchesFamily =
+      input.family === "all" ||
+      (input.family === "family"
+        ? !template.isVariant && template.variantCount > 0
+        : input.family === "variant"
+          ? template.isVariant
+          : !template.isVariant && template.variantCount === 0);
+
+    return matchesQuery && matchesStatus && matchesUsage && matchesFamily;
+  });
 }
 
 function buildGroupsTabHref(input: {

@@ -18,6 +18,7 @@ type RuntimeTemplatePreviewPageProps = {
   searchParams: Promise<{
     preset?: string;
     versionId?: string;
+    compareVersionId?: string;
   }>;
 };
 
@@ -28,7 +29,7 @@ export default async function RuntimeTemplatePreviewPage({
   await requireAuthenticatedDashboardUser();
   const user = await getOrCreateDashboardUser();
   const { templateId } = await params;
-  const { preset, versionId } = await searchParams;
+  const { preset, versionId, compareVersionId } = await searchParams;
   const template = await getTemplateWithVersionsForUser({
     userId: user.id,
     templateId,
@@ -67,6 +68,10 @@ export default async function RuntimeTemplatePreviewPage({
   };
 
   const version = template.selectedVersion;
+  const compareVersion =
+    compareVersionId && compareVersionId !== version.id
+      ? template.versions.find((entry) => entry.id === compareVersionId) ?? null
+      : null;
   const validation =
     version.validationJson && typeof version.validationJson === "object"
       ? (version.validationJson as {
@@ -77,6 +82,9 @@ export default async function RuntimeTemplatePreviewPage({
           stress?: { cases?: unknown[] };
         })
       : null;
+  const preferredCompareVersion =
+    compareVersion ??
+    getPreferredCompareVersion(template.versions, version.id, version.lifecycleStatus);
 
   return (
     <div className="space-y-6 text-[var(--dashboard-text)]">
@@ -103,6 +111,31 @@ export default async function RuntimeTemplatePreviewPage({
               <span className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-1">
                 {payload.visualPreset}
               </span>
+              {template.isVariant ? (
+                <span className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-1">
+                  Variant
+                </span>
+              ) : null}
+              {template.variantFamilyTemplate ? (
+                <span className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-1">
+                  Family: {template.variantFamilyTemplate.name}
+                </span>
+              ) : null}
+              {!template.isVariant && template.variantCount > 0 ? (
+                <span className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-1">
+                  {template.variantCount} variants
+                </span>
+              ) : null}
+              {template._count.generatedPins > 0 ? (
+                <span className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-1">
+                  {template._count.generatedPins} pin(s)
+                </span>
+              ) : null}
+              {template._count.generationPlans > 0 ? (
+                <span className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-1">
+                  {template._count.generationPlans} plan(s)
+                </span>
+              ) : null}
             </div>
           </div>
 
@@ -125,33 +158,100 @@ export default async function RuntimeTemplatePreviewPage({
             >
               Open final render path
             </Link>
+            {preferredCompareVersion ? (
+              <Link
+                href={`/dashboard/templates/${template.id}/preview?versionId=${version.id}&compareVersionId=${preferredCompareVersion.id}${preset ? `&preset=${preset}` : ""}`}
+                className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-5 py-3 text-sm font-semibold text-[var(--dashboard-subtle)]"
+              >
+                Compare versions
+              </Link>
+            ) : null}
           </div>
         </div>
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-6 shadow-[var(--dashboard-shadow-sm)]">
-          <div
-            className="overflow-hidden rounded-[22px] bg-white shadow-[var(--dashboard-shadow-sm)]"
-            style={{
-              width: PREVIEW_WIDTH,
-              height: PREVIEW_HEIGHT,
-            }}
-          >
-            <div
-              style={{
-                width: 1080,
-                height: 1920,
-                transform: `scale(${PREVIEW_SCALE})`,
-                transformOrigin: "top left",
-              }}
-            >
-              {renderRuntimeTemplate(version.schemaJson, payload)}
+          {compareVersion ? (
+            <div className="grid gap-5 2xl:grid-cols-2">
+              <CompareCanvasCard
+                label={`Selected v${version.versionNumber}`}
+                lifecycleStatus={version.lifecycleStatus}
+              >
+                {renderRuntimeTemplate(version.schemaJson, payload)}
+              </CompareCanvasCard>
+              <CompareCanvasCard
+                label={`Compare v${compareVersion.versionNumber}`}
+                lifecycleStatus={compareVersion.lifecycleStatus}
+              >
+                {renderRuntimeTemplate(compareVersion.schemaJson, payload)}
+              </CompareCanvasCard>
             </div>
-          </div>
+          ) : (
+            <PreviewCanvas>{renderRuntimeTemplate(version.schemaJson, payload)}</PreviewCanvas>
+          )}
         </div>
 
         <aside className="space-y-4">
+          <div className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-5 shadow-[var(--dashboard-shadow-sm)]">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
+                Versions
+              </p>
+              {compareVersion ? (
+                <Link
+                  href={`/dashboard/templates/${template.id}/preview?versionId=${version.id}${preset ? `&preset=${preset}` : ""}`}
+                  className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-1.5 text-xs font-semibold text-[var(--dashboard-subtle)]"
+                >
+                  Exit compare
+                </Link>
+              ) : null}
+            </div>
+            <div className="mt-3 space-y-2">
+              {template.versions.map((entry) => {
+                const isSelected = entry.id === version.id;
+                const isCompared = entry.id === compareVersion?.id;
+
+                return (
+                  <div
+                    key={entry.id}
+                    className={`rounded-[18px] border px-3 py-3 ${
+                      isSelected
+                        ? "border-[var(--dashboard-accent-border)] bg-[var(--dashboard-accent-soft)]"
+                        : isCompared
+                          ? "border-[var(--dashboard-line)] bg-[var(--dashboard-panel-alt)]"
+                          : "border-[var(--dashboard-line)] bg-[var(--dashboard-panel)]"
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-muted)]">
+                        <span>v{entry.versionNumber}</span>
+                        <span>{entry.lifecycleStatus}</span>
+                        {entry.id === template.activeVersion?.id ? <span>Active</span> : null}
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Link
+                          href={`/dashboard/templates/${template.id}/preview?versionId=${entry.id}${preset ? `&preset=${preset}` : ""}`}
+                          className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-3 py-1.5 text-xs font-semibold text-[var(--dashboard-subtle)]"
+                        >
+                          View
+                        </Link>
+                        {entry.id !== version.id ? (
+                          <Link
+                            href={`/dashboard/templates/${template.id}/preview?versionId=${version.id}&compareVersionId=${entry.id}${preset ? `&preset=${preset}` : ""}`}
+                            className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-3 py-1.5 text-xs font-semibold text-[var(--dashboard-subtle)]"
+                          >
+                            Compare
+                          </Link>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
           <div className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-5 shadow-[var(--dashboard-shadow-sm)]">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--dashboard-muted)]">
               Preset
@@ -160,7 +260,7 @@ export default async function RuntimeTemplatePreviewPage({
               {templateVisualPresets.slice(0, 10).map((presetId) => (
                 <Link
                   key={presetId}
-                  href={`/dashboard/templates/${template.id}/preview?preset=${presetId}&versionId=${version.id}`}
+                  href={`/dashboard/templates/${template.id}/preview?preset=${presetId}&versionId=${version.id}${compareVersion ? `&compareVersionId=${compareVersion.id}` : ""}`}
                   className={`rounded-full border px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] ${
                     presetId === payload.visualPreset
                       ? "border-[var(--dashboard-accent)] bg-[var(--dashboard-accent-soft)] text-[var(--dashboard-accent-strong)]"
@@ -212,6 +312,12 @@ export default async function RuntimeTemplatePreviewPage({
                 <dt className="font-semibold text-[var(--dashboard-muted)]">Images</dt>
                 <dd className="mt-1">{payload.images.length}</dd>
               </div>
+              <div>
+                <dt className="font-semibold text-[var(--dashboard-muted)]">Where used</dt>
+                <dd className="mt-1">
+                  {template._count.generationPlans} plan(s) • {template._count.generatedPins} pin(s)
+                </dd>
+              </div>
               {validation?.generatedAt ? (
                 <div>
                   <dt className="font-semibold text-[var(--dashboard-muted)]">Last validation</dt>
@@ -223,5 +329,80 @@ export default async function RuntimeTemplatePreviewPage({
         </aside>
       </section>
     </div>
+  );
+}
+
+function PreviewCanvas({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      className="overflow-hidden rounded-[22px] bg-white shadow-[var(--dashboard-shadow-sm)]"
+      style={{
+        width: PREVIEW_WIDTH,
+        height: PREVIEW_HEIGHT,
+      }}
+    >
+      <div
+        style={{
+          width: 1080,
+          height: 1920,
+          transform: `scale(${PREVIEW_SCALE})`,
+          transformOrigin: "top left",
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function CompareCanvasCard({
+  label,
+  lifecycleStatus,
+  children,
+}: {
+  label: string;
+  lifecycleStatus: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-muted)]">
+        <span className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-1">
+          {label}
+        </span>
+        <span className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-1">
+          {lifecycleStatus}
+        </span>
+      </div>
+      <PreviewCanvas>{children}</PreviewCanvas>
+    </div>
+  );
+}
+
+function getPreferredCompareVersion(
+  versions: Array<{
+    id: string;
+    lifecycleStatus: string;
+  }>,
+  selectedVersionId: string,
+  selectedLifecycleStatus: string,
+) {
+  const otherVersions = versions.filter((entry) => entry.id !== selectedVersionId);
+  if (otherVersions.length === 0) {
+    return null;
+  }
+
+  if (selectedLifecycleStatus === "DRAFT") {
+    return (
+      otherVersions.find((entry) => entry.lifecycleStatus === "FINALIZED") ??
+      otherVersions[0] ??
+      null
+    );
+  }
+
+  return (
+    otherVersions.find((entry) => entry.lifecycleStatus === "DRAFT") ??
+    otherVersions[0] ??
+    null
   );
 }

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { createCustomDraftFromBuiltInTemplateAction } from "@/app/dashboard/templates/actions";
 import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
 import { requireAuthenticatedDashboardUser } from "@/lib/auth/dashboardSession";
 import { listCustomTemplatesForUser } from "@/lib/runtime-templates/db";
@@ -13,9 +14,17 @@ const THUMBNAIL_WIDTH = 296;
 const THUMBNAIL_SCALE = THUMBNAIL_WIDTH / 1080;
 const THUMBNAIL_HEIGHT = Math.round(1920 * THUMBNAIL_SCALE);
 
-export default async function DashboardLibraryPage() {
+export default async function DashboardLibraryPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{
+    q?: string;
+    source?: string;
+  }>;
+}) {
   await requireAuthenticatedDashboardUser();
   const user = await getOrCreateDashboardUser();
+  const resolvedSearchParams = (await searchParams) ?? {};
   const [builtIns, customFinalized, customTemplates] = await Promise.all([
     getBuiltInSelectableTemplateCandidatesForUser(user.id),
     listFinalizedCustomTemplateCandidatesForUser(user.id),
@@ -27,6 +36,38 @@ export default async function DashboardLibraryPage() {
   const draftCount = customTemplates.filter((template) => template.lifecycleStatus === "DRAFT").length;
   const archivedCount = customTemplates.filter((template) => template.lifecycleStatus === "ARCHIVED").length;
   const totalSelectableCount = builtIns.length + finalizedCustomTemplates.length;
+  const query = resolvedSearchParams.q?.trim().toLowerCase() ?? "";
+  const sourceFilter =
+    resolvedSearchParams.source === "builtin" || resolvedSearchParams.source === "custom"
+      ? resolvedSearchParams.source
+      : "all";
+  const customTemplateMap = new Map(customTemplates.map((template) => [template.id, template]));
+  const visibleBuiltIns = builtIns.filter((template) => {
+    if (sourceFilter === "custom") {
+      return false;
+    }
+
+    return matchesLibraryQuery(query, {
+      name: template.name,
+      description: template.description,
+      groups: template.userGroups.map((group) => group.name),
+      family: null,
+    });
+  });
+  const visibleCustomTemplates = finalizedCustomTemplates.filter((template) => {
+    if (sourceFilter === "builtin") {
+      return false;
+    }
+
+    const fullTemplate = customTemplateMap.get(template.templateId);
+
+    return matchesLibraryQuery(query, {
+      name: template.name,
+      description: template.description,
+      groups: template.userGroups.map((group) => group.name),
+      family: fullTemplate?.variantFamilyTemplate?.name ?? null,
+    });
+  });
 
   return (
     <div className="space-y-5 text-[var(--dashboard-text)]">
@@ -54,39 +95,106 @@ export default async function DashboardLibraryPage() {
         </div>
       </section>
 
-      <LibrarySection title="Built-in templates" count={builtIns.length}>
-        <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
-          {builtIns.map((template) => (
-            <TemplateCard
-              key={template.id}
-              preview={
-                <LibraryThumbnail>
-                  {renderTemplate(template.id, template.sampleProps)}
-                </LibraryThumbnail>
-              }
-              name={template.name}
-              badges={[
-                { label: "Built-in", tone: "accent" },
-                { label: `${template.imageSlotCount} slots` },
-              ]}
-              groupInfo={summarizeItems(template.userGroups.map((group) => group.name), "Not in any groups")}
-              previewHref={template.previewPath ?? `/preview/${template.id}`}
-              renderHref={`/render/${template.id}`}
-              manageGroupsHref={`/dashboard/templates?view=groups&templateSearch=${encodeURIComponent(template.name)}`}
+      <section className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-4 shadow-[var(--dashboard-shadow-sm)]">
+        <form className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_220px_auto] xl:items-end">
+          <label className="space-y-1.5">
+            <span className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--dashboard-muted)]">
+              Search
+            </span>
+            <input
+              type="text"
+              name="q"
+              defaultValue={resolvedSearchParams.q ?? ""}
+              placeholder="Search template, family, or group"
+              className="w-full rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-2 text-[var(--dashboard-text)]"
             />
-          ))}
-        </div>
+          </label>
+          <label className="space-y-1.5">
+            <span className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--dashboard-muted)]">
+              Source
+            </span>
+            <select
+              name="source"
+              defaultValue={sourceFilter}
+              className="w-full rounded-xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-3 py-2 text-[var(--dashboard-text)]"
+            >
+              <option value="all">All</option>
+              <option value="builtin">Built-in</option>
+              <option value="custom">Custom</option>
+            </select>
+          </label>
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-text)]"
+            >
+              Apply
+            </button>
+            <Link
+              href="/dashboard/library"
+              className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)]"
+            >
+              Reset
+            </Link>
+          </div>
+        </form>
+      </section>
+
+      <LibrarySection title="Built-in templates" count={visibleBuiltIns.length}>
+        {visibleBuiltIns.length === 0 ? (
+          <EmptyState
+            title="No built-in templates match"
+            description="Adjust the current search or source filter to see more built-in templates."
+          />
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
+            {visibleBuiltIns.map((template) => (
+              <TemplateCard
+                key={template.id}
+                preview={
+                  <LibraryThumbnail>
+                    {renderTemplate(template.id, template.sampleProps)}
+                  </LibraryThumbnail>
+                }
+                name={template.name}
+                badges={[
+                  { label: "Built-in", tone: "accent" },
+                  { label: `${template.imageSlotCount} slots` },
+                ]}
+                groupInfo={summarizeItems(template.userGroups.map((group) => group.name), "Not in any groups")}
+                previewHref={template.previewPath ?? `/preview/${template.id}`}
+                renderHref={`/render/${template.id}`}
+                manageGroupsHref={`/dashboard/templates?view=groups&templateSearch=${encodeURIComponent(template.name)}`}
+                builtInCloneAction={
+                  <form action={createCustomDraftFromBuiltInTemplateAction} className="contents">
+                    <input type="hidden" name="builtInTemplateId" value={template.id} />
+                    <button
+                      type="submit"
+                      className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)]"
+                    >
+                      Custom draft
+                    </button>
+                  </form>
+                }
+              />
+            ))}
+          </div>
+        )}
       </LibrarySection>
 
-      <LibrarySection title="My finalized custom templates" count={finalizedCustomTemplates.length}>
-        {finalizedCustomTemplates.length === 0 ? (
+      <LibrarySection title="My finalized custom templates" count={visibleCustomTemplates.length}>
+        {visibleCustomTemplates.length === 0 ? (
           <EmptyState
             title="No finalized custom templates"
             description="Finalize a custom template from Templates to make it available in the library."
           />
         ) : (
           <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
-            {finalizedCustomTemplates.map((template) => (
+            {visibleCustomTemplates.map((template) => {
+              const fullTemplate = customTemplateMap.get(template.templateId);
+              const compareVersion = fullTemplate ? getPreferredCompareVersion(fullTemplate) : null;
+
+              return (
               <TemplateCard
                 key={template.selectionKey}
                 preview={
@@ -100,13 +208,28 @@ export default async function DashboardLibraryPage() {
                 badges={[
                   { label: "Custom", tone: "accent" },
                   { label: `v${template.versionNumber ?? 1}` },
+                  ...(fullTemplate?.isVariant ? [{ label: "Variant" }] : []),
+                  ...(fullTemplate?.variantFamilyTemplate
+                    ? [{ label: `Family: ${fullTemplate.variantFamilyTemplate.name}` }]
+                    : []),
                 ]}
                 groupInfo={summarizeItems(template.userGroups.map((group) => group.name), "Not in any groups")}
                 previewHref={template.previewPath}
                 renderHref={template.renderPath}
                 manageGroupsHref={`/dashboard/templates?view=groups&templateSearch=${encodeURIComponent(template.name)}`}
+                secondaryInfo={
+                  fullTemplate && (fullTemplate._count.generationPlans > 0 || fullTemplate._count.generatedPins > 0)
+                    ? `Used in ${fullTemplate._count.generationPlans} plan(s) and ${fullTemplate._count.generatedPins} pin(s)`
+                    : null
+                }
+                compareHref={
+                  compareVersion && template.templateVersionId
+                    ? `/dashboard/templates/${template.templateId}/preview?versionId=${template.templateVersionId}&compareVersionId=${compareVersion.id}`
+                    : null
+                }
               />
-            ))}
+              );
+            })}
           </div>
         )}
       </LibrarySection>
@@ -144,6 +267,9 @@ function TemplateCard({
   previewHref,
   renderHref,
   manageGroupsHref,
+  builtInCloneAction,
+  secondaryInfo,
+  compareHref,
 }: {
   preview: React.ReactNode;
   name: string;
@@ -152,6 +278,9 @@ function TemplateCard({
   previewHref: string;
   renderHref: string;
   manageGroupsHref: string;
+  builtInCloneAction?: React.ReactNode;
+  secondaryInfo?: string | null;
+  compareHref?: string | null;
 }) {
   return (
     <article className="overflow-hidden rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] shadow-[var(--dashboard-shadow-sm)]">
@@ -175,6 +304,12 @@ function TemplateCard({
           <p className="mt-1 text-sm text-[var(--dashboard-text)]">{groupInfo}</p>
         </div>
 
+        {secondaryInfo ? (
+          <div className="rounded-[18px] border border-[var(--dashboard-warning-border)] bg-[var(--dashboard-warning-soft)] px-3 py-2 text-sm text-[var(--dashboard-warning-ink)]">
+            {secondaryInfo}
+          </div>
+        ) : null}
+
         <div className="flex flex-wrap gap-2">
           <Link
             href={previewHref}
@@ -194,6 +329,15 @@ function TemplateCard({
           >
             Manage groups
           </Link>
+          {compareHref ? (
+            <Link
+              href={compareHref}
+              className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)]"
+            >
+              Compare
+            </Link>
+          ) : null}
+          {builtInCloneAction}
         </div>
       </div>
     </article>
@@ -278,4 +422,50 @@ function summarizeItems(items: string[], emptyLabel: string, limit = 3) {
   const overflowCount = items.length - visibleItems.length;
 
   return overflowCount > 0 ? `${visibleItems.join(", ")} +${overflowCount}` : visibleItems.join(", ");
+}
+
+function matchesLibraryQuery(
+  query: string,
+  input: {
+    name: string;
+    description: string | null;
+    groups: string[];
+    family: string | null;
+  },
+) {
+  if (!query) {
+    return true;
+  }
+
+  return [input.name, input.description ?? "", input.family ?? "", ...input.groups].some((value) =>
+    value.toLowerCase().includes(query),
+  );
+}
+
+function getPreferredCompareVersion(
+  template: NonNullable<Awaited<ReturnType<typeof listCustomTemplatesForUser>>[number]>,
+) {
+  const activeVersion = template.activeVersion;
+  if (!activeVersion) {
+    return null;
+  }
+
+  const otherVersions = template.versions.filter((version) => version.id !== activeVersion.id);
+  if (otherVersions.length === 0) {
+    return null;
+  }
+
+  if (activeVersion.lifecycleStatus === "DRAFT") {
+    return (
+      otherVersions.find((version) => version.lifecycleStatus === "FINALIZED") ??
+      otherVersions[0] ??
+      null
+    );
+  }
+
+  return (
+    otherVersions.find((version) => version.lifecycleStatus === "DRAFT") ??
+    otherVersions[0] ??
+    null
+  );
 }
