@@ -2841,6 +2841,7 @@ const TEMPLATE_PRESET_CATEGORY_ALLOWLIST: Record<string, TemplateVisualPresetCat
   "color-pop-ladder-number-card": ["earthy-warm", "dark-drama", "graphic-pop", "fresh-vivid", "feminine-bold"],
   "hero-bowl-stack": ["earthy-warm", "dark-drama", "graphic-pop", "fresh-vivid"],
   "menu-board-split": ["earthy-warm", "dark-drama", "graphic-pop", "fresh-vivid"],
+  "recipe-card-carousel": ["earthy-warm", "dark-drama", "graphic-pop", "fresh-vivid"],
 };
 
 export function getPresetIdsForTemplate(

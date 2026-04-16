@@ -4365,6 +4365,8 @@ function getArtworkTitleRule(templateId: string) {
       return { maxWords: 5, maxChars: 34, maxLines: 3, singleLine: false };
     case "menu-board-split":
       return { maxWords: 5, maxChars: 34, maxLines: 3, singleLine: false };
+    case "recipe-card-carousel":
+      return { maxWords: 5, maxChars: 34, maxLines: 3, singleLine: false };
     case "hero-arch-sidebar-triptych":
       return { maxWords: 5, maxChars: 30, maxLines: 5, singleLine: false };
     case "three-image-center-poster-number-footer":
@@ -4426,6 +4428,10 @@ function getArtworkGoal(templateId: string, templateSupportsSubtitle: boolean) {
 
   if (templateId === "menu-board-split") {
     return "Create a number-aware Pinterest artwork headline for a bold food roundup cover with a dark menu-board title panel. Use 3 to 5 strong words total, do not include the count in the headline itself, and make it feel like a strong restaurant-board feature rather than a sentence. Favor concrete food roundup closers like Recipes, Dinners, Meals, Soups, Desserts, or Ideas.";
+  }
+
+  if (templateId === "recipe-card-carousel") {
+    return "Create a number-aware Pinterest artwork headline for a layered food roundup cover with three oversized cascading photo cards and a central title slab. Use 3 to 5 strong words total, do not include the count in the headline itself, and make it feel like a saved recipe-card stack rather than a sentence. Favor concrete food roundup closers like Recipes, Desserts, Meals, Cookies, Dinners, or Ideas.";
   }
 
   if (templateId === "five-image-center-band-number-domain") {
@@ -4539,6 +4545,11 @@ function enforceArtworkTitleRule(templateId: string, title: string) {
   }
 
   if (templateId === "menu-board-split") {
+    headline = ensureHeroNumberArtworkTitle(headline);
+    headline = ensureThreeToFiveWordFoodRoundupTitle(headline);
+  }
+
+  if (templateId === "recipe-card-carousel") {
     headline = ensureHeroNumberArtworkTitle(headline);
     headline = ensureThreeToFiveWordFoodRoundupTitle(headline);
   }

@@ -26,6 +26,7 @@ import { TemplateHeroScrapbookTapeTag } from "@/templates/TemplateHeroScrapbookT
 import { TemplateBookmarkRibbonCollageTitle } from "@/templates/TemplateBookmarkRibbonCollageTitle";
 import { TemplateHeroBowlStack } from "@/templates/TemplateHeroBowlStack";
 import { TemplateMenuBoardSplit } from "@/templates/TemplateMenuBoardSplit";
+import { TemplateRecipeCardCarousel } from "@/templates/TemplateRecipeCardCarousel";
 import type { JSX } from "react";
 import {
   sampleTemplateDataBookmarkRibbonCollageTitle,
@@ -45,6 +46,7 @@ import {
   sampleTemplateDataHeroScrapbookTapeTag,
   sampleTemplateDataHeroBowlStack,
   sampleTemplateDataMenuBoardSplit,
+  sampleTemplateDataRecipeCardCarousel,
   sampleTemplateDataHeroTextTripleSplitFooter,
   sampleTemplateDataMasonryGridNumberTitleFooter,
   sampleTemplateDataNineImageGridOverlayNumberFooter,
@@ -480,6 +482,21 @@ export const TEMPLATE_CONFIGS: Record<string, TemplateConfig> = {
       footer: true,
     },
   },
+  "recipe-card-carousel": {
+    id: "recipe-card-carousel",
+    name: "Recipe Card Carousel",
+    componentKey: "TemplateRecipeCardCarousel",
+    previewPath: "/preview/recipe-card-carousel",
+    locked: true,
+    canvas: { width: 1080, height: 1920 },
+    imageSlotCount: 3,
+    textFields: ["subtitle", "title", "itemNumber", "domain", "visualPreset"],
+    features: {
+      overlay: true,
+      numberTreatment: "hero",
+      footer: true,
+    },
+  },
 };
 
 const TEMPLATE_COMPONENTS: Record<
@@ -514,6 +531,7 @@ const TEMPLATE_COMPONENTS: Record<
   "bookmark-ribbon-collage-title": TemplateBookmarkRibbonCollageTitle,
   "hero-bowl-stack": TemplateHeroBowlStack,
   "menu-board-split": TemplateMenuBoardSplit,
+  "recipe-card-carousel": TemplateRecipeCardCarousel,
 };
 
 export function getTemplateConfig(templateId: string) {
@@ -641,6 +659,10 @@ export function getSampleTemplateProps(templateId: string) {
 
   if (templateId === "menu-board-split") {
     return sampleTemplateDataMenuBoardSplit;
+  }
+
+  if (templateId === "recipe-card-carousel") {
+    return sampleTemplateDataRecipeCardCarousel;
   }
 
   return sampleTemplateDataWithSubtitle;

@@ -337,3 +337,16 @@ export const sampleTemplateDataMenuBoardSplit: TemplateRenderProps = {
   itemNumber: 21,
   visualPreset: "espresso-cherry",
 };
+
+export const sampleTemplateDataRecipeCardCarousel: TemplateRenderProps = {
+  subtitle: "Recipe Roundup",
+  title: "Christmas Dessert Ideas",
+  images: [
+    "/sample-images/8.jpg",
+    "/sample-images/7.jpg",
+    "/sample-images/1.jpg",
+  ],
+  domain: "homebites.com",
+  itemNumber: 25,
+  visualPreset: "crimson-custard",
+};
