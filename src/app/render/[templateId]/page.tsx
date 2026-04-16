@@ -1,4 +1,6 @@
 import { notFound } from "next/navigation";
+import type { ReactNode } from "react";
+import { ResponsiveCanvasPreview } from "@/components/ResponsiveCanvasPreview";
 import { isDatabaseConfigured } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
 import { getRuntimeTemplateForRender } from "@/lib/runtime-templates/db";
@@ -20,6 +22,7 @@ type RenderPageProps = {
     versionId?: string;
     preset?: string;
     stressCase?: string;
+    embed?: string;
   }>;
 };
 
@@ -28,21 +31,48 @@ export default async function RenderTemplatePage({
   searchParams,
 }: RenderPageProps) {
   const { templateId } = await params;
-  const { jobId, planId, versionId, preset, stressCase } = await searchParams;
+  const { jobId, planId, versionId, preset, stressCase, embed } = await searchParams;
   const config = getTemplateConfig(templateId);
+  const embedMode = embed === "1";
+
+  const renderInShell = (content: ReactNode) => {
+    if (!embedMode) {
+      return <main className="flex min-h-screen items-center justify-center bg-[#d9d1c7] p-8">{content}</main>;
+    }
+
+    return (
+      <main className="flex h-screen items-center justify-center overflow-hidden bg-[#d9d1c7] p-3">
+        <div
+          className="h-full overflow-hidden"
+          style={{
+            width: "min(calc((100vh - 24px) * 0.5625), calc(100vw - 24px))",
+          }}
+        >
+          <ResponsiveCanvasPreview
+            canvasWidth={1080}
+            canvasHeight={1920}
+            maxViewportHeightRatio={0.9875}
+            className="h-full w-full"
+          >
+            {content}
+          </ResponsiveCanvasPreview>
+        </div>
+      </main>
+    );
+  };
 
   if (config) {
     const payload = await getRenderPayload(
       templateId,
       jobId,
       planId,
+      {
+        presetOverride: preset ?? null,
+      },
     );
+    const rendered = renderTemplate(templateId, payload);
 
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-[#d9d1c7] p-8">
-        {renderTemplate(templateId, payload)}
-      </main>
-    );
+    return renderInShell(rendered);
   }
 
   if (!isDatabaseConfigured()) {
@@ -83,11 +113,9 @@ export default async function RenderTemplatePage({
           presetId: activePreset,
           stressCaseId: stressCase ?? null,
         }).payload
-      : await getRenderPayload(templateId, jobId, planId);
+      : await getRenderPayload(templateId, jobId, planId, {
+          presetOverride: preset ?? null,
+        });
 
-  return (
-    <main className="flex min-h-screen items-center justify-center bg-[#d9d1c7] p-8">
-      {renderRuntimeTemplate(document, payload)}
-    </main>
-  );
+  return renderInShell(renderRuntimeTemplate(document, payload));
 }

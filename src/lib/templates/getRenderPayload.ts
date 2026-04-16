@@ -9,6 +9,9 @@ export async function getRenderPayload(
   templateId: string,
   jobId?: string,
   planId?: string,
+  options?: {
+    presetOverride?: string | null;
+  },
 ): Promise<TemplateRenderProps> {
   if (!jobId || !isDatabaseConfigured()) {
     return getTemplateConfig(templateId)
@@ -58,7 +61,10 @@ export async function getRenderPayload(
           : job.listCountHint ?? undefined,
       domain: job.domainSnapshot,
       visualPreset: toVisualPreset(
-        renderContext.visualPreset ?? renderContext.colorPreset,
+        resolvePresetValueForPreview(
+          options?.presetOverride,
+          renderContext.visualPreset ?? renderContext.colorPreset,
+        ),
         templateId,
       ),
       images:
@@ -75,7 +81,27 @@ export async function getRenderPayload(
   }
 }
 
+function resolvePresetValueForPreview(override: unknown, savedValue: unknown) {
+  const validOverride = toValidatedVisualPreset(override);
+  if (validOverride) {
+    return validOverride;
+  }
+
+  return savedValue;
+}
+
 function toVisualPreset(value: unknown, templateId: string) {
+  const validatedValue = toValidatedVisualPreset(value);
+  if (validatedValue) {
+    return validatedValue;
+  }
+
+  return getTemplateConfig(templateId)
+    ? getSampleTemplateProps(templateId).visualPreset
+    : getSampleRuntimeTemplateRenderProps().visualPreset;
+}
+
+function toValidatedVisualPreset(value: unknown) {
   if (
     typeof value === "string" &&
     templateVisualPresets.includes(value as (typeof templateVisualPresets)[number])
@@ -83,7 +109,5 @@ function toVisualPreset(value: unknown, templateId: string) {
     return value as (typeof templateVisualPresets)[number];
   }
 
-  return getTemplateConfig(templateId)
-    ? getSampleTemplateProps(templateId).visualPreset
-    : getSampleRuntimeTemplateRenderProps().visualPreset;
+  return undefined;
 }

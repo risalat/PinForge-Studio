@@ -137,6 +137,7 @@ type ReviewActionState =
   | { kind: "retune_preset"; planId: string }
   | { kind: "discard_plans"; scope: "selected" | "single" }
   | { kind: "discard_pins"; scope: "all" | "single" }
+  | { kind: "apply_preset"; planId: string }
   | { kind: "save_overrides"; planId: string }
   | { kind: "set_review_state"; planId: string }
   | null;
@@ -313,6 +314,7 @@ export function JobReviewManager({
   const [generationFeedback, setGenerationFeedback] = useState<FeedbackState>(null);
   const [previewPinIndex, setPreviewPinIndex] = useState<number | null>(null);
   const [previewSource, setPreviewSource] = useState<{ url: string; label: string } | null>(null);
+  const [previewRender, setPreviewRender] = useState<{ url: string; label: string } | null>(null);
   const [missingAssetPinIds, setMissingAssetPinIds] = useState<string[]>([]);
   const [renderProgress, setRenderProgress] = useState<RenderProgressState | null>(null);
   const [isRenderingPlans, setIsRenderingPlans] = useState(false);
@@ -497,6 +499,20 @@ export function JobReviewManager({
     previewPinIndex !== null && previewPinIndex >= 0 && previewPinIndex < generatedPins.length
       ? generatedPins[previewPinIndex]
       : null;
+  const selectedPlanPresetPreviewDirty = selectedPlan
+    ? isPlanPresetPreviewDirty(selectedPlan, selectedPlanDraft)
+    : false;
+  const selectedPlanGeneratedPreviewOutOfDate =
+    selectedPlan && selectedPlanCurrentPin
+      ? isGeneratedPreviewOutOfDate(selectedPlan, selectedPlanCurrentPin)
+      : false;
+  const selectedPlanPreviewUrl = selectedPlan
+    ? buildQueueRenderPreviewUrl({
+        jobId,
+        plan: selectedPlan,
+        draft: selectedPlanDraft,
+      })
+    : null;
 
   function getButtonClass(options: {
     tone: "accent" | "danger" | "neutral";
@@ -523,6 +539,15 @@ export function JobReviewManager({
     setMissingAssetPinIds((current) =>
       current.includes(pinId) ? current : [...current, pinId],
     );
+  }
+
+  function resetPlanPresetPreview(planId: string) {
+    const plan = plans.find((entry) => entry.id === planId);
+    if (!plan) {
+      return;
+    }
+
+    updatePlanDraft(planId, { visualPreset: normalizePresetValue(plan.visualPreset) });
   }
 
   function toggleTemplate(templateId: string) {
@@ -1395,6 +1420,56 @@ export function JobReviewManager({
         notify({
           tone: "error",
           title: "Override save failed",
+          message,
+          sticky: true,
+        });
+      } finally {
+        setActiveAction(null);
+      }
+    });
+  }
+
+  function handleApplyPlanPreset(planId: string) {
+    const plan = plans.find((entry) => entry.id === planId);
+    const draft = planDrafts.find((entry) => entry.planId === planId);
+    if (!plan || !draft) {
+      return;
+    }
+
+    if (!isPlanPresetPreviewDirty(plan, draft)) {
+      return;
+    }
+
+    startTransition(async () => {
+      setActiveAction({ kind: "apply_preset", planId });
+      try {
+        setPlansFeedback(null);
+        await runAction(`/api/dashboard/jobs/${jobId}/plans`, {
+          mode: "update_render_context",
+          planId,
+          visualPreset: draft.visualPreset.trim() === "" ? null : draft.visualPreset,
+        });
+        setPlansFeedback({
+          tone: "success",
+          message: "Preset saved. Rerender this pin to export the updated look.",
+        });
+        notify({
+          tone: "success",
+          title: "Preset applied",
+          message:
+            "The saved preset was updated. The generated image now needs rerendering to match it.",
+        });
+        router.refresh();
+      } catch (actionError) {
+        const message =
+          actionError instanceof Error ? actionError.message : "Unable to apply preset.";
+        setPlansFeedback({
+          tone: "error",
+          message,
+        });
+        notify({
+          tone: "error",
+          title: "Preset apply failed",
           message,
           sticky: true,
         });
@@ -2552,6 +2627,15 @@ export function JobReviewManager({
                   const absoluteIndex = currentPin
                     ? generatedPins.findIndex((entry) => entry.id === currentPin.id)
                     : -1;
+                  const isPresetPreviewDirty = isPlanPresetPreviewDirty(plan, draft);
+                  const generatedPreviewOutOfDate = isGeneratedPreviewOutOfDate(plan, currentPin);
+                  const previewUrl = buildQueueRenderPreviewUrl({
+                    jobId,
+                    plan,
+                    draft,
+                  });
+                  const shouldShowLivePreview =
+                    isPresetPreviewDirty || !currentPin || assetMissing;
 
                   return (
                     <article
@@ -2582,40 +2666,40 @@ export function JobReviewManager({
                         </div>
                       </div>
                       <div className="p-4">
-                        {currentPin ? (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (!assetMissing && absoluteIndex >= 0) {
-                                setPreviewPinIndex(absoluteIndex);
-                              } else {
-                                openPlanEditor(plan.id);
-                              }
-                            }}
-                            className="group block w-full overflow-hidden rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)]"
-                          >
-                            {assetMissing ? (
-                              <MissingAssetCard />
-                            ) : (
-                              <img
-                                src={currentPin.exportPath}
-                                alt={draft?.title || currentPin.title || plan.templateName}
-                                className="aspect-[2/3] w-full object-cover transition duration-200 group-hover:scale-[1.02]"
-                                onError={() => markPinAssetMissing(currentPin.id)}
-                              />
-                            )}
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => openPlanEditor(plan.id)}
-                            className="flex aspect-[2/3] w-full items-center justify-center rounded-2xl border border-dashed border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-6 text-center text-sm font-semibold text-[var(--dashboard-subtle)]"
-                          >
-                            No rendered output yet.
-                            <br />
-                            Open editor or queue a render.
-                          </button>
-                        )}
+                        <QueuePreviewSurface
+                          alt={draft?.title || currentPin?.title || plan.templateName}
+                          assetMissing={assetMissing}
+                          currentPinExportPath={currentPin?.exportPath ?? null}
+                          currentPinId={currentPin?.id ?? null}
+                          livePreviewUrl={previewUrl}
+                          onAssetMissing={markPinAssetMissing}
+                          onOpenLivePreview={() =>
+                            setPreviewRender({
+                              url: previewUrl,
+                              label: draft?.title || currentPin?.title || plan.templateName,
+                            })
+                          }
+                          onOpenRenderedPin={
+                            absoluteIndex >= 0 ? () => setPreviewPinIndex(absoluteIndex) : undefined
+                          }
+                          placeholderLabel="No rendered output yet. Adjust the preset or queue a render."
+                          showLivePreview={shouldShowLivePreview}
+                        />
+
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {isPresetPreviewDirty ? (
+                            <StatusPill label="Previewing preset only" tone="warning" />
+                          ) : null}
+                          {generatedPreviewOutOfDate ? (
+                            <StatusPill label="Generated image out of date" tone="warning" />
+                          ) : null}
+                          {generatedPreviewOutOfDate && plan.visualPreset ? (
+                            <StatusPill
+                              label={`Saved preset ${formatLabel(plan.visualPreset)}`}
+                              tone="neutral"
+                            />
+                          ) : null}
+                        </div>
 
                         {currentPin?.isScheduled ? (
                           <p className="mt-3 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-success-ink)]">
@@ -2644,6 +2728,82 @@ export function JobReviewManager({
                             {plan.rerenderError ? (
                               <p className="mt-2 text-sm text-[var(--dashboard-danger-ink)]">{plan.rerenderError}</p>
                             ) : null}
+                          </div>
+
+                          <div className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-3">
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                              <label className="min-w-[220px] flex-1 text-sm font-semibold text-[var(--dashboard-subtle)]">
+                                Preview preset
+                                <select
+                                  value={draft?.visualPreset ?? ""}
+                                  onChange={(event) =>
+                                    updatePlanDraft(plan.id, { visualPreset: event.target.value })
+                                  }
+                                  className="mt-2 w-full rounded-xl border border-[var(--dashboard-line)] bg-white px-3 py-2"
+                                >
+                                  <option value="">Use recommended preset</option>
+                                  {visualPresetCategories.map((category) => (
+                                    <optgroup key={category.id} label={category.label}>
+                                      {visualPresetOptions
+                                        .filter((preset) => preset.categoryId === category.id)
+                                        .map((preset) => (
+                                          <option key={preset.id} value={preset.id}>
+                                            {preset.label}
+                                          </option>
+                                        ))}
+                                    </optgroup>
+                                  ))}
+                                </select>
+                              </label>
+                              <div className="flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleApplyPlanPreset(plan.id)}
+                                  disabled={
+                                    Boolean(activeAction) ||
+                                    isRenderingPlans ||
+                                    !isPresetPreviewDirty
+                                  }
+                                  className={getButtonClass({
+                                    tone: "neutral",
+                                    busy:
+                                      activeAction?.kind === "apply_preset" &&
+                                      activeAction.planId === plan.id,
+                                  })}
+                                >
+                                  <BusyActionLabel
+                                    busy={
+                                      activeAction?.kind === "apply_preset" &&
+                                      activeAction.planId === plan.id
+                                    }
+                                    label="Apply preset"
+                                    busyLabel="Applying preset..."
+                                  />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => resetPlanPresetPreview(plan.id)}
+                                  disabled={
+                                    Boolean(activeAction) ||
+                                    isRenderingPlans ||
+                                    !isPresetPreviewDirty
+                                  }
+                                  className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] disabled:opacity-60"
+                                >
+                                  Reset preview
+                                </button>
+                              </div>
+                            </div>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              {isPresetPreviewDirty ? (
+                                <StatusPill label="Apply to save this preset" tone="warning" />
+                              ) : (
+                                <StatusPill label="Preview matches saved preset" tone="good" />
+                              )}
+                              {generatedPreviewOutOfDate ? (
+                                <StatusPill label="Rerender required after save" tone="warning" />
+                              ) : null}
+                            </div>
                           </div>
 
                           <div className="flex flex-wrap gap-2">
@@ -2946,6 +3106,34 @@ export function JobReviewManager({
                       </button>
                       <button
                         type="button"
+                        onClick={() => handleApplyPlanPreset(selectedPlan.id)}
+                        disabled={
+                          Boolean(activeAction) ||
+                          isRenderingPlans ||
+                          !selectedPlanPresetPreviewDirty
+                        }
+                        aria-busy={
+                          activeAction?.kind === "apply_preset" &&
+                          activeAction.planId === selectedPlan.id
+                        }
+                        className={getButtonClass({
+                          tone: "neutral",
+                          busy:
+                            activeAction?.kind === "apply_preset" &&
+                            activeAction.planId === selectedPlan.id,
+                        })}
+                      >
+                        <BusyActionLabel
+                          busy={
+                            activeAction?.kind === "apply_preset" &&
+                            activeAction.planId === selectedPlan.id
+                          }
+                          label="Apply preset"
+                          busyLabel="Applying preset..."
+                        />
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => handleSavePlanSettings(selectedPlan.id)}
                         disabled={Boolean(activeAction) || isRenderingPlans}
                         aria-busy={activeAction?.kind === "save_overrides" && activeAction.planId === selectedPlan.id}
@@ -2961,6 +3149,21 @@ export function JobReviewManager({
                         />
                       </button>
                     </div>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {selectedPlanPresetPreviewDirty ? (
+                      <StatusPill label="Previewing preset only" tone="warning" />
+                    ) : null}
+                    {selectedPlanGeneratedPreviewOutOfDate ? (
+                      <StatusPill label="Generated image out of date" tone="warning" />
+                    ) : null}
+                    {selectedPlanGeneratedPreviewOutOfDate ? (
+                      <StatusPill label="Saved preset changed - rerender required" tone="warning" />
+                    ) : null}
+                    {!selectedPlanPresetPreviewDirty ? (
+                      <StatusPill label="Preview matches saved preset" tone="good" />
+                    ) : null}
                   </div>
 
                   <div className="mt-4 grid gap-4 md:grid-cols-2">
@@ -3016,6 +3219,26 @@ export function JobReviewManager({
                         ))}
                       </select>
                     </label>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => resetPlanPresetPreview(selectedPlan.id)}
+                      disabled={
+                        Boolean(activeAction) ||
+                        isRenderingPlans ||
+                        !selectedPlanPresetPreviewDirty
+                      }
+                      className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] disabled:opacity-60"
+                    >
+                      Reset preview
+                    </button>
+                    <span className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)]">
+                      {selectedPlanPresetPreviewDirty
+                        ? "Live preview uses the unsaved preset"
+                        : "Live preview uses the saved preset"}
+                    </span>
                   </div>
 
                   <div className="mt-4 grid gap-3 md:grid-cols-2">
@@ -3107,7 +3330,7 @@ export function JobReviewManager({
                                   <img
                                     src={pin.exportPath}
                                     alt={pin.title ?? "Generated pin"}
-                                    className="w-full transition duration-200 group-hover:scale-[1.02]"
+                                    className="aspect-[2/3] w-full bg-[var(--dashboard-panel-alt)] object-contain transition duration-200 group-hover:scale-[1.01]"
                                     onError={() => markPinAssetMissing(pin.id)}
                                   />
                                 )}
@@ -3304,6 +3527,30 @@ export function JobReviewManager({
                 </button>
                 <button
                   type="button"
+                  onClick={() => handleApplyPlanPreset(selectedPlan.id)}
+                  disabled={
+                    Boolean(activeAction) ||
+                    isRenderingPlans ||
+                    !selectedPlanPresetPreviewDirty
+                  }
+                  className={getButtonClass({
+                    tone: "neutral",
+                    busy:
+                      activeAction?.kind === "apply_preset" &&
+                      activeAction.planId === selectedPlan.id,
+                  })}
+                >
+                  <BusyActionLabel
+                    busy={
+                      activeAction?.kind === "apply_preset" &&
+                      activeAction.planId === selectedPlan.id
+                    }
+                    label="Apply preset"
+                    busyLabel="Applying preset..."
+                  />
+                </button>
+                <button
+                  type="button"
                   onClick={() => handleSavePlanSettings(selectedPlan.id)}
                   disabled={Boolean(activeAction) || isRenderingPlans}
                   className={getButtonClass({
@@ -3319,30 +3566,67 @@ export function JobReviewManager({
                 </button>
               </div>
 
+              <div className="flex flex-wrap gap-2">
+                {selectedPlanPresetPreviewDirty ? (
+                  <StatusPill label="Previewing preset only" tone="warning" />
+                ) : null}
+                {selectedPlanGeneratedPreviewOutOfDate ? (
+                  <StatusPill label="Generated image out of date" tone="warning" />
+                ) : null}
+                {selectedPlanGeneratedPreviewOutOfDate ? (
+                  <StatusPill label="Saved preset changed - rerender required" tone="warning" />
+                ) : null}
+                {!selectedPlanPresetPreviewDirty ? (
+                  <StatusPill label="Preview matches saved preset" tone="good" />
+                ) : null}
+              </div>
+
               <article className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-4">
-                {selectedPlanCurrentPin ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const absoluteIndex = generatedPins.findIndex((pin) => pin.id === selectedPlanCurrentPin.id);
-                      if (absoluteIndex >= 0) {
-                        setPreviewPinIndex(absoluteIndex);
-                      }
-                    }}
-                    className="block w-full overflow-hidden rounded-2xl border border-[var(--dashboard-line)]"
-                  >
-                    <img
-                      src={selectedPlanCurrentPin.exportPath}
-                        alt={selectedPlanDraft?.title || selectedPlanCurrentPin.title || selectedPlan.templateName}
-                      className="aspect-[2/3] w-full object-cover"
-                      onError={() => markPinAssetMissing(selectedPlanCurrentPin.id)}
-                    />
-                  </button>
-                ) : (
-                  <div className="flex aspect-[2/3] w-full items-center justify-center rounded-2xl border border-dashed border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-6 text-center text-sm font-semibold text-[var(--dashboard-subtle)]">
-                    No rendered output yet for this plan.
-                  </div>
-                )}
+                <QueuePreviewSurface
+                  alt={
+                    selectedPlanDraft?.title ||
+                    selectedPlanCurrentPin?.title ||
+                    selectedPlan.templateName
+                  }
+                  assetMissing={
+                    selectedPlanCurrentPin
+                      ? missingAssetPinIds.includes(selectedPlanCurrentPin.id)
+                      : false
+                  }
+                  currentPinExportPath={selectedPlanCurrentPin?.exportPath ?? null}
+                  currentPinId={selectedPlanCurrentPin?.id ?? null}
+                  livePreviewUrl={selectedPlanPreviewUrl ?? ""}
+                  onAssetMissing={markPinAssetMissing}
+                  onOpenLivePreview={() => {
+                    if (!selectedPlanPreviewUrl) {
+                      return;
+                    }
+                    setPreviewRender({
+                      url: selectedPlanPreviewUrl,
+                      label:
+                        selectedPlanDraft?.title ||
+                        selectedPlanCurrentPin?.title ||
+                        selectedPlan.templateName,
+                    });
+                  }}
+                  onOpenRenderedPin={() => {
+                    if (!selectedPlanCurrentPin) {
+                      return;
+                    }
+                    const absoluteIndex = generatedPins.findIndex(
+                      (pin) => pin.id === selectedPlanCurrentPin.id,
+                    );
+                    if (absoluteIndex >= 0) {
+                      setPreviewPinIndex(absoluteIndex);
+                    }
+                  }}
+                  placeholderLabel="No rendered output yet. Adjust the preset or queue a render."
+                  showLivePreview={
+                    selectedPlanPresetPreviewDirty ||
+                    !selectedPlanCurrentPin ||
+                    missingAssetPinIds.includes(selectedPlanCurrentPin?.id ?? "")
+                  }
+                />
               </article>
 
               <article className="rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-4">
@@ -3399,6 +3683,26 @@ export function JobReviewManager({
                       ))}
                     </select>
                   </label>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => resetPlanPresetPreview(selectedPlan.id)}
+                    disabled={
+                      Boolean(activeAction) ||
+                      isRenderingPlans ||
+                      !selectedPlanPresetPreviewDirty
+                    }
+                    className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)] disabled:opacity-60"
+                  >
+                    Reset preview
+                  </button>
+                  <span className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)]">
+                    {selectedPlanPresetPreviewDirty
+                      ? "Live preview uses the unsaved preset"
+                      : "Live preview uses the saved preset"}
+                  </span>
                 </div>
               </article>
 
@@ -3494,7 +3798,7 @@ export function JobReviewManager({
                               <img
                                 src={pin.exportPath}
                                 alt={pin.title ?? "Generated pin"}
-                                className="aspect-[2/3] w-full object-cover"
+                                className="aspect-[2/3] w-full bg-[var(--dashboard-panel-alt)] object-contain"
                                 onError={() => markPinAssetMissing(pin.id)}
                               />
                             )}
@@ -3574,6 +3878,43 @@ export function JobReviewManager({
                 src={previewSource.url}
                 alt={previewSource.label}
                 className="max-h-[78vh] w-auto rounded-xl border border-[var(--dashboard-line)]"
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {previewRender ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(12,18,28,0.72)] p-6 backdrop-blur-sm">
+          <div className="max-h-[92vh] w-full max-w-6xl overflow-hidden rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] shadow-[var(--dashboard-shadow-md)]">
+            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--dashboard-line)] px-5 py-4">
+              <div>
+                <p className="text-sm font-semibold text-[var(--dashboard-text)]">Live preset preview</p>
+                <p className="mt-1 text-sm text-[var(--dashboard-subtle)]">{previewRender.label}</p>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <a
+                  href={previewRender.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-full border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-subtle)]"
+                >
+                  Open in new tab
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setPreviewRender(null)}
+                  className="rounded-full dashboard-accent-action bg-[var(--dashboard-accent)] px-4 py-2 text-sm font-semibold text-white"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+            <div className="flex max-h-[calc(92vh-80px)] items-center justify-center overflow-auto bg-[var(--dashboard-panel)] p-5">
+              <iframe
+                title={previewRender.label}
+                src={previewRender.url}
+                className="h-[78vh] w-[calc(78vh*0.5625)] min-w-[340px] rounded-xl border border-[var(--dashboard-line)] bg-white"
               />
             </div>
           </div>
@@ -3790,6 +4131,63 @@ function SelectionChip({ label, onClick }: { label: string; onClick: () => void 
     >
       {label}
     </button>
+  );
+}
+
+function QueuePreviewSurface(props: {
+  alt: string;
+  assetMissing: boolean;
+  currentPinExportPath: string | null;
+  currentPinId: string | null;
+  livePreviewUrl: string;
+  onAssetMissing: (pinId: string) => void;
+  onOpenLivePreview?: () => void;
+  onOpenRenderedPin?: () => void;
+  placeholderLabel: string;
+  showLivePreview: boolean;
+}) {
+  if (props.showLivePreview) {
+    return (
+      <button
+        type="button"
+        onClick={props.onOpenLivePreview}
+        className="group block w-full overflow-hidden rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] text-left"
+      >
+        <iframe
+          title={props.alt}
+          src={props.livePreviewUrl}
+          loading="lazy"
+          className="pointer-events-none aspect-[2/3] w-full bg-white"
+        />
+      </button>
+    );
+  }
+
+  if (props.currentPinExportPath) {
+    return (
+      <button
+        type="button"
+        onClick={() => props.onOpenRenderedPin?.()}
+        className="group block w-full overflow-hidden rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)]"
+      >
+        {props.assetMissing ? (
+          <MissingAssetCard />
+        ) : (
+          <img
+            src={props.currentPinExportPath}
+            alt={props.alt}
+            className="aspect-[2/3] w-full bg-[var(--dashboard-panel-alt)] object-contain transition duration-200 group-hover:scale-[1.01]"
+            onError={() => props.currentPinId && props.onAssetMissing(props.currentPinId)}
+          />
+        )}
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex aspect-[2/3] w-full items-center justify-center rounded-2xl border border-dashed border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-6 text-center text-sm font-semibold text-[var(--dashboard-subtle)]">
+      {props.placeholderLabel}
+    </div>
   );
 }
 
@@ -4025,4 +4423,34 @@ function extractTaskPlanIds(task: RenderTaskState) {
   const singlePlanId = typeof payload.planId === "string" ? payload.planId : null;
 
   return Array.from(new Set([...planIds, ...(singlePlanId ? [singlePlanId] : [])]));
+}
+
+function normalizePresetValue(value?: string | null) {
+  return value?.trim() ?? "";
+}
+
+function isPlanPresetPreviewDirty(plan: PlanItem, draft?: PlanDraft) {
+  return normalizePresetValue(draft?.visualPreset) !== normalizePresetValue(plan.visualPreset);
+}
+
+function isGeneratedPreviewOutOfDate(plan: PlanItem, currentPin: GeneratedPinItem | null) {
+  return Boolean(currentPin) && plan.status !== "GENERATED";
+}
+
+function buildQueueRenderPreviewUrl(input: {
+  jobId: string;
+  plan: Pick<PlanItem, "id" | "templateId">;
+  draft?: Pick<PlanDraft, "visualPreset">;
+}) {
+  const params = new URLSearchParams({
+    jobId: input.jobId,
+    planId: input.plan.id,
+    embed: "1",
+  });
+  const preset = normalizePresetValue(input.draft?.visualPreset);
+  if (preset) {
+    params.set("preset", preset);
+  }
+
+  return `/render/${encodeURIComponent(input.plan.templateId)}?${params.toString()}`;
 }
