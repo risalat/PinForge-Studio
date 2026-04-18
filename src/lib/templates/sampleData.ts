@@ -350,3 +350,16 @@ export const sampleTemplateDataRecipeCardCarousel: TemplateRenderProps = {
   itemNumber: 25,
   visualPreset: "crimson-custard",
 };
+
+export const sampleTemplateDataNeonDinerStack: TemplateRenderProps = {
+  subtitle: "Recipe Roundup",
+  title: "Game Day Snack Recipes",
+  images: [
+    "/sample-images/8.jpg",
+    "/sample-images/7.jpg",
+    "/sample-images/1.jpg",
+  ],
+  domain: "homebites.com",
+  itemNumber: 27,
+  visualPreset: "scarlet-vanilla",
+};

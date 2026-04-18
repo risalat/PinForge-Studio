@@ -370,6 +370,8 @@ function getBuiltInArtworkRule(templateId: string) {
       return { maxWords: 5, maxChars: 34, maxLines: 3 };
     case "recipe-card-carousel":
       return { maxWords: 5, maxChars: 34, maxLines: 3 };
+    case "neon-diner-stack":
+      return { maxWords: 6, maxChars: 36, maxLines: 2 };
     case "hero-arch-sidebar-triptych":
       return { maxWords: 5, maxChars: 30, maxLines: 5 };
     case "three-image-center-poster-number-footer":

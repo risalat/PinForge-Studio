@@ -27,6 +27,7 @@ import { TemplateBookmarkRibbonCollageTitle } from "@/templates/TemplateBookmark
 import { TemplateHeroBowlStack } from "@/templates/TemplateHeroBowlStack";
 import { TemplateMenuBoardSplit } from "@/templates/TemplateMenuBoardSplit";
 import { TemplateRecipeCardCarousel } from "@/templates/TemplateRecipeCardCarousel";
+import { TemplateNeonDinerStack } from "@/templates/TemplateNeonDinerStack";
 import type { JSX } from "react";
 import {
   sampleTemplateDataBookmarkRibbonCollageTitle,
@@ -47,6 +48,7 @@ import {
   sampleTemplateDataHeroBowlStack,
   sampleTemplateDataMenuBoardSplit,
   sampleTemplateDataRecipeCardCarousel,
+  sampleTemplateDataNeonDinerStack,
   sampleTemplateDataHeroTextTripleSplitFooter,
   sampleTemplateDataMasonryGridNumberTitleFooter,
   sampleTemplateDataNineImageGridOverlayNumberFooter,
@@ -497,6 +499,21 @@ export const TEMPLATE_CONFIGS: Record<string, TemplateConfig> = {
       footer: true,
     },
   },
+  "neon-diner-stack": {
+    id: "neon-diner-stack",
+    name: "Neon Diner Stack",
+    componentKey: "TemplateNeonDinerStack",
+    previewPath: "/preview/neon-diner-stack",
+    locked: true,
+    canvas: { width: 1080, height: 1920 },
+    imageSlotCount: 3,
+    textFields: ["subtitle", "title", "itemNumber", "domain", "visualPreset"],
+    features: {
+      overlay: true,
+      numberTreatment: "hero",
+      footer: true,
+    },
+  },
 };
 
 const TEMPLATE_COMPONENTS: Record<
@@ -532,6 +549,7 @@ const TEMPLATE_COMPONENTS: Record<
   "hero-bowl-stack": TemplateHeroBowlStack,
   "menu-board-split": TemplateMenuBoardSplit,
   "recipe-card-carousel": TemplateRecipeCardCarousel,
+  "neon-diner-stack": TemplateNeonDinerStack,
 };
 
 export function getTemplateConfig(templateId: string) {
@@ -663,6 +681,10 @@ export function getSampleTemplateProps(templateId: string) {
 
   if (templateId === "recipe-card-carousel") {
     return sampleTemplateDataRecipeCardCarousel;
+  }
+
+  if (templateId === "neon-diner-stack") {
+    return sampleTemplateDataNeonDinerStack;
   }
 
   return sampleTemplateDataWithSubtitle;

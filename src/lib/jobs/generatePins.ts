@@ -4434,6 +4434,10 @@ function getArtworkGoal(templateId: string, templateSupportsSubtitle: boolean) {
     return "Create a number-aware Pinterest artwork headline for a layered food roundup cover with three oversized cascading photo cards and a central title slab. Use 3 to 5 strong words total, do not include the count in the headline itself, and make it feel like a saved recipe-card stack rather than a sentence. Favor concrete food roundup closers like Recipes, Desserts, Meals, Cookies, Dinners, or Ideas.";
   }
 
+  if (templateId === "neon-diner-stack") {
+    return "Create a number-aware Pinterest artwork headline for a loud diner-inspired food roundup cover with a diagonal neon title band and oversized count block. Use 3 to 5 strong words total, do not include the count in the headline itself, and make it feel highly clickable, bold, and feed-first. Favor concrete food roundup closers like Recipes, Snacks, Dinners, Desserts, Drinks, or Ideas.";
+  }
+
   if (templateId === "five-image-center-band-number-domain") {
     return "Create a number-aware Pinterest artwork headline for a center band with a separate ellipse number badge. It must be 4 to 6 strong words total, never fewer than 4 words, and should not include the count in the headline itself. Favor a softer 1 to 2 word opener followed by two bolder lower lines. Keep it decor-editorial, compact, and visually scannable.";
   }
@@ -4550,6 +4554,11 @@ function enforceArtworkTitleRule(templateId: string, title: string) {
   }
 
   if (templateId === "recipe-card-carousel") {
+    headline = ensureHeroNumberArtworkTitle(headline);
+    headline = ensureThreeToFiveWordFoodRoundupTitle(headline);
+  }
+
+  if (templateId === "neon-diner-stack") {
     headline = ensureHeroNumberArtworkTitle(headline);
     headline = ensureThreeToFiveWordFoodRoundupTitle(headline);
   }
@@ -4707,10 +4716,10 @@ function ensureThreeToFiveWordFoodRoundupTitle(title: string) {
     "ideas",
     "dishes",
   ]);
-  const words = safeTitle.split(/\s+/).filter(Boolean).slice(0, 5);
+  const words = safeTitle.split(/\s+/).filter(Boolean).slice(0, 6);
 
   if (words.length >= 4) {
-    const bounded = words.slice(0, 5);
+    const bounded = words.slice(0, 6);
     const lastWord = bounded[bounded.length - 1]?.toLowerCase().replace(/[^a-z0-9]/g, "") ?? "";
     if (closers.has(lastWord)) {
       return toTitleCase(bounded.join(" "));
