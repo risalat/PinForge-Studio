@@ -1,8 +1,9 @@
+import { cache } from "react";
 import { Prisma } from "@prisma/client";
 import { requireAuthenticatedDashboardUser } from "@/lib/auth/dashboardSession";
 import { prisma } from "@/lib/prisma";
 
-export async function getOrCreateDashboardUser() {
+export const getOrCreateDashboardUser = cache(async function getOrCreateDashboardUser() {
   const authUser = await requireAuthenticatedDashboardUser();
   const email = authUser.email?.trim().toLowerCase();
 
@@ -53,4 +54,4 @@ export async function getOrCreateDashboardUser() {
 
     throw error;
   }
-}
+});

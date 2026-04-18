@@ -56,6 +56,8 @@ function resolvePrismaDatasourceUrl() {
       parsed.searchParams.set("connection_limit", String(configuredConnectionLimit));
     } else if (isServerlessRuntime()) {
       parsed.searchParams.set("connection_limit", "1");
+    } else if (process.env.NODE_ENV === "development") {
+      parsed.searchParams.set("connection_limit", "10");
     } else {
       parsed.searchParams.set("connection_limit", "5");
     }

@@ -5,6 +5,7 @@ import { isDatabaseConfigured } from "@/lib/env";
 import {
   type AiCredentialInput,
   getIntegrationSettingsSummary,
+  getIntegrationSettingsSummaryUncached,
   type WorkspaceProfileInput,
   saveIntegrationSettings,
 } from "@/lib/settings/integrationSettings";
@@ -96,7 +97,7 @@ export async function POST(request: Request) {
       workspaceProfiles: payload.workspaceProfiles as WorkspaceProfileInput[] | undefined,
       aiCredentials: payload.aiCredentials as AiCredentialInput[] | undefined,
     });
-    const settings = await getIntegrationSettingsSummary();
+    const settings = await getIntegrationSettingsSummaryUncached();
 
     return NextResponse.json({
       ok: true,

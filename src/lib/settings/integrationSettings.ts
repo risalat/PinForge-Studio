@@ -1,3 +1,4 @@
+import { cache } from "react";
 import type { AIProvider } from "@/lib/ai";
 import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
 import { prisma } from "@/lib/prisma";
@@ -131,7 +132,54 @@ export async function getIntegrationSettingsForUserId(userId: string) {
   };
 }
 
+const getIntegrationSettingsSummaryCached = cache(
+  async (): Promise<IntegrationSettingsSummary> => {
+    const user = await getOrCreateDashboardUser();
+    const [settings, workspaceProfiles, aiCredentials] = await Promise.all([
+      prisma.userIntegrationSettings.findUnique({
+        where: {
+          userId: user.id,
+        },
+      }),
+      listWorkspaceProfilesForUserId(user.id),
+      listAiCredentialsForUserId(user.id),
+    ]);
+
+    const defaultProfile = pickDefaultWorkspaceProfile(workspaceProfiles);
+    const defaultAiCredential = pickDefaultAiCredential(aiCredentials);
+    const publerCredential = summarizeStoredSecret(settings?.publerApiKeyEnc);
+    const aiCredential =
+      defaultAiCredential ??
+      summarizeLegacyAiCredential(settings);
+
+    return {
+      publerWorkspaceId: defaultProfile?.workspaceId ?? settings?.publerWorkspaceId ?? "",
+      publerAllowedDomains: defaultProfile?.allowedDomains ?? settings?.publerAllowedDomains ?? [],
+      publerAccountId: defaultProfile?.defaultAccountId ?? settings?.publerAccountId ?? "",
+      publerBoardId: defaultProfile?.defaultBoardId ?? settings?.publerBoardId ?? "",
+      workspaceProfiles,
+      aiCredentials,
+      defaultAiCredentialId: aiCredential?.id ?? "",
+      aiProvider: aiCredential?.provider ?? toAiProvider(settings?.aiProvider),
+      aiModel: aiCredential?.model ?? settings?.aiModel ?? "",
+      aiCustomEndpoint: aiCredential?.customEndpoint ?? settings?.aiCustomEndpoint ?? "",
+      hasPublerApiKey: publerCredential.hasStoredValue,
+      hasAiApiKey: aiCredential?.hasApiKey ?? false,
+      canUsePublerApiKey: publerCredential.canUseValue,
+      canUseAiApiKey: aiCredential?.canUseApiKey ?? false,
+      publerCredentialState: publerCredential.state,
+      aiCredentialState: aiCredential?.credentialState ?? "missing",
+      publerCredentialMessage: publerCredential.message,
+      aiCredentialMessage: aiCredential?.credentialMessage ?? "",
+    };
+  },
+);
+
 export async function getIntegrationSettingsSummary(): Promise<IntegrationSettingsSummary> {
+  return getIntegrationSettingsSummaryCached();
+}
+
+export async function getIntegrationSettingsSummaryUncached(): Promise<IntegrationSettingsSummary> {
   const user = await getOrCreateDashboardUser();
   const [settings, workspaceProfiles, aiCredentials] = await Promise.all([
     prisma.userIntegrationSettings.findUnique({
