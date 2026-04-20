@@ -29,6 +29,7 @@ import { TemplateMenuBoardSplit } from "@/templates/TemplateMenuBoardSplit";
 import { TemplateRecipeCardCarousel } from "@/templates/TemplateRecipeCardCarousel";
 import { TemplateNeonDinerStack } from "@/templates/TemplateNeonDinerStack";
 import { TemplateBentoGridRecipes } from "@/templates/TemplateBentoGridRecipes";
+import { TemplateDessertBoxSign } from "@/templates/TemplateDessertBoxSign";
 import type { JSX } from "react";
 import {
   sampleTemplateDataBookmarkRibbonCollageTitle,
@@ -51,6 +52,7 @@ import {
   sampleTemplateDataRecipeCardCarousel,
   sampleTemplateDataNeonDinerStack,
   sampleTemplateDataBentoGridRecipes,
+  sampleTemplateDataDessertBoxSign,
   sampleTemplateDataHeroTextTripleSplitFooter,
   sampleTemplateDataMasonryGridNumberTitleFooter,
   sampleTemplateDataNineImageGridOverlayNumberFooter,
@@ -531,6 +533,21 @@ export const TEMPLATE_CONFIGS: Record<string, TemplateConfig> = {
       footer: true,
     },
   },
+  "dessert-box-sign": {
+    id: "dessert-box-sign",
+    name: "Dessert Box Sign",
+    componentKey: "TemplateDessertBoxSign",
+    previewPath: "/preview/dessert-box-sign",
+    locked: true,
+    canvas: { width: 1080, height: 1920 },
+    imageSlotCount: 4,
+    textFields: ["subtitle", "title", "itemNumber", "domain", "visualPreset"],
+    features: {
+      overlay: true,
+      numberTreatment: "hero",
+      footer: true,
+    },
+  },
 };
 
 const TEMPLATE_COMPONENTS: Record<
@@ -568,6 +585,7 @@ const TEMPLATE_COMPONENTS: Record<
   "recipe-card-carousel": TemplateRecipeCardCarousel,
   "neon-diner-stack": TemplateNeonDinerStack,
   "bento-grid-recipes": TemplateBentoGridRecipes,
+  "dessert-box-sign": TemplateDessertBoxSign,
 };
 
 export function getTemplateConfig(templateId: string) {
@@ -707,6 +725,10 @@ export function getSampleTemplateProps(templateId: string) {
 
   if (templateId === "bento-grid-recipes") {
     return sampleTemplateDataBentoGridRecipes;
+  }
+
+  if (templateId === "dessert-box-sign") {
+    return sampleTemplateDataDessertBoxSign;
   }
 
   return sampleTemplateDataWithSubtitle;

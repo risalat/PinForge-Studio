@@ -374,6 +374,8 @@ function getBuiltInArtworkRule(templateId: string) {
       return { maxWords: 6, maxChars: 36, maxLines: 2 };
     case "bento-grid-recipes":
       return { maxWords: 6, maxChars: 42, maxLines: 4 };
+    case "dessert-box-sign":
+      return { maxWords: 6, maxChars: 38, maxLines: 3 };
     case "hero-arch-sidebar-triptych":
       return { maxWords: 5, maxChars: 30, maxLines: 5 };
     case "three-image-center-poster-number-footer":

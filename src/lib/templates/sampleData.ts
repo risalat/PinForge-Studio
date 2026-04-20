@@ -379,3 +379,17 @@ export const sampleTemplateDataBentoGridRecipes: TemplateRenderProps = {
   itemNumber: 18,
   visualPreset: "tomato-basil",
 };
+
+export const sampleTemplateDataDessertBoxSign: TemplateRenderProps = {
+  subtitle: "Bakery Favorites",
+  title: "Christmas Dessert Ideas",
+  images: [
+    "/sample-images/8.jpg",
+    "/sample-images/7.jpg",
+    "/sample-images/1.jpg",
+    "/sample-images/3.jpg",
+  ],
+  domain: "homebites.com",
+  itemNumber: 25,
+  visualPreset: "crimson-custard",
+};
