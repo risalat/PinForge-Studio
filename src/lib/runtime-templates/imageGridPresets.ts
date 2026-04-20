@@ -16,6 +16,12 @@ const GRID_LAYOUTS: Record<
     cells: GridCellFraction[];
   }
 > = {
+  "single-1": {
+    slotCount: 1,
+    cells: [
+      { x: 0, y: 0, width: 1, height: 1 },
+    ],
+  },
   "split-2-vertical": {
     slotCount: 2,
     cells: [

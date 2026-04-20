@@ -118,6 +118,7 @@ export const runtimeTemplateImageSemanticRoleValues = [
 ] as const;
 
 export const runtimeTemplateImageGridLayoutValues = [
+  "single-1",
   "split-2-vertical",
   "split-2-horizontal",
   "stack-3",

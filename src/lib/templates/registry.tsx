@@ -30,6 +30,7 @@ import { TemplateRecipeCardCarousel } from "@/templates/TemplateRecipeCardCarous
 import { TemplateNeonDinerStack } from "@/templates/TemplateNeonDinerStack";
 import { TemplateBentoGridRecipes } from "@/templates/TemplateBentoGridRecipes";
 import { TemplateDessertBoxSign } from "@/templates/TemplateDessertBoxSign";
+import { TemplateDetailCropStripCover } from "@/templates/TemplateDetailCropStripCover";
 import type { JSX } from "react";
 import {
   sampleTemplateDataBookmarkRibbonCollageTitle,
@@ -53,6 +54,7 @@ import {
   sampleTemplateDataNeonDinerStack,
   sampleTemplateDataBentoGridRecipes,
   sampleTemplateDataDessertBoxSign,
+  sampleTemplateDataDetailCropStripCover,
   sampleTemplateDataHeroTextTripleSplitFooter,
   sampleTemplateDataMasonryGridNumberTitleFooter,
   sampleTemplateDataNineImageGridOverlayNumberFooter,
@@ -548,6 +550,21 @@ export const TEMPLATE_CONFIGS: Record<string, TemplateConfig> = {
       footer: true,
     },
   },
+  "detail-crop-strip-cover": {
+    id: "detail-crop-strip-cover",
+    name: "Detail Crop Strip Cover",
+    componentKey: "TemplateDetailCropStripCover",
+    previewPath: "/preview/detail-crop-strip-cover",
+    locked: true,
+    canvas: { width: 1080, height: 1920 },
+    imageSlotCount: 5,
+    textFields: ["subtitle", "title", "itemNumber", "domain", "visualPreset"],
+    features: {
+      overlay: true,
+      numberTreatment: "hero",
+      footer: true,
+    },
+  },
 };
 
 const TEMPLATE_COMPONENTS: Record<
@@ -586,6 +603,7 @@ const TEMPLATE_COMPONENTS: Record<
   "neon-diner-stack": TemplateNeonDinerStack,
   "bento-grid-recipes": TemplateBentoGridRecipes,
   "dessert-box-sign": TemplateDessertBoxSign,
+  "detail-crop-strip-cover": TemplateDetailCropStripCover,
 };
 
 export function getTemplateConfig(templateId: string) {
@@ -729,6 +747,10 @@ export function getSampleTemplateProps(templateId: string) {
 
   if (templateId === "dessert-box-sign") {
     return sampleTemplateDataDessertBoxSign;
+  }
+
+  if (templateId === "detail-crop-strip-cover") {
+    return sampleTemplateDataDetailCropStripCover;
   }
 
   return sampleTemplateDataWithSubtitle;

@@ -1309,6 +1309,9 @@ function buildStarterRuntimeTemplateDocumentFromBuiltIn(input: {
 }
 
 function resolveStarterGridLayoutPreset(imageSlotCount: number) {
+  if (imageSlotCount <= 1) {
+    return "single-1" as const;
+  }
   if (imageSlotCount <= 2) {
     return "split-2-vertical" as const;
   }

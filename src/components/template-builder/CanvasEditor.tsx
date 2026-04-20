@@ -2,6 +2,7 @@
 
 import { RuntimeTemplateCanvas } from "@/components/runtime-template/RuntimeTemplateCanvas";
 import { useCanvasInteractions } from "@/components/template-builder/useCanvasInteractions";
+import { getRuntimeTemplateGridSlotCount } from "@/lib/runtime-templates/imageGridPresets";
 import type {
   RuntimeTemplateDocument,
   RuntimeTemplateEditorState,
@@ -541,25 +542,7 @@ function resolveHandlePosition(
 }
 
 function getGridSlotCount(layout: Extract<RuntimeTemplateElement, { type: "imageGrid" }>["layoutPreset"]) {
-  if (layout === "split-2-vertical" || layout === "split-2-horizontal") {
-    return 2;
-  }
-  if (layout === "stack-3") {
-    return 3;
-  }
-  if (layout === "grid-4") {
-    return 4;
-  }
-  if (layout === "collage-5") {
-    return 5;
-  }
-  if (layout === "split-6") {
-    return 6;
-  }
-  if (layout === "grid-8") {
-    return 8;
-  }
-  return 9;
+  return getRuntimeTemplateGridSlotCount(layout);
 }
 
 function clamp(value: number, minimum: number, maximum: number) {

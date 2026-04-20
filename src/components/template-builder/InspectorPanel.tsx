@@ -24,6 +24,9 @@ import {
   getTemplateVisualPresetCategoryMeta,
 } from "@/lib/templates/visualPresets";
 import {
+  getRuntimeTemplateGridSlotCount,
+} from "@/lib/runtime-templates/imageGridPresets";
+import {
   runtimeTemplateBorderTokenValues,
   runtimeTemplateFillTokenValues,
   runtimeTemplateFontTokenValues,
@@ -1357,25 +1360,7 @@ function getTextSemanticOptions(
 }
 
 function getGridSlotCount(layout: (typeof runtimeTemplateImageGridLayoutValues)[number]) {
-  if (layout === "split-2-vertical" || layout === "split-2-horizontal") {
-    return 2;
-  }
-  if (layout === "stack-3") {
-    return 3;
-  }
-  if (layout === "grid-4") {
-    return 4;
-  }
-  if (layout === "collage-5") {
-    return 5;
-  }
-  if (layout === "split-6") {
-    return 6;
-  }
-  if (layout === "grid-8") {
-    return 8;
-  }
-  return 9;
+  return getRuntimeTemplateGridSlotCount(layout);
 }
 
 function ValidationDisclosure(props: {

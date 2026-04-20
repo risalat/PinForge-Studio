@@ -2845,6 +2845,7 @@ const TEMPLATE_PRESET_CATEGORY_ALLOWLIST: Record<string, TemplateVisualPresetCat
   "neon-diner-stack": ["dark-drama", "graphic-pop", "fresh-vivid"],
   "bento-grid-recipes": ["earthy-warm", "dark-drama", "graphic-pop", "fresh-vivid"],
   "dessert-box-sign": ["earthy-warm", "dark-drama", "graphic-pop", "fresh-vivid", "feminine-bold"],
+  "detail-crop-strip-cover": ["earthy-warm", "dark-drama", "graphic-pop", "fresh-vivid"],
 };
 
 export function getPresetIdsForTemplate(
