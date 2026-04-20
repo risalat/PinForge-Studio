@@ -2843,6 +2843,7 @@ const TEMPLATE_PRESET_CATEGORY_ALLOWLIST: Record<string, TemplateVisualPresetCat
   "menu-board-split": ["earthy-warm", "dark-drama", "graphic-pop", "fresh-vivid"],
   "recipe-card-carousel": ["earthy-warm", "dark-drama", "graphic-pop", "fresh-vivid"],
   "neon-diner-stack": ["dark-drama", "graphic-pop", "fresh-vivid"],
+  "bento-grid-recipes": ["earthy-warm", "dark-drama", "graphic-pop", "fresh-vivid"],
 };
 
 export function getPresetIdsForTemplate(

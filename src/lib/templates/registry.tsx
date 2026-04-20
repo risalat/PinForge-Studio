@@ -28,6 +28,7 @@ import { TemplateHeroBowlStack } from "@/templates/TemplateHeroBowlStack";
 import { TemplateMenuBoardSplit } from "@/templates/TemplateMenuBoardSplit";
 import { TemplateRecipeCardCarousel } from "@/templates/TemplateRecipeCardCarousel";
 import { TemplateNeonDinerStack } from "@/templates/TemplateNeonDinerStack";
+import { TemplateBentoGridRecipes } from "@/templates/TemplateBentoGridRecipes";
 import type { JSX } from "react";
 import {
   sampleTemplateDataBookmarkRibbonCollageTitle,
@@ -49,6 +50,7 @@ import {
   sampleTemplateDataMenuBoardSplit,
   sampleTemplateDataRecipeCardCarousel,
   sampleTemplateDataNeonDinerStack,
+  sampleTemplateDataBentoGridRecipes,
   sampleTemplateDataHeroTextTripleSplitFooter,
   sampleTemplateDataMasonryGridNumberTitleFooter,
   sampleTemplateDataNineImageGridOverlayNumberFooter,
@@ -514,6 +516,21 @@ export const TEMPLATE_CONFIGS: Record<string, TemplateConfig> = {
       footer: true,
     },
   },
+  "bento-grid-recipes": {
+    id: "bento-grid-recipes",
+    name: "Bento Grid Recipes",
+    componentKey: "TemplateBentoGridRecipes",
+    previewPath: "/preview/bento-grid-recipes",
+    locked: true,
+    canvas: { width: 1080, height: 1920 },
+    imageSlotCount: 6,
+    textFields: ["subtitle", "title", "itemNumber", "domain", "visualPreset"],
+    features: {
+      overlay: true,
+      numberTreatment: "hero",
+      footer: true,
+    },
+  },
 };
 
 const TEMPLATE_COMPONENTS: Record<
@@ -550,6 +567,7 @@ const TEMPLATE_COMPONENTS: Record<
   "menu-board-split": TemplateMenuBoardSplit,
   "recipe-card-carousel": TemplateRecipeCardCarousel,
   "neon-diner-stack": TemplateNeonDinerStack,
+  "bento-grid-recipes": TemplateBentoGridRecipes,
 };
 
 export function getTemplateConfig(templateId: string) {
@@ -685,6 +703,10 @@ export function getSampleTemplateProps(templateId: string) {
 
   if (templateId === "neon-diner-stack") {
     return sampleTemplateDataNeonDinerStack;
+  }
+
+  if (templateId === "bento-grid-recipes") {
+    return sampleTemplateDataBentoGridRecipes;
   }
 
   return sampleTemplateDataWithSubtitle;

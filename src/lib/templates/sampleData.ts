@@ -363,3 +363,19 @@ export const sampleTemplateDataNeonDinerStack: TemplateRenderProps = {
   itemNumber: 27,
   visualPreset: "scarlet-vanilla",
 };
+
+export const sampleTemplateDataBentoGridRecipes: TemplateRenderProps = {
+  subtitle: "Recipe Roundup",
+  title: "Meal Prep Lunch Recipes",
+  images: [
+    "/sample-images/8.jpg",
+    "/sample-images/7.jpg",
+    "/sample-images/1.jpg",
+    "/sample-images/2.jpg",
+    "/sample-images/3.jpg",
+    "/sample-images/6.jpg",
+  ],
+  domain: "homebites.com",
+  itemNumber: 18,
+  visualPreset: "tomato-basil",
+};

@@ -4367,6 +4367,8 @@ function getArtworkTitleRule(templateId: string) {
       return { maxWords: 5, maxChars: 34, maxLines: 3, singleLine: false };
     case "recipe-card-carousel":
       return { maxWords: 5, maxChars: 34, maxLines: 3, singleLine: false };
+    case "bento-grid-recipes":
+      return { maxWords: 6, maxChars: 42, maxLines: 4, singleLine: false };
     case "hero-arch-sidebar-triptych":
       return { maxWords: 5, maxChars: 30, maxLines: 5, singleLine: false };
     case "three-image-center-poster-number-footer":
@@ -4436,6 +4438,10 @@ function getArtworkGoal(templateId: string, templateSupportsSubtitle: boolean) {
 
   if (templateId === "neon-diner-stack") {
     return "Create a number-aware Pinterest artwork headline for a loud diner-inspired food roundup cover with a diagonal neon title band and oversized count block. Use 3 to 5 strong words total, do not include the count in the headline itself, and make it feel highly clickable, bold, and feed-first. Favor concrete food roundup closers like Recipes, Snacks, Dinners, Desserts, Drinks, or Ideas.";
+  }
+
+  if (templateId === "bento-grid-recipes") {
+    return "Create a number-aware Pinterest artwork headline for a structured food roundup cover with a dominant hero dish, detail crop strips, and a compact modular title card. Use 3 to 5 strong words total, do not include the count in the headline itself, and make it feel like a neat, highly scannable recipe roundup cover. Favor concrete food roundup closers like Recipes, Meals, Dinners, Desserts, Snacks, or Ideas.";
   }
 
   if (templateId === "five-image-center-band-number-domain") {
@@ -4559,6 +4565,11 @@ function enforceArtworkTitleRule(templateId: string, title: string) {
   }
 
   if (templateId === "neon-diner-stack") {
+    headline = ensureHeroNumberArtworkTitle(headline);
+    headline = ensureThreeToFiveWordFoodRoundupTitle(headline);
+  }
+
+  if (templateId === "bento-grid-recipes") {
     headline = ensureHeroNumberArtworkTitle(headline);
     headline = ensureThreeToFiveWordFoodRoundupTitle(headline);
   }
