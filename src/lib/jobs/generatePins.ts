@@ -4367,6 +4367,10 @@ function getArtworkTitleRule(templateId: string) {
       return { maxWords: 5, maxChars: 34, maxLines: 3, singleLine: false };
     case "recipe-card-carousel":
       return { maxWords: 5, maxChars: 34, maxLines: 3, singleLine: false };
+    case "oven-door-poster":
+      return { maxWords: 6, maxChars: 40, maxLines: 3, singleLine: false };
+    case "takeout-ticket-stack":
+      return { maxWords: 5, maxChars: 36, maxLines: 2, singleLine: false };
     case "bento-grid-recipes":
       return { maxWords: 6, maxChars: 42, maxLines: 4, singleLine: false };
     case "hero-arch-sidebar-triptych":
@@ -4438,6 +4442,14 @@ function getArtworkGoal(templateId: string, templateSupportsSubtitle: boolean) {
 
   if (templateId === "neon-diner-stack") {
     return "Create a number-aware Pinterest artwork headline for a loud diner-inspired food roundup cover with a diagonal neon title band and oversized count block. Use 3 to 5 strong words total, do not include the count in the headline itself, and make it feel highly clickable, bold, and feed-first. Favor concrete food roundup closers like Recipes, Snacks, Dinners, Desserts, Drinks, or Ideas.";
+  }
+
+  if (templateId === "oven-door-poster") {
+    return "Create a number-aware Pinterest artwork headline for a bold kitchen-poster food roundup cover with one dominant hero dish, a large poster title block, and a framed oven-window support image. Use 3 to 5 strong words total, do not include the count in the headline itself, and make it feel baked, comforting, and instantly scannable. Favor concrete food roundup closers like Recipes, Bakes, Dinners, Desserts, Cookies, or Ideas.";
+  }
+
+  if (templateId === "takeout-ticket-stack") {
+    return "Create a number-aware Pinterest artwork headline for a loud food roundup cover styled like a printed takeout order ticket with a docked count tab. Use 3 to 5 strong words total, do not include the count in the headline itself, and make it feel like a bold food order board rather than an editorial poster. Favor concrete food roundup closers like Recipes, Dinners, Tacos, Dips, Soups, or Ideas.";
   }
 
   if (templateId === "bento-grid-recipes") {
@@ -4565,6 +4577,16 @@ function enforceArtworkTitleRule(templateId: string, title: string) {
   }
 
   if (templateId === "neon-diner-stack") {
+    headline = ensureHeroNumberArtworkTitle(headline);
+    headline = ensureThreeToFiveWordFoodRoundupTitle(headline);
+  }
+
+  if (templateId === "oven-door-poster") {
+    headline = ensureHeroNumberArtworkTitle(headline);
+    headline = ensureThreeToFiveWordFoodRoundupTitle(headline);
+  }
+
+  if (templateId === "takeout-ticket-stack") {
     headline = ensureHeroNumberArtworkTitle(headline);
     headline = ensureThreeToFiveWordFoodRoundupTitle(headline);
   }

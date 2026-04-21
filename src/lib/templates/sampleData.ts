@@ -408,3 +408,28 @@ export const sampleTemplateDataDetailCropStripCover: TemplateRenderProps = {
   itemNumber: 31,
   visualPreset: "citrus-mint",
 };
+
+export const sampleTemplateDataOvenDoorPoster: TemplateRenderProps = {
+  subtitle: "Fresh From The Oven",
+  title: "Baked Dinner Recipes",
+  images: [
+    "/sample-images/8.jpg",
+    "/sample-images/7.jpg",
+  ],
+  domain: "homebites.com",
+  itemNumber: 24,
+  visualPreset: "crimson-custard",
+};
+
+export const sampleTemplateDataTakeoutTicketStack: TemplateRenderProps = {
+  subtitle: "Hot Order",
+  title: "Party Dip Recipes",
+  images: [
+    "/sample-images/8.jpg",
+    "/sample-images/7.jpg",
+    "/sample-images/1.jpg",
+  ],
+  domain: "homebites.com",
+  itemNumber: 21,
+  visualPreset: "tomato-basil",
+};

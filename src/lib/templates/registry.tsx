@@ -31,6 +31,8 @@ import { TemplateNeonDinerStack } from "@/templates/TemplateNeonDinerStack";
 import { TemplateBentoGridRecipes } from "@/templates/TemplateBentoGridRecipes";
 import { TemplateDessertBoxSign } from "@/templates/TemplateDessertBoxSign";
 import { TemplateDetailCropStripCover } from "@/templates/TemplateDetailCropStripCover";
+import { TemplateOvenDoorPoster } from "@/templates/TemplateOvenDoorPoster";
+import { TemplateTakeoutTicketStack } from "@/templates/TemplateTakeoutTicketStack";
 import type { JSX } from "react";
 import {
   sampleTemplateDataBookmarkRibbonCollageTitle,
@@ -55,6 +57,8 @@ import {
   sampleTemplateDataBentoGridRecipes,
   sampleTemplateDataDessertBoxSign,
   sampleTemplateDataDetailCropStripCover,
+  sampleTemplateDataOvenDoorPoster,
+  sampleTemplateDataTakeoutTicketStack,
   sampleTemplateDataHeroTextTripleSplitFooter,
   sampleTemplateDataMasonryGridNumberTitleFooter,
   sampleTemplateDataNineImageGridOverlayNumberFooter,
@@ -565,6 +569,36 @@ export const TEMPLATE_CONFIGS: Record<string, TemplateConfig> = {
       footer: true,
     },
   },
+  "oven-door-poster": {
+    id: "oven-door-poster",
+    name: "Oven Door Poster",
+    componentKey: "TemplateOvenDoorPoster",
+    previewPath: "/preview/oven-door-poster",
+    locked: true,
+    canvas: { width: 1080, height: 1920 },
+    imageSlotCount: 2,
+    textFields: ["subtitle", "title", "itemNumber", "domain", "visualPreset"],
+    features: {
+      overlay: true,
+      numberTreatment: "hero",
+      footer: true,
+    },
+  },
+  "takeout-ticket-stack": {
+    id: "takeout-ticket-stack",
+    name: "Takeout Ticket Stack",
+    componentKey: "TemplateTakeoutTicketStack",
+    previewPath: "/preview/takeout-ticket-stack",
+    locked: true,
+    canvas: { width: 1080, height: 1920 },
+    imageSlotCount: 3,
+    textFields: ["subtitle", "title", "itemNumber", "domain", "visualPreset"],
+    features: {
+      overlay: true,
+      numberTreatment: "hero",
+      footer: true,
+    },
+  },
 };
 
 const TEMPLATE_COMPONENTS: Record<
@@ -604,6 +638,8 @@ const TEMPLATE_COMPONENTS: Record<
   "bento-grid-recipes": TemplateBentoGridRecipes,
   "dessert-box-sign": TemplateDessertBoxSign,
   "detail-crop-strip-cover": TemplateDetailCropStripCover,
+  "oven-door-poster": TemplateOvenDoorPoster,
+  "takeout-ticket-stack": TemplateTakeoutTicketStack,
 };
 
 export function getTemplateConfig(templateId: string) {
@@ -751,6 +787,14 @@ export function getSampleTemplateProps(templateId: string) {
 
   if (templateId === "detail-crop-strip-cover") {
     return sampleTemplateDataDetailCropStripCover;
+  }
+
+  if (templateId === "oven-door-poster") {
+    return sampleTemplateDataOvenDoorPoster;
+  }
+
+  if (templateId === "takeout-ticket-stack") {
+    return sampleTemplateDataTakeoutTicketStack;
   }
 
   return sampleTemplateDataWithSubtitle;

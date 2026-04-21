@@ -159,7 +159,7 @@ function normalizeArticleUrl(input) {
     const parsed = new URL(trimmed);
     const protocol = parsed.protocol.toLowerCase();
     const hostname = parsed.hostname.toLowerCase().replace(/^www\./, "");
-    const pathname = parsed.pathname.replace(/\/{2,}/g, "/").replace(/\/+$/, "") || "/";
+    const pathname = parsed.pathname.replace(/\/{2,}/g, "/").replace(/\/+$/, "").toLowerCase() || "/";
     const searchParams = new URLSearchParams(parsed.search);
 
     for (const key of Array.from(searchParams.keys())) {

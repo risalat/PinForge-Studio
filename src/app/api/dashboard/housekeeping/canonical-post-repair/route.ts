@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAuthenticatedDashboardApiUser } from "@/lib/auth/dashboardSession";
 import { isDatabaseConfigured } from "@/lib/env";
+import { prisma } from "@/lib/prisma";
 import { repairCanonicalPosts } from "@/lib/housekeeping/canonicalPostMaintenance";
 
 export const runtime = "nodejs";
@@ -24,6 +25,7 @@ export async function POST() {
 
   try {
     const result = await repairCanonicalPosts();
+    await prisma.postPulseSnapshot.deleteMany({});
 
     return NextResponse.json({
       ok: true,

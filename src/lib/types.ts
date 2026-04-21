@@ -151,7 +151,11 @@ export function normalizeArticleUrl(input: string) {
     const parsed = new URL(trimmed);
     const protocol = parsed.protocol.toLowerCase();
     const hostname = parsed.hostname.toLowerCase().replace(/^www\./, "");
-    const pathname = parsed.pathname.replace(/\/{2,}/g, "/").replace(/\/+$/, "") || "/";
+    const pathname =
+      parsed.pathname
+        .replace(/\/{2,}/g, "/")
+        .replace(/\/+$/, "")
+        .toLowerCase() || "/";
     const searchParams = new URLSearchParams(parsed.search);
     for (const key of Array.from(searchParams.keys())) {
       const normalizedKey = key.toLowerCase();
@@ -192,7 +196,11 @@ export function buildArticleUrlCandidates(input: string) {
     const parsed = new URL(canonical || trimmed);
     const hostname = parsed.hostname.toLowerCase().replace(/^www\./, "");
     const protocol = parsed.protocol.toLowerCase();
-    const pathname = parsed.pathname.replace(/\/{2,}/g, "/").replace(/\/+$/, "") || "/";
+    const pathname =
+      parsed.pathname
+        .replace(/\/{2,}/g, "/")
+        .replace(/\/+$/, "")
+        .toLowerCase() || "/";
     const search = parsed.search;
     const port =
       parsed.port && !isDefaultPort(protocol, parsed.port) ? `:${parsed.port}` : "";

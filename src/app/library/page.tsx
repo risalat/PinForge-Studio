@@ -236,6 +236,10 @@ function getTemplateUsage(templateId: string) {
       return "Use for decor and lifestyle roundups where a handcrafted scrapbook feel can stop the scroll more aggressively than a clean editorial grid.";
     case "bookmark-ribbon-collage-title":
       return "Use for premium roundup covers where a bold number rail and a cleaner magazine-style title block should feel more elevated than a scrapbook layout.";
+    case "oven-door-poster":
+      return "Use for baked, casserole, and holiday-food roundups where one hero dish should lead and a framed lower support image can reinforce the poster feel.";
+    case "takeout-ticket-stack":
+      return "Use for bold food roundups where a receipt-style ticket, docked count tab, and staggered support cards should feel louder and more feed-stopping than a standard poster layout.";
     default:
       return "Use for locked template-driven render tests and job planning.";
   }
