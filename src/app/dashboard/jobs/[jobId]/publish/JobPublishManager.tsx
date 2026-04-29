@@ -250,6 +250,9 @@ export function JobPublishManager({
     descriptions: null,
     schedule: null,
   });
+  const [isBulkTitlePanelOpen, setIsBulkTitlePanelOpen] = useState(false);
+  const [bulkTitleText, setBulkTitleText] = useState("");
+  const [bulkTitleValidationMessage, setBulkTitleValidationMessage] = useState<string | null>(null);
   const [collapsedSteps, setCollapsedSteps] = useState<Record<PublishStepKey, boolean>>({
     upload: false,
     titles: false,
@@ -273,6 +276,7 @@ export function JobPublishManager({
   const isUploadingMedia = activeAction === "upload_media";
   const isGeneratingTitles = activeAction === "generate_titles";
   const isSavingCopy = activeAction === "save_copy";
+  const isApplyingBulkTitles = activeAction === "bulk_titles";
   const isGeneratingDescriptions = activeAction === "generate_descriptions";
   const isSchedulingPins = activeAction === "schedule";
 
@@ -462,6 +466,10 @@ export function JobPublishManager({
   const selectedPins = useMemo(
     () => orderedPins.filter((pin) => selectedPinIds.includes(pin.id)),
     [orderedPins, selectedPinIds],
+  );
+  const bulkTitleTargetPins = useMemo(
+    () => selectedPins.filter((pin) => isPinReadyForTitleWork(pin)),
+    [selectedPins],
   );
   const selectedTitleReadyPins = useMemo(
     () => selectedPins.filter((pin) => isPinReadyForTitleGeneration(pin)),
@@ -1605,6 +1613,76 @@ export function JobPublishManager({
         item.generatedPinId === generatedPinId ? { ...item, [key]: nextValue } : item,
       ),
     );
+  }
+
+  function applyBulkTitles() {
+    if (bulkTitleTargetPins.length === 0) {
+      setBulkTitleValidationMessage("Select at least one publish-ready pin.");
+      return;
+    }
+
+    const assignedTitles = assignBulkTitlesToPins(
+      bulkTitleTargetPins,
+      bulkTitleText.split(/\r?\n/),
+    );
+
+    if (assignedTitles.length === 0) {
+      setBulkTitleValidationMessage("Paste at least one valid title.");
+      return;
+    }
+
+    const copies = bulkTitleTargetPins.map((pin, index) => ({
+      generatedPinId: pin.id,
+      title: (assignedTitles[index] ?? "").slice(0, TITLE_MAX_LENGTH),
+    }));
+
+    startTransition(async () => {
+      try {
+        setBulkTitleValidationMessage(null);
+        setSectionFeedback((current) => ({
+          ...current,
+          titles: null,
+        }));
+        setActiveAction("bulk_titles");
+
+        await runAction({
+          action: "save_copy",
+          copies,
+        });
+        await refreshPublishSnapshot();
+        setBulkTitleText("");
+        setIsBulkTitlePanelOpen(false);
+        setSectionFeedback((current) => ({
+          ...current,
+          titles: {
+            tone: "success",
+            message: "Bulk titles applied to pins.",
+          },
+        }));
+        notify({
+          tone: "success",
+          title: "Bulk titles applied",
+          message: "Bulk titles applied to pins.",
+        });
+        router.refresh();
+      } catch (error) {
+        setSectionFeedback((current) => ({
+          ...current,
+          titles: {
+            tone: "error",
+            message: error instanceof Error ? error.message : "Unable to apply bulk titles.",
+          },
+        }));
+        notify({
+          tone: "error",
+          title: "Bulk title apply failed",
+          message: error instanceof Error ? error.message : "Unable to apply bulk titles.",
+          sticky: true,
+        });
+      } finally {
+        setActiveAction(null);
+      }
+    });
   }
 
   function togglePin(pinId: string, isChecked: boolean) {
@@ -2757,7 +2835,85 @@ function formatDateLabel(value: string) {
                   busyLabel="Saving..."
                 />
               </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsBulkTitlePanelOpen((current) => !current);
+                  setBulkTitleValidationMessage(null);
+                }}
+                disabled={isPending || Boolean(activeAction) || bulkTitleTargetPins.length === 0}
+                className={getActionButtonClass({
+                  tone: "secondary",
+                  disabled: isPending || Boolean(activeAction) || bulkTitleTargetPins.length === 0,
+                })}
+              >
+                Bulk Paste Titles
+              </button>
             </div>
+            {isBulkTitlePanelOpen ? (
+              <div className="mt-4 rounded-2xl border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-base font-bold text-[var(--dashboard-text)]">Bulk Paste Titles</h3>
+                    <p className="mt-2 max-w-3xl text-sm text-[var(--dashboard-subtle)]">
+                      Titles will be assigned randomly. If there are fewer titles than pins, every title is used once before repeating.
+                    </p>
+                  </div>
+                  <StatusChip label={`${bulkTitleTargetPins.length} selected pins`} tone="neutral" />
+                </div>
+                <textarea
+                  value={bulkTitleText}
+                  onChange={(event) => {
+                    setBulkTitleText(event.target.value);
+                    if (bulkTitleValidationMessage) {
+                      setBulkTitleValidationMessage(null);
+                    }
+                  }}
+                  rows={7}
+                  placeholder={"Paste one title per line...\nCozy Bedroom Ideas That Feel Calm and Expensive\nSmall Patio Styling Tricks You'll Want to Copy\nNeutral Living Room Ideas That Look Effortless"}
+                  className="mt-4 w-full resize-y rounded-2xl border border-[var(--dashboard-line)] bg-white px-4 py-3 text-sm outline-none"
+                />
+                {bulkTitleValidationMessage ? (
+                  <p className="mt-2 text-sm font-semibold text-[var(--dashboard-danger-ink)]">
+                    {bulkTitleValidationMessage}
+                  </p>
+                ) : null}
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={applyBulkTitles}
+                    disabled={isPending || Boolean(activeAction) || bulkTitleTargetPins.length === 0}
+                    aria-busy={isApplyingBulkTitles}
+                    className={getActionButtonClass({
+                      tone: "primary",
+                      busy: isApplyingBulkTitles,
+                      disabled: isPending || Boolean(activeAction) || bulkTitleTargetPins.length === 0,
+                    })}
+                  >
+                    <ActionButtonContent
+                      busy={isApplyingBulkTitles}
+                      label="Apply Titles"
+                      busyLabel="Applying..."
+                      inverse
+                    />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsBulkTitlePanelOpen(false);
+                      setBulkTitleValidationMessage(null);
+                    }}
+                    disabled={isPending || Boolean(activeAction)}
+                    className={getActionButtonClass({
+                      tone: "secondary",
+                      disabled: isPending || Boolean(activeAction),
+                    })}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : null}
             {sectionFeedback.titles ? <SectionFeedback feedback={sectionFeedback.titles} className="mt-4" /> : null}
 
             {activeTitleTasks.length > 0 ? (
@@ -3986,6 +4142,54 @@ function buildTitleCandidatesByPinId(pins: PinItem[]) {
       .filter((pin) => pin.titleOptions.length > 0)
       .map((pin) => [pin.id, pin.titleOptions]),
   );
+}
+
+function assignBulkTitlesToPins<T>(
+  pins: T[],
+  rawTitles: string[],
+  getCurrentTitle?: (pin: T) => string,
+) {
+  const normalizedTitles = rawTitles
+    .map((title) => title.trim())
+    .filter((title) => title.length > 0);
+
+  if (pins.length === 0 || normalizedTitles.length === 0) {
+    return [];
+  }
+
+  const assignedTitles: string[] = [];
+  let titlePool = shuffleTitles(normalizedTitles);
+
+  for (const pin of pins) {
+    if (titlePool.length === 0) {
+      titlePool = shuffleTitles(normalizedTitles);
+      const previousTitle = assignedTitles[assignedTitles.length - 1];
+
+      if (titlePool.length > 1 && titlePool[0] === previousTitle) {
+        const swapIndex = titlePool.findIndex((title) => title !== previousTitle);
+        if (swapIndex > 0) {
+          [titlePool[0], titlePool[swapIndex]] = [titlePool[swapIndex], titlePool[0]];
+        }
+      }
+    }
+
+    const currentTitle = getCurrentTitle?.(pin).trim();
+    const nextTitle = titlePool.shift();
+    assignedTitles.push(nextTitle ?? currentTitle ?? normalizedTitles[0]);
+  }
+
+  return assignedTitles;
+}
+
+function shuffleTitles(titles: string[]) {
+  const shuffled = [...titles];
+
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+  }
+
+  return shuffled;
 }
 
 function getPublishSelectionStorageKey(jobId: string) {
