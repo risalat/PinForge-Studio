@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAuthenticatedDashboardApiUser } from "@/lib/auth/dashboardSession";
+// Do not use getApiEffectiveUserId() here.
+// Extension API keys are personal to the signed-in actor account.
 import { createApiKey, listApiKeys } from "@/lib/auth/apiKeys";
 import { isDatabaseConfigured } from "@/lib/env";
 

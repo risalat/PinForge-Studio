@@ -3,6 +3,10 @@ import { promisify } from "node:util";
 import { prisma } from "@/lib/prisma";
 import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
 
+// Extension API keys are intentionally scoped to the signed-in actor user.
+// They do not follow the team "effective user" context because extension
+// intake credentials must remain personal and non-shared.
+
 const scrypt = promisify(nodeScrypt);
 const KEY_SCHEME = "pfs_live";
 const SECRET_BYTES = 24;
