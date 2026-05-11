@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
 import { isDatabaseConfigured } from "@/lib/env";
 import { duplicateRuntimeTemplateDraftForUser } from "@/lib/runtime-templates/db";
+import { getApiEffectiveUserId } from "@/lib/team/effectiveUserContext";
 
 export const runtime = "nodejs";
 
@@ -28,9 +28,9 @@ export async function POST(request: Request, { params }: RouteProps) {
     const payload = duplicateTemplateSchema.parse(
       request.headers.get("content-length") === "0" ? {} : await request.json().catch(() => ({})),
     );
-    const user = await getOrCreateDashboardUser();
+    const effectiveUserId = await getApiEffectiveUserId();
     const result = await duplicateRuntimeTemplateDraftForUser({
-      userId: user.id,
+      userId: effectiveUserId,
       templateId,
       asVariant: payload.asVariant,
     });

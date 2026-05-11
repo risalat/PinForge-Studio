@@ -179,16 +179,17 @@ export async function getIntegrationSettingsSummary(): Promise<IntegrationSettin
   return getIntegrationSettingsSummaryCached();
 }
 
-export async function getIntegrationSettingsSummaryUncached(): Promise<IntegrationSettingsSummary> {
-  const user = await getOrCreateDashboardUser();
+export async function getIntegrationSettingsSummaryForUserId(
+  userId: string,
+): Promise<IntegrationSettingsSummary> {
   const [settings, workspaceProfiles, aiCredentials] = await Promise.all([
     prisma.userIntegrationSettings.findUnique({
       where: {
-        userId: user.id,
+        userId,
       },
     }),
-    listWorkspaceProfilesForUserId(user.id),
-    listAiCredentialsForUserId(user.id),
+    listWorkspaceProfilesForUserId(userId),
+    listAiCredentialsForUserId(userId),
   ]);
 
   const defaultProfile = pickDefaultWorkspaceProfile(workspaceProfiles);
@@ -220,16 +221,22 @@ export async function getIntegrationSettingsSummaryUncached(): Promise<Integrati
   };
 }
 
+export async function getIntegrationSettingsSummaryUncached(): Promise<IntegrationSettingsSummary> {
+  const user = await getOrCreateDashboardUser();
+  return getIntegrationSettingsSummaryForUserId(user.id);
+}
+
 export async function saveIntegrationSettings(
   input: Omit<Partial<IntegrationSettings>, "workspaceProfiles" | "aiCredentials"> & {
     workspaceProfiles?: WorkspaceProfileInput[];
     aiCredentials?: AiCredentialInput[];
   },
+  options?: { userId?: string },
 ) {
-  const user = await getOrCreateDashboardUser();
+  const resolvedUserId = options?.userId ?? (await getOrCreateDashboardUser()).id;
   const existing = await prisma.userIntegrationSettings.findUnique({
     where: {
-      userId: user.id,
+      userId: resolvedUserId,
     },
   });
   const normalizedProfiles =
@@ -244,7 +251,7 @@ export async function saveIntegrationSettings(
     const existingAiCredentials =
       normalizedAiCredentials !== null
         ? await tx.aiCredential.findMany({
-            where: { userId: user.id },
+            where: { userId: resolvedUserId },
           })
         : [];
     const existingAiCredentialMap = new Map(
@@ -262,7 +269,7 @@ export async function saveIntegrationSettings(
       : null;
     const settings = await tx.userIntegrationSettings.upsert({
       where: {
-        userId: user.id,
+        userId: resolvedUserId,
       },
       update: {
         publerApiKeyEnc:
@@ -311,7 +318,7 @@ export async function saveIntegrationSettings(
             : input.aiCustomEndpoint?.trim(),
       },
       create: {
-        userId: user.id,
+        userId: resolvedUserId,
         publerApiKeyEnc: input.publerApiKey?.trim()
           ? encryptSecret(input.publerApiKey.trim())
           : null,
@@ -335,14 +342,14 @@ export async function saveIntegrationSettings(
     if (normalizedProfiles !== null) {
       await tx.workspaceProfile.deleteMany({
         where: {
-          userId: user.id,
+          userId: resolvedUserId,
         },
       });
 
       if (normalizedProfiles.length > 0) {
         await tx.workspaceProfile.createMany({
           data: normalizedProfiles.map((profile) => ({
-            userId: user.id,
+            userId: resolvedUserId,
             workspaceId: profile.workspaceId,
             workspaceName: profile.workspaceName,
             allowedDomains: profile.allowedDomains,
@@ -359,14 +366,14 @@ export async function saveIntegrationSettings(
     if (normalizedAiCredentials !== null) {
       await tx.aiCredential.deleteMany({
         where: {
-          userId: user.id,
+          userId: resolvedUserId,
         },
       });
 
       if (normalizedAiCredentials.length > 0) {
         await tx.aiCredential.createMany({
           data: normalizedAiCredentials.map((credential) => ({
-            userId: user.id,
+            userId: resolvedUserId,
             label: credential.label,
             provider: credential.provider,
             apiKeyEnc:
@@ -537,14 +544,15 @@ export async function saveWorkspaceProfileDefaults(input: {
   workspaceId: string;
   defaultAccountId?: string;
   defaultBoardId?: string;
+  userId?: string;
 }) {
   const workspaceId = input.workspaceId.trim();
   if (!workspaceId) {
     throw new Error("Select a workspace profile first.");
   }
 
-  const user = await getOrCreateDashboardUser();
-  const profiles = await listWorkspaceProfilesForUserId(user.id);
+  const resolvedUserId = input.userId ?? (await getOrCreateDashboardUser()).id;
+  const profiles = await listWorkspaceProfilesForUserId(resolvedUserId);
   const targetProfile = profiles.find((profile) => profile.workspaceId === workspaceId);
 
   if (!targetProfile) {
@@ -563,9 +571,9 @@ export async function saveWorkspaceProfileDefaults(input: {
 
   await saveIntegrationSettings({
     workspaceProfiles: nextProfiles,
-  });
+  }, { userId: resolvedUserId });
 
-  return getWorkspaceProfileForUserId(user.id, workspaceId);
+  return getWorkspaceProfileForUserId(resolvedUserId, workspaceId);
 }
 
 export async function getEffectivePublerAllowedDomainsForUserId(userId: string) {

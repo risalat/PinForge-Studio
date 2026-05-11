@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAuthenticatedDashboardApiUser } from "@/lib/auth/dashboardSession";
 import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
+import { getApiEffectiveUserId } from "@/lib/team/effectiveUserContext";
 import { isDatabaseConfigured } from "@/lib/env";
 import { PublerClient } from "@/lib/publer/publerClient";
 import {
@@ -9,7 +10,7 @@ import {
   getCachedPublerBoards,
   getCachedPublerWorkspaces,
 } from "@/lib/publer/metadataCache";
-import { getIntegrationSettings } from "@/lib/settings/integrationSettings";
+import { getIntegrationSettingsForUserId } from "@/lib/settings/integrationSettings";
 
 const schema = z.object({
   apiKey: z.string().trim().optional(),
@@ -27,7 +28,8 @@ export async function POST(request: Request) {
   try {
     const rawPayload = await request.json();
     const payload = schema.parse(rawPayload);
-    const savedSettings = isDatabaseConfigured() ? await getIntegrationSettings() : null;
+    const effectiveUserId = isDatabaseConfigured() ? await getApiEffectiveUserId() : "";
+    const savedSettings = isDatabaseConfigured() ? await getIntegrationSettingsForUserId(effectiveUserId) : null;
     const user = isDatabaseConfigured() ? await getOrCreateDashboardUser() : null;
     const apiKey = payload.apiKey?.trim() || savedSettings?.publerApiKey || "";
 

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAuthenticatedDashboardApiUser } from "@/lib/auth/dashboardSession";
-import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
+import { getApiEffectiveUserId } from "@/lib/team/effectiveUserContext";
 import { isDatabaseConfigured } from "@/lib/env";
 import { saveJobImageSelections } from "@/lib/jobs/generatePins";
 
@@ -41,10 +41,10 @@ export async function POST(request: Request, { params }: RouteProps) {
   try {
     const { jobId } = await params;
     const payload = reviewSchema.parse(await request.json());
-    const user = await getOrCreateDashboardUser();
+    const effectiveUserId = await getApiEffectiveUserId();
 
     await saveJobImageSelections({
-      userId: user.id,
+      userId: effectiveUserId,
       jobId,
       images: payload.images,
       globalKeywords: payload.globalKeywords,

@@ -1,6 +1,8 @@
 import { SettingsManager } from "@/app/dashboard/settings/SettingsManager";
+import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
 import { isDatabaseConfigured } from "@/lib/env";
-import { getIntegrationSettingsSummary } from "@/lib/settings/integrationSettings";
+import { getIntegrationSettingsSummaryForUserId } from "@/lib/settings/integrationSettings";
+import { getDashboardEffectiveUserContext } from "@/lib/team/effectiveUserContext";
 import type { IntegrationSettingsSummary } from "@/lib/types";
 
 export default async function DashboardIntegrationsPage() {
@@ -28,7 +30,9 @@ export default async function DashboardIntegrationsPage() {
 
   if (databaseReady) {
     try {
-      settings = await getIntegrationSettingsSummary();
+      const user = await getOrCreateDashboardUser();
+      const context = await getDashboardEffectiveUserContext(user.id);
+      settings = await getIntegrationSettingsSummaryForUserId(context.effectiveUserId);
     } catch {
       databaseReady = false;
     }

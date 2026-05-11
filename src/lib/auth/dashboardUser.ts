@@ -2,6 +2,7 @@ import { cache } from "react";
 import { Prisma } from "@prisma/client";
 import { requireAuthenticatedDashboardUser } from "@/lib/auth/dashboardSession";
 import { prisma } from "@/lib/prisma";
+import { getOrCreateOwnedStudioTeamForUser } from "@/lib/team/studioTeam";
 
 export const getOrCreateDashboardUser = cache(async function getOrCreateDashboardUser() {
   const authUser = await requireAuthenticatedDashboardUser();
@@ -12,7 +13,7 @@ export const getOrCreateDashboardUser = cache(async function getOrCreateDashboar
   }
 
   try {
-    return await prisma.user.upsert({
+    const user = await prisma.user.upsert({
       where: {
         authUserId: authUser.id,
       },
@@ -24,6 +25,15 @@ export const getOrCreateDashboardUser = cache(async function getOrCreateDashboar
         email,
       },
     });
+
+    await getOrCreateOwnedStudioTeamForUser({
+      userId: user.id,
+      email: user.email ?? email,
+    }).catch(() => {
+      // non-blocking: team creation failure should not prevent dashboard access
+    });
+
+    return user;
   } catch (error) {
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -40,7 +50,7 @@ export const getOrCreateDashboardUser = cache(async function getOrCreateDashboar
       }
 
       if (!existingByEmail.authUserId || existingByEmail.authUserId === authUser.id) {
-        return prisma.user.update({
+        const user = await prisma.user.update({
           where: {
             id: existingByEmail.id,
           },
@@ -49,6 +59,15 @@ export const getOrCreateDashboardUser = cache(async function getOrCreateDashboar
             email,
           },
         });
+
+        await getOrCreateOwnedStudioTeamForUser({
+          userId: user.id,
+          email: user.email ?? email,
+        }).catch(() => {
+          // non-blocking
+        });
+
+        return user;
       }
     }
 

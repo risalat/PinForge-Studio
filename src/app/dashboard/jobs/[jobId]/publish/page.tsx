@@ -10,11 +10,13 @@ import { isDatabaseConfigured } from "@/lib/env";
 import { getJobForUser, listJobCyclesForPost } from "@/lib/jobs/generatePins";
 import { getPublishScheduleContextForPost } from "@/lib/jobs/publishScheduleContext";
 import {
-  getIntegrationSettingsSummary,
+  getIntegrationSettingsSummaryForUserId,
   getWorkspaceAllowedDomainsForUserId,
   getWorkspaceProfileForUserId,
 } from "@/lib/settings/integrationSettings";
+import { getDashboardEffectiveUserContext } from "@/lib/team/effectiveUserContext";
 import { resolveStoredAssetUrl } from "@/lib/storage/assetUrl";
+import type { IntegrationSettingsSummary } from "@/lib/types";
 
 type PageProps = {
   params: Promise<{
@@ -35,9 +37,11 @@ export default async function DashboardJobPublishPage({ params }: PageProps) {
   }
 
   const user = await getOrCreateDashboardUser();
+  const context = await getDashboardEffectiveUserContext(user.id);
+  const effectiveUserId = context.effectiveUserId;
   const [job, settings] = await Promise.all([
-    getJobForUser(jobId, user.id),
-    getIntegrationSettingsSummary().catch(() => ({
+    getJobForUser(jobId, effectiveUserId),
+    getIntegrationSettingsSummaryForUserId(effectiveUserId).catch((): IntegrationSettingsSummary => ({
       publerWorkspaceId: "",
       publerAllowedDomains: [],
       publerAccountId: "",
@@ -52,8 +56,8 @@ export default async function DashboardJobPublishPage({ params }: PageProps) {
       hasAiApiKey: false,
       canUsePublerApiKey: false,
       canUseAiApiKey: false,
-      publerCredentialState: "missing" as const,
-      aiCredentialState: "missing" as const,
+      publerCredentialState: "missing",
+      aiCredentialState: "missing",
       publerCredentialMessage: "",
       aiCredentialMessage: "",
     })),
@@ -64,11 +68,11 @@ export default async function DashboardJobPublishPage({ params }: PageProps) {
   }
 
   const activeWorkspaceId = await getDashboardWorkspaceScope(settings.publerWorkspaceId);
-  const [activeWorkspaceProfile, allowedDomains] = await Promise.all([
-    getWorkspaceProfileForUserId(user.id, activeWorkspaceId),
-    getWorkspaceAllowedDomainsForUserId(user.id, activeWorkspaceId),
+  const [allowedDomains, activeWorkspaceProfile, cycleJobs] = await Promise.all([
+    getWorkspaceAllowedDomainsForUserId(effectiveUserId, activeWorkspaceId),
+    getWorkspaceProfileForUserId(effectiveUserId, activeWorkspaceId),
+    listJobCyclesForPost(effectiveUserId, job.postId),
   ]);
-  const cycleJobs = await listJobCyclesForPost(user.id, job.postId);
   const cycleContext = buildCycleContext(cycleJobs, job.id);
   const isInActiveScope = matchesAllowedDomain(job.domainSnapshot, allowedDomains);
   const isFailedCycle = job.status === "FAILED" || job.scheduleRuns[0]?.status === "FAILED";
@@ -82,7 +86,7 @@ export default async function DashboardJobPublishPage({ params }: PageProps) {
     );
   }
   const initialScheduleContext = await getPublishScheduleContextForPost({
-    userId: user.id,
+    userId: effectiveUserId,
     postId: job.postId,
     workspaceId: activeWorkspaceId,
   });

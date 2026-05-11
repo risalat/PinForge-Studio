@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAuthenticatedDashboardApiUser } from "@/lib/auth/dashboardSession";
-import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
+import { getApiEffectiveUserId } from "@/lib/team/effectiveUserContext";
 import { isDatabaseConfigured } from "@/lib/env";
 import { syncPublerPublicationRecordsForUser } from "@/lib/dashboard/publerSync";
 
@@ -25,8 +25,8 @@ export async function POST(request: Request) {
   try {
     const rawPayload = await request.json().catch(() => ({}));
     const payload = schema.parse(rawPayload);
-    const user = await getOrCreateDashboardUser();
-    const result = await syncPublerPublicationRecordsForUser(user.id, {
+    const effectiveUserId = await getApiEffectiveUserId();
+    const result = await syncPublerPublicationRecordsForUser(effectiveUserId, {
       workspaceId: payload.workspaceId,
     });
     return NextResponse.json({ ok: true, result });

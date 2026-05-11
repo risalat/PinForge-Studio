@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAuthenticatedDashboardApiUser } from "@/lib/auth/dashboardSession";
-import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
+import { getApiEffectiveUserId } from "@/lib/team/effectiveUserContext";
 import { isDatabaseConfigured } from "@/lib/env";
 import { createFreshPinsJobFromPost } from "@/lib/jobs/generatePins";
 
@@ -27,9 +27,9 @@ export async function POST(request: Request) {
 
   try {
     const payload = schema.parse(await request.json());
-    const user = await getOrCreateDashboardUser();
+    const effectiveUserId = await getApiEffectiveUserId();
     const result = await createFreshPinsJobFromPost({
-      userId: user.id,
+      userId: effectiveUserId,
       postId: payload.postId,
     });
 

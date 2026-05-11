@@ -3,8 +3,9 @@ import { z } from "zod";
 import { AIClient } from "@/lib/ai";
 import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
 import { requireAuthenticatedDashboardApiUser } from "@/lib/auth/dashboardSession";
+import { getApiEffectiveUserId } from "@/lib/team/effectiveUserContext";
 import { isDatabaseConfigured } from "@/lib/env";
-import { getIntegrationSettings, resolveAiCredentialForUserId } from "@/lib/settings/integrationSettings";
+import { getIntegrationSettingsForUserId, resolveAiCredentialForUserId } from "@/lib/settings/integrationSettings";
 
 const schema = z.object({
   provider: z.enum(["gemini", "openai", "openrouter", "koala", "custom_endpoint"]),
@@ -23,12 +24,13 @@ export async function POST(request: Request) {
   try {
     const rawPayload = await request.json();
     const payload = schema.parse(rawPayload);
+    const effectiveUserId = isDatabaseConfigured() ? await getApiEffectiveUserId() : "";
     const dashboardUser = isDatabaseConfigured() ? await getOrCreateDashboardUser() : null;
-    const savedSettings = isDatabaseConfigured() ? await getIntegrationSettings() : null;
+    const savedSettings = isDatabaseConfigured() ? await getIntegrationSettingsForUserId(effectiveUserId) : null;
     const savedCredential =
       dashboardUser && payload.credentialId
         ? await resolveAiCredentialForUserId({
-            userId: dashboardUser.id,
+            userId: effectiveUserId,
             aiCredentialId: payload.credentialId,
           })
         : null;

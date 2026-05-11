@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import { Prisma, TemplateLifecycleStatus, TemplateSourceKind, TemplateRendererKind } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { listCustomTemplatesForUser } from "@/lib/runtime-templates/db";
 import {
@@ -7,6 +7,7 @@ import {
 } from "@/lib/templates/selectableTemplates";
 import type { TemplateUserGroupSummary } from "@/lib/templates/templateGroupMetadata";
 import { ensureTemplateRecordsForUser } from "@/lib/templates/templateRecords";
+import { getTeamTemplateVisibleUserIds } from "@/lib/team/teamAccess";
 
 const templateGroupTransactionOptions = {
   maxWait: 10_000,
@@ -351,10 +352,36 @@ export async function getTemplateGroupDetailsForUser(input: {
 }
 
 export async function listAssignableTemplatesForUser(userId: string) {
-  const [builtInTemplates, customTemplates] = await Promise.all([
+  const [builtInTemplates, customTemplates, visibleUserIds] = await Promise.all([
     getBuiltInSelectableTemplateCandidatesForUser(userId),
     listCustomTemplatesForUser(userId),
+    getTeamTemplateVisibleUserIds(userId),
   ]);
+
+  const teamVisibleTemplates =
+    visibleUserIds.length > 1
+      ? await prisma.template.findMany({
+          where: {
+            sourceKind: TemplateSourceKind.CUSTOM,
+            rendererKind: TemplateRendererKind.RUNTIME_SCHEMA,
+            lifecycleStatus: TemplateLifecycleStatus.FINALIZED,
+            createdByUserId: {
+              in: visibleUserIds.filter((id) => id !== userId),
+            },
+            isActive: true,
+            activeVersionId: { not: null },
+          },
+          include: {
+            activeVersion: {
+              select: {
+                id: true,
+                versionNumber: true,
+                isLocked: true,
+              },
+            },
+          },
+        })
+      : [];
 
   const assignableTemplates = [
     ...builtInTemplates.map((template) => ({
@@ -398,6 +425,31 @@ export async function listAssignableTemplatesForUser(userId: string) {
       userGroups: template.userGroups,
       userGroupIds: template.userGroupIds,
     })),
+    ...teamVisibleTemplates
+      .filter((t) => t.activeVersion?.isLocked)
+      .map((template) => ({
+        id: template.id,
+        templateId: template.id,
+        templateVersionId: template.activeVersionId ?? null,
+        selectionKey: buildTemplateSelectionKey({
+          templateId: template.id,
+          templateVersionId: template.activeVersionId ?? null,
+        }),
+        name: template.name,
+        slug: template.slug,
+        description: template.description,
+        sourceKind: template.sourceKind as "CUSTOM",
+        rendererKind: template.rendererKind as "RUNTIME_SCHEMA",
+        lifecycleStatus: template.lifecycleStatus as "FINALIZED",
+        previewPath: template.activeVersionId
+          ? `/dashboard/templates/${template.id}/preview?versionId=${template.activeVersionId}`
+          : `/dashboard/templates/${template.id}/preview`,
+        updatedAt: template.updatedAt,
+        systemCategories: [] as string[],
+        templateCategories: [] as string[],
+        userGroups: [] as TemplateUserGroupSummary[],
+        userGroupIds: [] as string[],
+      })),
   ] satisfies AssignableTemplateForUser[];
 
   return assignableTemplates.sort((left, right) =>

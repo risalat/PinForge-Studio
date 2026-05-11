@@ -150,26 +150,103 @@ enum TemplateRendererKind {
   RUNTIME_SCHEMA
 }
 
+enum StudioTeamRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum StudioTeamMembershipStatus {
+  ACTIVE
+  REMOVED
+}
+
+enum StudioTeamInvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+}
+
 model User {
-  id                      String                   @id @default(cuid())
-  authUserId              String?                  @unique
-  email                   String                   @unique
-  createdAt               DateTime                 @default(now())
-  apiKeys                 ApiKey[]
-  aiCredentials           AiCredential[]
-  generationJobs          GenerationJob[]
-  integrationSettings     UserIntegrationSettings?
-  publicationRecords      PublicationRecord[]
-  publicationSyncStates   PublicationSyncState[]
-  workspaceProfiles       WorkspaceProfile[]
-  freshTargetSnoozes      FreshTargetSnooze[]
-  backgroundTasks         BackgroundTask[]
-  publerMetadataCaches    PublerMetadataCache[]
-  postPulseSnapshots      PostPulseSnapshot[]
-  createdTemplates        Template[]               @relation("UserCreatedTemplates")
-  createdTemplateVersions TemplateVersion[]        @relation("UserCreatedTemplateVersions")
-  templateGroups          TemplateGroup[]
-  templateBlocks          TemplateBlock[]
+  id                          String                    @id @default(cuid())
+  authUserId                  String?                   @unique
+  email                       String                    @unique
+  createdAt                   DateTime                  @default(now())
+  apiKeys                     ApiKey[]
+  aiCredentials               AiCredential[]
+  generationJobs              GenerationJob[]
+  integrationSettings         UserIntegrationSettings?
+  publicationRecords          PublicationRecord[]
+  publicationSyncStates       PublicationSyncState[]
+  workspaceProfiles           WorkspaceProfile[]
+  freshTargetSnoozes          FreshTargetSnooze[]
+  backgroundTasks             BackgroundTask[]
+  publerMetadataCaches        PublerMetadataCache[]
+  postPulseSnapshots          PostPulseSnapshot[]
+  createdTemplates            Template[]                @relation("UserCreatedTemplates")
+  createdTemplateVersions     TemplateVersion[]         @relation("UserCreatedTemplateVersions")
+  templateGroups              TemplateGroup[]
+  templateBlocks              TemplateBlock[]
+  ownedStudioTeams            StudioTeam[]              @relation("OwnedStudioTeams")
+  studioTeamMemberships       StudioTeamMembership[]
+  sentStudioTeamInvitations   StudioTeamInvitation[]    @relation("SentStudioTeamInvitations")
+  acceptedStudioTeamInvitations StudioTeamInvitation[]  @relation("AcceptedStudioTeamInvitations")
+}
+
+model StudioTeam {
+  id          String                    @id @default(cuid())
+  name        String
+  ownerUserId String
+  createdAt   DateTime                  @default(now())
+  updatedAt   DateTime                  @updatedAt
+
+  owner       User                      @relation("OwnedStudioTeams", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  memberships StudioTeamMembership[]
+  invitations StudioTeamInvitation[]
+
+  @@index([ownerUserId])
+}
+
+model StudioTeamMembership {
+  id        String                      @id @default(cuid())
+  teamId    String
+  userId    String
+  role      StudioTeamRole              @default(MEMBER)
+  status    StudioTeamMembershipStatus  @default(ACTIVE)
+  createdAt DateTime                    @default(now())
+  updatedAt DateTime                    @updatedAt
+
+  team      StudioTeam                  @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user      User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+  @@index([userId, status])
+  @@index([teamId, status])
+}
+
+model StudioTeamInvitation {
+  id               String                      @id @default(cuid())
+  email            String
+  teamId           String
+  invitedByUserId  String
+  acceptedByUserId String?
+  role             StudioTeamRole              @default(MEMBER)
+  status           StudioTeamInvitationStatus  @default(PENDING)
+  tokenHash        String                      @unique
+  expiresAt        DateTime
+  acceptedAt       DateTime?
+  revokedAt        DateTime?
+  createdAt        DateTime                    @default(now())
+  updatedAt        DateTime                    @updatedAt
+
+  team             StudioTeam                  @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  invitedBy        User                        @relation("SentStudioTeamInvitations", fields: [invitedByUserId], references: [id], onDelete: Cascade)
+  acceptedBy       User?                       @relation("AcceptedStudioTeamInvitations", fields: [acceptedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([email, status])
+  @@index([teamId, status])
+  @@index([invitedByUserId, createdAt])
 }
 
 model Post {

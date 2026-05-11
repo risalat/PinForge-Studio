@@ -22,9 +22,10 @@ import { listJobsForUser } from "@/lib/jobs/generatePins";
 import { getPublishQueueCapacitySummary } from "@/lib/jobs/publishQueueCapacity";
 import { prisma } from "@/lib/prisma";
 import {
-  getIntegrationSettingsSummary,
+  getIntegrationSettingsSummaryForUserId,
   getWorkspaceAllowedDomainsForUserId,
 } from "@/lib/settings/integrationSettings";
+import { getDashboardEffectiveUserContext } from "@/lib/team/effectiveUserContext";
 import { normalizeArticleUrl } from "@/lib/types";
 
 async function getDashboardData(input?: {
@@ -62,26 +63,28 @@ async function getDashboardData(input?: {
 
   try {
     const user = await getOrCreateDashboardUser();
+    const context = await getDashboardEffectiveUserContext(user.id);
+    const effectiveUserId = context.effectiveUserId;
     const [settings, allJobs] = await Promise.all([
-      getIntegrationSettingsSummary(),
-      listJobsForUser(user.id),
+      getIntegrationSettingsSummaryForUserId(effectiveUserId),
+      listJobsForUser(effectiveUserId),
     ]);
     const activeWorkspaceId = await getDashboardWorkspaceScope(settings.publerWorkspaceId);
-    const allowedDomains = await getWorkspaceAllowedDomainsForUserId(user.id, activeWorkspaceId);
+    const allowedDomains = await getWorkspaceAllowedDomainsForUserId(effectiveUserId, activeWorkspaceId);
     const [postPulseRecords, queueCapacity] = await Promise.all([
-      listPostPulseRecordsForUser(user.id, {
+      listPostPulseRecordsForUser(effectiveUserId, {
         workspaceId: activeWorkspaceId,
         allowedDomains,
       }),
       getPublishQueueCapacitySummary({
-        userId: user.id,
+        userId: effectiveUserId,
         workspaceId: activeWorkspaceId,
         days: 7,
       }),
     ]);
     const activeSnoozes = await prisma.freshTargetSnooze.findMany({
       where: {
-        userId: user.id,
+        userId: effectiveUserId,
         workspaceId: activeWorkspaceId,
         snoozedUntil: {
           gt: new Date(),

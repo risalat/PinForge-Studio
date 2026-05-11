@@ -15,11 +15,13 @@ export function DashboardShell({
   activeWorkspaceId,
   workspaceProfiles,
   calendarNotifications,
+  effectiveUserBanner,
   children,
 }: {
   activeWorkspaceId: string;
   workspaceProfiles: WorkspaceProfileSummary[];
   calendarNotifications: DashboardCalendarNotification[];
+  effectiveUserBanner?: string | null;
   children: ReactNode;
 }) {
   const pathname = usePathname();
@@ -69,6 +71,11 @@ export function DashboardShell({
         )}
 
         <div className={`min-w-0 ${isTemplateEditorRoute ? "lg:h-screen lg:overflow-hidden" : ""}`}>
+          {effectiveUserBanner && !isTemplateEditorRoute ? (
+            <div className="sticky top-0 z-30 border-b border-[var(--dashboard-warning-border)] bg-[var(--dashboard-warning-soft)] px-5 py-2.5 text-center text-sm font-semibold text-[var(--dashboard-warning-ink)] lg:px-8">
+              {effectiveUserBanner}
+            </div>
+          ) : null}
           {isTemplateEditorRoute ? null : (
             <header className="sticky top-0 z-20 border-b border-[var(--dashboard-line)] bg-[color:var(--dashboard-canvas)]/92 backdrop-blur-xl">
               <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-4 lg:px-8">
@@ -346,6 +353,15 @@ function NavIcon({
           <path d="M6 7V5h12v2" />
           <path d="M7 7l1 12h8l1-12" />
           <path d="M10 11v4M14 11v4" />
+        </svg>
+      );
+    case "team":
+      return (
+        <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.8">
+          <circle cx="9" cy="8" r="3" />
+          <circle cx="15" cy="8" r="3" />
+          <path d="M4 17c0-2 2-4 5-4s5 2 5 4" />
+          <path d="M15 13c3 0 5 2 5 4" />
         </svg>
       );
     case "admin":

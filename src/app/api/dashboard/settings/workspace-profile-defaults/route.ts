@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAuthenticatedDashboardApiUser } from "@/lib/auth/dashboardSession";
+import { getApiEffectiveUserId } from "@/lib/team/effectiveUserContext";
 import { isDatabaseConfigured } from "@/lib/env";
 import { saveWorkspaceProfileDefaults } from "@/lib/settings/integrationSettings";
 
@@ -28,7 +29,8 @@ export async function POST(request: Request) {
 
   try {
     const payload = schema.parse(await request.json());
-    const profile = await saveWorkspaceProfileDefaults(payload);
+    const effectiveUserId = await getApiEffectiveUserId();
+    const profile = await saveWorkspaceProfileDefaults({ ...payload, userId: effectiveUserId });
 
     return NextResponse.json({
       ok: true,

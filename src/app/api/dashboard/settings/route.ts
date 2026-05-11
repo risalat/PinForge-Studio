@@ -2,10 +2,10 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAuthenticatedDashboardApiUser } from "@/lib/auth/dashboardSession";
 import { isDatabaseConfigured } from "@/lib/env";
+import { getApiEffectiveUserId } from "@/lib/team/effectiveUserContext";
 import {
   type AiCredentialInput,
-  getIntegrationSettingsSummary,
-  getIntegrationSettingsSummaryUncached,
+  getIntegrationSettingsSummaryForUserId,
   type WorkspaceProfileInput,
   saveIntegrationSettings,
 } from "@/lib/settings/integrationSettings";
@@ -65,7 +65,8 @@ export async function GET() {
     );
   }
 
-  const settings = await getIntegrationSettingsSummary();
+  const effectiveUserId = await getApiEffectiveUserId();
+  const settings = await getIntegrationSettingsSummaryForUserId(effectiveUserId);
 
   return NextResponse.json({
     ok: true,
@@ -92,12 +93,13 @@ export async function POST(request: Request) {
   try {
     const rawPayload = await request.json();
     const payload = settingsSchema.parse(rawPayload);
+    const effectiveUserId = await getApiEffectiveUserId();
     await saveIntegrationSettings({
       ...payload,
       workspaceProfiles: payload.workspaceProfiles as WorkspaceProfileInput[] | undefined,
       aiCredentials: payload.aiCredentials as AiCredentialInput[] | undefined,
-    });
-    const settings = await getIntegrationSettingsSummaryUncached();
+    }, { userId: effectiveUserId });
+    const settings = await getIntegrationSettingsSummaryForUserId(effectiveUserId);
 
     return NextResponse.json({
       ok: true,

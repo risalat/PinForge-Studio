@@ -2,10 +2,11 @@ import Link from "next/link";
 import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
 import { isDatabaseConfigured } from "@/lib/env";
 import {
-  getIntegrationSettingsSummary,
+  getIntegrationSettingsSummaryForUserId,
   getWorkspaceAllowedDomainsForUserId,
 } from "@/lib/settings/integrationSettings";
 import { getDashboardWorkspaceScope } from "@/lib/dashboard/workspaceScope";
+import { getDashboardEffectiveUserContext } from "@/lib/team/effectiveUserContext";
 import {
   buildPostPulseSummary,
   filterPostPulseRecords,
@@ -27,15 +28,18 @@ export default async function DashboardPostPulsePage({
   const databaseReady = isDatabaseConfigured();
   const user = databaseReady ? await getOrCreateDashboardUser() : null;
   const resolvedSearchParams = (await searchParams) ?? {};
-  const settings = user ? await getIntegrationSettingsSummary() : null;
+  const effectiveUserId = user
+    ? (await getDashboardEffectiveUserContext(user.id)).effectiveUserId
+    : null;
+  const settings = effectiveUserId ? await getIntegrationSettingsSummaryForUserId(effectiveUserId) : null;
   const selectedWorkspaceId = await getDashboardWorkspaceScope(settings?.publerWorkspaceId || "");
-  const allowedDomains = user
-    ? await getWorkspaceAllowedDomainsForUserId(user.id, selectedWorkspaceId)
+  const allowedDomains = effectiveUserId
+    ? await getWorkspaceAllowedDomainsForUserId(effectiveUserId, selectedWorkspaceId)
     : [];
   const selectedFilter = normalizePostPulseFilter(resolvedSearchParams.filter);
   const selectedSort = normalizePostPulseSort(resolvedSearchParams.sort);
-  const baseRecords = user
-    ? await listPostPulseRecordsForUser(user.id, {
+  const baseRecords = effectiveUserId
+    ? await listPostPulseRecordsForUser(effectiveUserId, {
         workspaceId: selectedWorkspaceId,
         allowedDomains,
       })

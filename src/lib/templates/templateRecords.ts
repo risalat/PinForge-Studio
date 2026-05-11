@@ -7,6 +7,7 @@ import {
 } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getTemplateConfig } from "@/lib/templates/registry";
+import { getTeamTemplateVisibleUserIds } from "@/lib/team/teamAccess";
 
 export function ensureBuiltInTemplateRecord(
   templateId: string,
@@ -89,6 +90,8 @@ export async function ensureTemplateRecordsForUser(input: {
     customTemplateIds.push(templateId);
   }
 
+  const visibleUserIds = await getTeamTemplateVisibleUserIds(input.userId);
+
   const builtInTemplates = await ensureBuiltInTemplateRecords(builtInTemplateIds, {
     tx: input.tx,
   });
@@ -99,7 +102,7 @@ export async function ensureTemplateRecordsForUser(input: {
             id: {
               in: customTemplateIds,
             },
-            createdByUserId: input.userId,
+            createdByUserId: { in: visibleUserIds },
             sourceKind: TemplateSourceKind.CUSTOM,
           },
         })

@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
 import { isDatabaseConfigured } from "@/lib/env";
 import { runtimeTemplateDocumentDraftSchema } from "@/lib/runtime-templates/schema.zod";
 import { createTemplateBlockForUser } from "@/lib/template-blocks/db";
+import { getApiEffectiveUserId } from "@/lib/team/effectiveUserContext";
 
 export const runtime = "nodejs";
 
@@ -22,9 +22,9 @@ export async function POST(request: Request) {
 
   try {
     const payload = createTemplateBlockSchema.parse(await request.json());
-    const user = await getOrCreateDashboardUser();
+    const effectiveUserId = await getApiEffectiveUserId();
     const block = await createTemplateBlockForUser({
-      userId: user.id,
+      userId: effectiveUserId,
       name: payload.name,
       description: payload.description || undefined,
       document: payload.document,

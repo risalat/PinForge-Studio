@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { BackgroundTaskKind, BackgroundTaskStatus } from "@prisma/client";
 import { requireAuthenticatedDashboardApiUser } from "@/lib/auth/dashboardSession";
-import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
+import { getApiEffectiveUserId } from "@/lib/team/effectiveUserContext";
 import { isDatabaseConfigured } from "@/lib/env";
 import {
   discardGeneratedPinsForJob,
@@ -52,7 +52,7 @@ export async function GET(request: Request, { params }: RouteProps) {
 
       try {
         const { jobId } = await params;
-        const user = await getOrCreateDashboardUser();
+        const effectiveUserId = await getApiEffectiveUserId();
         const url = new URL(request.url);
         const taskId = url.searchParams.get("taskId")?.trim() || null;
 
@@ -81,7 +81,7 @@ export async function GET(request: Request, { params }: RouteProps) {
           );
         }
 
-        if (task.userId && task.userId !== user.id) {
+        if (task.userId && task.userId !== effectiveUserId) {
           return withCorrelationHeader(
             NextResponse.json({ ok: false, error: "Task not found." }, { status: 404 }),
             correlationId,
@@ -136,7 +136,7 @@ export async function POST(request: Request, { params }: RouteProps) {
 
       try {
         const { jobId } = await params;
-        const user = await getOrCreateDashboardUser();
+        const effectiveUserId = await getApiEffectiveUserId();
         const body = (await request.json().catch(() => ({}))) as {
           action?: "generate" | "discard_generated_pins";
           generatedPinIds?: string[];
@@ -146,7 +146,7 @@ export async function POST(request: Request, { params }: RouteProps) {
 
         if (body.action === "discard_generated_pins") {
           const result = await discardGeneratedPinsForJob({
-            userId: user.id,
+            userId: effectiveUserId,
             jobId,
             generatedPinIds: body.generatedPinIds,
           });
@@ -161,7 +161,7 @@ export async function POST(request: Request, { params }: RouteProps) {
         }
 
         const result = await generatePinsForJob({
-          userId: user.id,
+          userId: effectiveUserId,
           jobId,
           planIds: body.planIds,
           aiCredentialId: body.aiCredentialId,

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAuthenticatedDashboardApiUser } from "@/lib/auth/dashboardSession";
-import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
+import { getApiEffectiveUserId } from "@/lib/team/effectiveUserContext";
 import { isDatabaseConfigured } from "@/lib/env";
 import { getPublishScheduleContextForPost } from "@/lib/jobs/publishScheduleContext";
 import { prisma } from "@/lib/prisma";
@@ -27,14 +27,14 @@ export async function GET(request: Request, context: RouteContext) {
     );
   }
 
-  const user = await getOrCreateDashboardUser();
+  const effectiveUserId = await getApiEffectiveUserId();
   const { jobId } = await context.params;
   const workspaceId = new URL(request.url).searchParams.get("workspaceId")?.trim() ?? "";
 
   const job = await prisma.generationJob.findFirst({
     where: {
       id: jobId,
-      userId: user.id,
+      userId: effectiveUserId,
     },
     select: {
       postId: true,
@@ -52,7 +52,7 @@ export async function GET(request: Request, context: RouteContext) {
   }
 
   const scheduleContext = await getPublishScheduleContextForPost({
-    userId: user.id,
+    userId: effectiveUserId,
     postId: job.postId,
     workspaceId,
   });

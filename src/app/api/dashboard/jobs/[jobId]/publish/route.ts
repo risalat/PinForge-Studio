@@ -2,7 +2,7 @@ import { BackgroundTaskKind, BackgroundTaskStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAuthenticatedDashboardApiUser } from "@/lib/auth/dashboardSession";
-import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
+import { getApiEffectiveUserId } from "@/lib/team/effectiveUserContext";
 import { EditablePinDescriptionSchema, EditablePinTitleSchema } from "@/lib/ai/validators";
 import { isDatabaseConfigured } from "@/lib/env";
 import { MIN_SCHEDULE_INTERVAL_MINUTES } from "@/lib/jobs/publishTiming";
@@ -111,8 +111,8 @@ export async function GET(_request: Request, { params }: RouteProps) {
 
       try {
         const { jobId } = await params;
-        const user = await getOrCreateDashboardUser();
-        const job = await getOwnedGeneratedPinsForPublish(jobId, user.id);
+        const effectiveUserId = await getApiEffectiveUserId();
+        const job = await getOwnedGeneratedPinsForPublish(jobId, effectiveUserId);
         const backgroundTasks = await listBackgroundTasksForJob({
           jobId,
           kinds: [
@@ -211,13 +211,13 @@ export async function POST(request: Request, { params }: RouteProps) {
       try {
         const { jobId } = await params;
         const payload = publishSchema.parse(await request.json());
-        const user = await getOrCreateDashboardUser();
+        const effectiveUserId = await getApiEffectiveUserId();
         let result: unknown = null;
 
         switch (payload.action) {
           case "upload_media":
             result = await queueUploadMediaForJobPins({
-              userId: user.id,
+              userId: effectiveUserId,
               jobId,
               generatedPinIds: payload.generatedPinIds,
               workspaceId: payload.workspaceId,
@@ -225,7 +225,7 @@ export async function POST(request: Request, { params }: RouteProps) {
             break;
           case "generate_titles":
             result = await queueTitleGenerationForJobPins({
-              userId: user.id,
+              userId: effectiveUserId,
               jobId,
               generatedPinIds: payload.generatedPinIds,
               aiCredentialId: payload.aiCredentialId,
@@ -234,14 +234,14 @@ export async function POST(request: Request, { params }: RouteProps) {
             break;
           case "save_copy":
             result = await saveJobPinCopyEdits({
-              userId: user.id,
+              userId: effectiveUserId,
               jobId,
               copies: payload.copies,
             });
             break;
           case "generate_descriptions":
             result = await queueDescriptionGenerationForJobPins({
-              userId: user.id,
+              userId: effectiveUserId,
               jobId,
               generatedPinIds: payload.generatedPinIds,
               aiCredentialId: payload.aiCredentialId,
@@ -250,7 +250,7 @@ export async function POST(request: Request, { params }: RouteProps) {
             break;
           case "schedule":
             result = await queueScheduleJobPins({
-              userId: user.id,
+              userId: effectiveUserId,
               jobId,
               firstPublishAt: payload.firstPublishAt,
               intervalMinutes: payload.intervalMinutes,

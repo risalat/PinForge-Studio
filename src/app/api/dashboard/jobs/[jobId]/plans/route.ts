@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ArtworkReviewState, BackgroundTaskKind, BackgroundTaskStatus } from "@prisma/client";
 import { z } from "zod";
 import { requireAuthenticatedDashboardApiUser } from "@/lib/auth/dashboardSession";
-import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
+import { getApiEffectiveUserId } from "@/lib/team/effectiveUserContext";
 import { EditablePinSubtitleSchema, EditablePinTitleSchema } from "@/lib/ai/validators";
 import { isDatabaseConfigured } from "@/lib/env";
 import {
@@ -88,9 +88,9 @@ export async function GET(request: Request, { params }: RouteProps) {
     return NextResponse.json({ ok: false, error: "DATABASE_URL is not configured." }, { status: 500 });
   }
 
-  try {
-    const { jobId } = await params;
-    const user = await getOrCreateDashboardUser();
+      try {
+        const { jobId } = await params;
+        const effectiveUserId = await getApiEffectiveUserId();
     const url = new URL(request.url);
     const taskId = url.searchParams.get("taskId")?.trim() || null;
 
@@ -113,7 +113,7 @@ export async function GET(request: Request, { params }: RouteProps) {
       return NextResponse.json({ ok: true, task: null });
     }
 
-    if (task.userId && task.userId !== user.id) {
+    if (task.userId && task.userId !== effectiveUserId) {
       return NextResponse.json({ ok: false, error: "Task not found." }, { status: 404 });
     }
 
@@ -144,11 +144,11 @@ export async function POST(request: Request, { params }: RouteProps) {
   try {
     const { jobId } = await params;
     const payload = plansSchema.parse(await request.json());
-    const user = await getOrCreateDashboardUser();
+    const effectiveUserId = await getApiEffectiveUserId();
 
     if (payload.mode === "assisted_auto") {
       const result = await createAssistedGenerationPlans({
-        userId: user.id,
+        userId: effectiveUserId,
         jobId,
         pinCount: payload.pinCount,
         templates:
@@ -168,7 +168,7 @@ export async function POST(request: Request, { params }: RouteProps) {
       });
     } else if (payload.mode === "manual") {
       await createManualGenerationPlan({
-        userId: user.id,
+        userId: effectiveUserId,
         jobId,
         templateId: payload.templateId,
         templateVersionId: payload.templateVersionId,
@@ -176,7 +176,7 @@ export async function POST(request: Request, { params }: RouteProps) {
       });
     } else if (payload.mode === "update_render_context") {
       await updateGenerationPlanRenderContext({
-        userId: user.id,
+        userId: effectiveUserId,
         jobId,
         planId: payload.planId,
         title: payload.title,
@@ -186,7 +186,7 @@ export async function POST(request: Request, { params }: RouteProps) {
       });
     } else if (payload.mode === "set_review_state") {
       await setGenerationPlanArtworkReviewState({
-        userId: user.id,
+        userId: effectiveUserId,
         jobId,
         planId: payload.planId,
         artworkReviewState: payload.artworkReviewState,
@@ -194,7 +194,7 @@ export async function POST(request: Request, { params }: RouteProps) {
       });
     } else if (payload.mode === "retune_preset") {
       const result = await queuePlanPresetRecommendation({
-        userId: user.id,
+        userId: effectiveUserId,
         jobId,
         planIds: payload.planIds,
         force: payload.force,
@@ -208,7 +208,7 @@ export async function POST(request: Request, { params }: RouteProps) {
       });
     } else {
       const result = await discardGenerationPlansForJob({
-        userId: user.id,
+        userId: effectiveUserId,
         jobId,
         planIds: payload.planIds,
       });

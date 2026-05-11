@@ -12,10 +12,11 @@ import { isDatabaseConfigured } from "@/lib/env";
 import { getJobForUser, listJobCyclesForPost } from "@/lib/jobs/generatePins";
 import { listTemplateGroupsForUser } from "@/lib/template-groups/db";
 import {
-  getIntegrationSettingsSummary,
+  getIntegrationSettingsSummaryForUserId,
   getWorkspaceAllowedDomainsForUserId,
   getWorkspaceProfileForUserId,
 } from "@/lib/settings/integrationSettings";
+import { getDashboardEffectiveUserContext } from "@/lib/team/effectiveUserContext";
 import { resolveStoredAssetUrl } from "@/lib/storage/assetUrl";
 import {
   listSelectableTemplateCandidatesForUser,
@@ -48,9 +49,11 @@ export default async function DashboardJobDetailsPage({ params }: PageProps) {
   }
 
   const user = await getOrCreateDashboardUser();
+  const context = await getDashboardEffectiveUserContext(user.id);
+  const effectiveUserId = context.effectiveUserId;
   const [job, settings] = await Promise.all([
-    getJobForUser(jobId, user.id),
-    getIntegrationSettingsSummary().catch(() => null),
+    getJobForUser(jobId, effectiveUserId),
+    getIntegrationSettingsSummaryForUserId(effectiveUserId).catch(() => null),
   ]);
   if (!job) {
     notFound();
@@ -58,10 +61,10 @@ export default async function DashboardJobDetailsPage({ params }: PageProps) {
 
   const activeWorkspaceId = await getDashboardWorkspaceScope(settings?.publerWorkspaceId || "");
   const [allowedDomains, activeWorkspaceProfile] = await Promise.all([
-    getWorkspaceAllowedDomainsForUserId(user.id, activeWorkspaceId),
-    getWorkspaceProfileForUserId(user.id, activeWorkspaceId),
+    getWorkspaceAllowedDomainsForUserId(effectiveUserId, activeWorkspaceId),
+    getWorkspaceProfileForUserId(effectiveUserId, activeWorkspaceId),
   ]);
-  const cycleJobs = await listJobCyclesForPost(user.id, job.postId);
+  const cycleJobs = await listJobCyclesForPost(effectiveUserId, job.postId);
   const cycleContext = buildCycleContext(cycleJobs, job.id);
   const isInActiveScope = matchesAllowedDomain(job.domainSnapshot, allowedDomains);
 
@@ -75,10 +78,10 @@ export default async function DashboardJobDetailsPage({ params }: PageProps) {
   }
 
   const [templates, templateGroups] = await Promise.all([
-    listSelectableTemplateCandidatesForUser(user.id).then((items) =>
+    listSelectableTemplateCandidatesForUser(effectiveUserId).then((items) =>
       items.filter((template): template is SelectableTemplateCandidate => Boolean(template)),
     ),
-    listTemplateGroupsForUser(user.id),
+    listTemplateGroupsForUser(effectiveUserId),
   ]);
 
   const statusLabel = formatLabel(job.status);

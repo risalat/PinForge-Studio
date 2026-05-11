@@ -5,9 +5,10 @@ import { getDashboardWorkspaceScope } from "@/lib/dashboard/workspaceScope";
 import { isDatabaseConfigured } from "@/lib/env";
 import { listJobsForUser } from "@/lib/jobs/generatePins";
 import {
-  getIntegrationSettingsSummary,
+  getIntegrationSettingsSummaryForUserId,
   getWorkspaceAllowedDomainsForUserId,
 } from "@/lib/settings/integrationSettings";
+import { getDashboardEffectiveUserContext } from "@/lib/team/effectiveUserContext";
 import { DashboardPublishingTableControls } from "@/app/dashboard/publishing/DashboardPublishingTableControls";
 
 type PublishingSearchParams = {
@@ -27,15 +28,18 @@ export default async function DashboardPublishingPage({
   const selectedSort = normalizePublishingSort(firstSearchParam(resolvedSearchParams.sort));
   const databaseReady = isDatabaseConfigured();
   const user = databaseReady ? await getOrCreateDashboardUser() : null;
-  const [allJobs, settings] = user
+  const effectiveUserId = user
+    ? (await getDashboardEffectiveUserContext(user.id)).effectiveUserId
+    : null;
+  const [allJobs, settings] = effectiveUserId
     ? await Promise.all([
-        listJobsForUser(user.id),
-        getIntegrationSettingsSummary(),
+        listJobsForUser(effectiveUserId),
+        getIntegrationSettingsSummaryForUserId(effectiveUserId),
       ])
     : [[], null];
   const activeWorkspaceId = await getDashboardWorkspaceScope(settings?.publerWorkspaceId || "");
-  const allowedDomains = user
-    ? await getWorkspaceAllowedDomainsForUserId(user.id, activeWorkspaceId)
+  const allowedDomains = effectiveUserId
+    ? await getWorkspaceAllowedDomainsForUserId(effectiveUserId, activeWorkspaceId)
     : [];
   const jobs = filterByAllowedDomains(allJobs, (job) => job.domainSnapshot, allowedDomains);
 

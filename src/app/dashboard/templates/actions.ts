@@ -11,6 +11,7 @@ import {
   createStarterCustomTemplateDraft,
   deleteRuntimeTemplateForUser,
   duplicateRuntimeTemplateDraftForUser,
+  duplicateSharedTemplateForUser,
   finalizeRuntimeTemplateVersionForUser,
   getTemplateWithVersionsForUser,
   runRuntimeTemplateValidationForUser,
@@ -350,6 +351,27 @@ export async function duplicateRuntimeTemplateAsVariantAction(formData: FormData
   });
 
   revalidatePath("/dashboard/templates");
+}
+
+export async function duplicateSharedTemplateAction(formData: FormData) {
+  if (!isDatabaseConfigured()) {
+    throw new Error("DATABASE_URL is not configured.");
+  }
+
+  const user = await getOrCreateDashboardUser();
+  const templateId = String(formData.get("templateId") ?? "").trim();
+
+  if (!templateId) {
+    throw new Error("Template is missing.");
+  }
+
+  await duplicateSharedTemplateForUser({
+    userId: user.id,
+    templateId,
+  });
+
+  revalidatePath("/dashboard/templates");
+  revalidatePath("/dashboard/library");
 }
 
 export async function archiveRuntimeTemplateAction(formData: FormData) {

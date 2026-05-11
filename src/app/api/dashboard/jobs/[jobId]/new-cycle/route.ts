@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
 import { requireAuthenticatedDashboardApiUser } from "@/lib/auth/dashboardSession";
+import { getApiEffectiveUserId } from "@/lib/team/effectiveUserContext";
 import { isDatabaseConfigured } from "@/lib/env";
 import { createFreshPinsJobFromPost, getOwnedJobHeaderOrThrow } from "@/lib/jobs/generatePins";
 
@@ -28,8 +28,8 @@ export async function POST(_request: Request, { params }: RouteProps) {
 
   try {
     const { jobId } = await params;
-    const user = await getOrCreateDashboardUser();
-    const job = await getOwnedJobHeaderOrThrow(jobId, user.id);
+    const effectiveUserId = await getApiEffectiveUserId();
+    const job = await getOwnedJobHeaderOrThrow(jobId, effectiveUserId);
 
     const latestScheduleStatus = job.scheduleRuns[0]?.status ?? null;
     const isFailedCycle = job.status === "FAILED" || latestScheduleStatus === "FAILED";
@@ -45,7 +45,7 @@ export async function POST(_request: Request, { params }: RouteProps) {
     }
 
     const result = await createFreshPinsJobFromPost({
-      userId: user.id,
+      userId: effectiveUserId,
       postId: job.postId,
     });
 

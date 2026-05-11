@@ -893,6 +893,98 @@ export async function duplicateRuntimeTemplateDraftForUser(input: {
   }, runtimeTemplateTransactionOptions);
 }
 
+export async function duplicateSharedTemplateForUser(input: {
+  userId: string;
+  templateId: string;
+}) {
+  const source = await prisma.template.findFirst({
+    where: {
+      id: input.templateId,
+      sourceKind: TemplateSourceKind.CUSTOM,
+      rendererKind: TemplateRendererKind.RUNTIME_SCHEMA,
+      isActive: true,
+      lifecycleStatus: TemplateLifecycleStatus.FINALIZED,
+      activeVersionId: { not: null },
+    },
+    include: {
+      activeVersion: {
+        select: {
+          id: true,
+          schemaJson: true,
+          editorStateJson: true,
+          lifecycleStatus: true,
+          isLocked: true,
+        },
+      },
+    },
+  });
+
+  if (!source?.activeVersion) {
+    throw new Error("Source template not found or not available for duplication.");
+  }
+
+  if (!source.activeVersion.isLocked || source.activeVersion.lifecycleStatus !== TemplateLifecycleStatus.FINALIZED) {
+    throw new Error("Only finalized templates can be duplicated.");
+  }
+
+  const schemaDocument = runtimeTemplateDocumentDraftSchema.parse(source.activeVersion.schemaJson);
+  const validation = validateRuntimeTemplateDocument(schemaDocument, { mode: "full" });
+  const editorState =
+    (source.activeVersion.editorStateJson as Prisma.InputJsonValue | null) ??
+    (createDefaultRuntimeTemplateEditorState() as unknown as Prisma.InputJsonValue);
+  const summary = summarizeRuntimeTemplateDocument(validation.document ?? schemaDocument);
+
+  return prisma.$transaction(async (tx) => {
+    const name = `${source.name} Copy`;
+    const slug = await buildUniqueTemplateSlug(tx, name);
+    const componentKey = `runtime:${slug}`;
+
+    const template = await tx.template.create({
+      data: {
+        name,
+        slug,
+        description: source.description,
+        componentKey,
+        configJson: source.configJson === null ? Prisma.JsonNull : source.configJson as Prisma.InputJsonValue,
+        isActive: true,
+        sourceKind: TemplateSourceKind.CUSTOM,
+        rendererKind: TemplateRendererKind.RUNTIME_SCHEMA,
+        lifecycleStatus: TemplateLifecycleStatus.DRAFT,
+        createdByUserId: input.userId,
+        canvasWidth: source.canvasWidth,
+        canvasHeight: source.canvasHeight,
+      },
+    });
+
+    const version = await tx.templateVersion.create({
+      data: {
+        templateId: template.id,
+        versionNumber: 1,
+        lifecycleStatus: TemplateLifecycleStatus.DRAFT,
+        schemaJson: schemaDocument as unknown as Prisma.InputJsonValue,
+        editorStateJson: editorState,
+        summaryJson: summary as Prisma.InputJsonValue,
+        validationJson: toValidationJson(validation),
+        isActive: true,
+        isLocked: false,
+        createdByUserId: input.userId,
+      },
+    });
+
+    await tx.template.update({
+      where: { id: template.id },
+      data: {
+        activeVersionId: version.id,
+      },
+    });
+
+    return {
+      templateId: template.id,
+      versionId: version.id,
+    };
+  }, runtimeTemplateTransactionOptions);
+}
+
 export async function archiveRuntimeTemplateForUser(input: {
   userId: string;
   templateId: string;

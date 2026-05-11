@@ -11,7 +11,8 @@ export type DashboardNavItem = {
     | "keys"
     | "integrations"
     | "housekeeping"
-    | "admin";
+    | "admin"
+    | "team";
 };
 
 export const dashboardNavigation = [
@@ -37,6 +38,7 @@ export const dashboardNavigation = [
     heading: "System",
     items: [
       { label: "Integrations", href: "/dashboard/integrations", icon: "integrations" },
+      { label: "Team", href: "/dashboard/team", icon: "team" },
       { label: "Housekeeping", href: "/dashboard/housekeeping", icon: "housekeeping" },
       { label: "Admin", href: "/dashboard/admin", icon: "admin" },
     ],
@@ -200,6 +202,18 @@ export function getDashboardPageTitle(pathname: string) {
       primaryActionHref: "/dashboard/housekeeping",
       secondaryActionLabel: "Publishing queue",
       secondaryActionHref: "/dashboard/publishing",
+    };
+  }
+
+  if (pathname === "/dashboard/team") {
+    return {
+      eyebrow: "Team",
+      title: "Team management",
+      description: "Manage teammates, invitations, and leader access.",
+      primaryActionLabel: "Overview",
+      primaryActionHref: "/dashboard",
+      secondaryActionLabel: "Integrations",
+      secondaryActionHref: "/dashboard/integrations",
     };
   }
 

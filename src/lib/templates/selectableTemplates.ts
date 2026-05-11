@@ -17,6 +17,7 @@ import {
   resolveTemplateUserGroupsFromAssignments,
   type TemplateUserGroupSummary,
 } from "@/lib/templates/templateGroupMetadata";
+import { getTeamTemplateVisibleUserIds } from "@/lib/team/teamAccess";
 import {
   getPresetIdsForCategories,
   getPresetIdsForTemplate,
@@ -86,7 +87,7 @@ export type SelectableTemplateCandidate = {
   };
 };
 
-type RuntimeTemplateListRecord = Awaited<ReturnType<typeof listRuntimeTemplatesForUser>>[number];
+type RuntimeTemplateListRecord = Awaited<ReturnType<typeof listRuntimeTemplatesForVisibleUsers>>[number];
 
 export function buildTemplateSelectionKey(input: TemplateSelectionRef) {
   return input.templateVersionId?.trim()
@@ -165,7 +166,8 @@ export async function getBuiltInSelectableTemplateCandidatesForUser(userId: stri
 }
 
 export async function listFinalizedCustomTemplateCandidatesForUser(userId: string) {
-  const templates = await listRuntimeTemplatesForUser(userId);
+  const visibleUserIds = await getTeamTemplateVisibleUserIds(userId);
+  const templates = await listRuntimeTemplatesForVisibleUsers(visibleUserIds);
   const candidates = templates
     .map((template) => toRuntimeSelectableTemplateCandidate(template))
     .filter(
@@ -220,12 +222,14 @@ export async function resolveSelectableTemplateCandidateForUser(
     };
   }
 
+  const visibleUserIds = await getTeamTemplateVisibleUserIds(userId);
+
   const runtimeTemplate = await prisma.template.findFirst({
     where: {
       id: input.templateId,
       sourceKind: TemplateSourceKind.CUSTOM,
       rendererKind: TemplateRendererKind.RUNTIME_SCHEMA,
-      createdByUserId: userId,
+      createdByUserId: { in: visibleUserIds },
       isActive: true,
       lifecycleStatus: {
         not: TemplateLifecycleStatus.ARCHIVED,
@@ -405,59 +409,61 @@ function getBuiltInArtworkRule(templateId: string) {
   }
 }
 
-async function listRuntimeTemplatesForUser(userId: string) {
+async function listRuntimeTemplatesForVisibleUsers(userIds: string[]) {
   return prisma.template.findMany({
     where: {
       sourceKind: TemplateSourceKind.CUSTOM,
-      createdByUserId: userId,
+      createdByUserId: { in: userIds },
     },
     orderBy: {
       updatedAt: "desc",
     },
-    include: {
-      activeVersion: {
+    include: runtimeTemplateListInclude,
+  });
+}
+
+const runtimeTemplateListInclude = {
+  activeVersion: {
+    select: {
+      id: true,
+      versionNumber: true,
+      lifecycleStatus: true,
+      isActive: true,
+      isLocked: true,
+      schemaJson: true,
+      summaryJson: true,
+      validationJson: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  },
+  templateGroupAssignments: {
+    select: {
+      group: {
         select: {
           id: true,
-          versionNumber: true,
-          lifecycleStatus: true,
-          isActive: true,
-          isLocked: true,
-          schemaJson: true,
-          summaryJson: true,
-          validationJson: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-      },
-      templateGroupAssignments: {
-        select: {
-          group: {
-            select: {
-              id: true,
-              name: true,
-              slug: true,
-              sortOrder: true,
-            },
-          },
-        },
-      },
-      versions: {
-        select: {
-          id: true,
-          versionNumber: true,
-          lifecycleStatus: true,
-          isActive: true,
-          isLocked: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-        orderBy: {
-          versionNumber: "desc",
+          name: true,
+          slug: true,
+          sortOrder: true,
         },
       },
     },
-  });
-}
+  },
+  versions: {
+    select: {
+      id: true,
+      versionNumber: true,
+      lifecycleStatus: true,
+      isActive: true,
+      isLocked: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+    orderBy: {
+      versionNumber: "desc",
+    },
+  },
+} satisfies Prisma.TemplateInclude;
 
 function toRuntimeSelectableTemplateCandidate(template: RuntimeTemplateListRecord) {
   const activeVersion = template.activeVersion;

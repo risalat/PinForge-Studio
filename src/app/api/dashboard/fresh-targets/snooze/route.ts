@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAuthenticatedDashboardApiUser } from "@/lib/auth/dashboardSession";
-import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
+import { getApiEffectiveUserId } from "@/lib/team/effectiveUserContext";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -21,14 +21,14 @@ export async function POST(request: Request) {
 
   try {
     const payload = snoozeSchema.parse(await request.json());
-    const user = await getOrCreateDashboardUser();
+    const effectiveUserId = await getApiEffectiveUserId();
     const workspaceId = payload.workspaceId?.trim() ?? "";
     const snoozedUntil = addDays(new Date(), SNOOZE_DAYS);
 
     await prisma.freshTargetSnooze.upsert({
       where: {
         userId_postId_workspaceId: {
-          userId: user.id,
+          userId: effectiveUserId,
           postId: payload.postId,
           workspaceId,
         },
@@ -37,7 +37,7 @@ export async function POST(request: Request) {
         snoozedUntil,
       },
       create: {
-        userId: user.id,
+        userId: effectiveUserId,
         postId: payload.postId,
         workspaceId,
         snoozedUntil,
