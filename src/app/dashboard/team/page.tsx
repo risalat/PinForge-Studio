@@ -1,6 +1,6 @@
 import { getOrCreateDashboardUser } from "@/lib/auth/dashboardUser";
 import { prisma } from "@/lib/prisma";
-import { getUserTeamRole } from "@/lib/team/teamAccess";
+import { getPrimaryTeamMembershipForDashboard } from "@/lib/team/teamAccess";
 import { StudioTeamRole, StudioTeamMembershipStatus, StudioTeamInvitationStatus } from "@prisma/client";
 import { TeamInviteForm } from "@/app/dashboard/team/TeamInviteForm";
 import { TeamLeaderPanel } from "@/app/dashboard/team/TeamLeaderPanel";
@@ -16,9 +16,9 @@ export default async function DashboardTeamPage({ searchParams }: PageProps) {
     : resolvedSearchParams.notice ?? "";
 
   const user = await getOrCreateDashboardUser();
-  const { role, teamId } = await getUserTeamRole(user.id);
+  const primaryTeam = await getPrimaryTeamMembershipForDashboard(user.id);
 
-  if (!role || !teamId) {
+  if (!primaryTeam) {
     return (
       <div className="space-y-5 text-[var(--dashboard-text)]">
         <section className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-6 shadow-[var(--dashboard-shadow-sm)]">
@@ -30,6 +30,8 @@ export default async function DashboardTeamPage({ searchParams }: PageProps) {
       </div>
     );
   }
+
+  const { teamId, role, isOwnedByUser } = primaryTeam;
 
   const team = await prisma.studioTeam.findUnique({
     where: { id: teamId },
@@ -72,9 +74,12 @@ export default async function DashboardTeamPage({ searchParams }: PageProps) {
     },
   });
 
-  const isLeader = role === StudioTeamRole.OWNER || role === StudioTeamRole.ADMIN;
+  // Phase 1: only the actual team owner can invite and operate-as.
+  const isTeamOwner = team.ownerUserId === user.id && role === StudioTeamRole.OWNER;
+  const canInviteTeammates = isTeamOwner;
+  const canOperateAsTeammates = isTeamOwner;
 
-  const accessibleUsers = isLeader
+  const accessibleUsers = canOperateAsTeammates
     ? await prisma.studioTeamMembership.findMany({
         where: {
           teamId,
@@ -104,6 +109,7 @@ export default async function DashboardTeamPage({ searchParams }: PageProps) {
         <h2 className="text-lg font-bold">{team.name}</h2>
         <p className="mt-1 text-sm text-[var(--dashboard-subtle)]">
           {members.length} member{members.length !== 1 ? "s" : ""}
+          {isOwnedByUser && " (your personal team)"}
         </p>
       </section>
 
@@ -135,7 +141,15 @@ export default async function DashboardTeamPage({ searchParams }: PageProps) {
         </div>
       </section>
 
-      {isLeader && (
+      {!isTeamOwner && !isOwnedByUser && (
+        <section className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel)] p-4 shadow-[var(--dashboard-shadow-sm)]">
+          <p className="text-sm text-[var(--dashboard-subtle)]">
+            Only the team owner can invite teammates or operate teammate workspaces.
+          </p>
+        </section>
+      )}
+
+      {canInviteTeammates && (
         <>
           <section className="rounded-[28px] border border-[var(--dashboard-line)] bg-[var(--dashboard-panel-strong)] p-5 shadow-[var(--dashboard-shadow-sm)]">
             <h3 className="text-base font-bold">Invite teammate</h3>

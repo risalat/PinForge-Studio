@@ -21,21 +21,43 @@ export async function createTeamInvitation(input: {
   email: string;
   role?: "ADMIN" | "MEMBER";
 }) {
-  const membership = await prisma.studioTeamMembership.findFirst({
+  // Phase 1: only the actual team owner (the person who owns the mother team)
+  // can invite teammates. Prevent invited members from using their auto-created
+  // personal team to send invites.
+  const nonOwnedActiveMembership = await prisma.studioTeamMembership.findFirst({
     where: {
       userId: input.invitedByUserId,
       status: StudioTeamMembershipStatus.ACTIVE,
-      role: {
-        in: [StudioTeamRole.OWNER, StudioTeamRole.ADMIN],
+      team: {
+        ownerUserId: {
+          not: input.invitedByUserId,
+        },
       },
-    },
-    include: {
-      team: true,
     },
   });
 
-  if (!membership) {
-    throw new Error("You must be an OWNER or ADMIN of a team to send invitations.");
+  if (nonOwnedActiveMembership) {
+    throw new Error("Only the team owner can invite teammates.");
+  }
+
+  const ownedTeam = await prisma.studioTeam.findFirst({
+    where: {
+      ownerUserId: input.invitedByUserId,
+    },
+    include: {
+      memberships: {
+        where: {
+          userId: input.invitedByUserId,
+          status: StudioTeamMembershipStatus.ACTIVE,
+          role: StudioTeamRole.OWNER,
+        },
+        take: 1,
+      },
+    },
+  });
+
+  if (!ownedTeam || ownedTeam.memberships.length === 0) {
+    throw new Error("Only the team owner can invite teammates.");
   }
 
   const email = input.email.trim().toLowerCase();
@@ -50,7 +72,7 @@ export async function createTeamInvitation(input: {
   await prisma.studioTeamInvitation.create({
     data: {
       email,
-      teamId: membership.teamId,
+      teamId: ownedTeam.id,
       invitedByUserId: input.invitedByUserId,
       role: input.role === "ADMIN" ? StudioTeamRole.ADMIN : StudioTeamRole.MEMBER,
       tokenHash,
@@ -186,31 +208,27 @@ export async function revokeInvitation(input: {
   userId: string;
   invitationId: string;
 }) {
-  const membership = await prisma.studioTeamMembership.findFirst({
-    where: {
-      userId: input.userId,
-      status: StudioTeamMembershipStatus.ACTIVE,
-      role: {
-        in: [StudioTeamRole.OWNER, StudioTeamRole.ADMIN],
-      },
-    },
-    select: { teamId: true },
-  });
-
-  if (!membership) {
-    throw new Error("Only team OWNER or ADMIN can revoke invitations.");
-  }
-
+  // Phase 1: only the team owner can revoke invitations.
   const invitation = await prisma.studioTeamInvitation.findFirst({
     where: {
       id: input.invitationId,
-      teamId: membership.teamId,
       status: StudioTeamInvitationStatus.PENDING,
+    },
+    include: {
+      team: {
+        select: {
+          ownerUserId: true,
+        },
+      },
     },
   });
 
   if (!invitation) {
     throw new Error("Pending invitation not found.");
+  }
+
+  if (invitation.team.ownerUserId !== input.userId) {
+    throw new Error("Only the team owner can revoke invitations.");
   }
 
   await prisma.studioTeamInvitation.update({

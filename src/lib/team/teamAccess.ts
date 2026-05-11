@@ -108,3 +108,59 @@ export async function getUserTeamRole(userId: string): Promise<{
 
   return { role: membership.role, teamId: membership.teamId };
 }
+
+export async function getPrimaryTeamMembershipForDashboard(userId: string): Promise<{
+  teamId: string;
+  role: StudioTeamRole;
+  ownerUserId: string;
+  isOwnedByUser: boolean;
+} | null> {
+  const memberships = await prisma.studioTeamMembership.findMany({
+    where: {
+      userId,
+      status: StudioTeamMembershipStatus.ACTIVE,
+    },
+    include: {
+      team: {
+        select: {
+          ownerUserId: true,
+        },
+      },
+    },
+  });
+
+  if (memberships.length === 0) {
+    return null;
+  }
+
+  // Prefer a membership where the user was invited to someone else's team
+  // (the "mother" team), rather than their own auto-created personal team.
+  const nonOwnedMembership = memberships.find(
+    (m) => m.team.ownerUserId !== userId,
+  );
+
+  if (nonOwnedMembership) {
+    return {
+      teamId: nonOwnedMembership.teamId,
+      role: nonOwnedMembership.role,
+      ownerUserId: nonOwnedMembership.team.ownerUserId,
+      isOwnedByUser: false,
+    };
+  }
+
+  // Fall back to the user's own owned team.
+  const ownedMembership = memberships.find(
+    (m) => m.team.ownerUserId === userId,
+  );
+
+  if (!ownedMembership) {
+    return null;
+  }
+
+  return {
+    teamId: ownedMembership.teamId,
+    role: ownedMembership.role,
+    ownerUserId: ownedMembership.team.ownerUserId,
+    isOwnedByUser: true,
+  };
+}
